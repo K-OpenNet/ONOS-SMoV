@@ -1,4 +1,4 @@
-SM-ONOS VN: Security-Mode ONOS for Virtual Network
+SM-ONOS VN: Security-Mode ONOS on Virtual Networks
 ====================================
 
 ### What is SM-ONOS VN?
