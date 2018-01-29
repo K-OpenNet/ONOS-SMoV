@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -470,9 +470,9 @@ public class SimpleLinkStoreTest {
         LinkKey linkId1 = LinkKey.linkKey(d1P1, d2P2);
 
         putLink(linkId1, DIRECT, DA1);
-        assertTrue("should be be durable", linkStore.getLink(d1P1, d2P2).isDurable());
+        assertTrue("should be be durable", linkStore.getLink(d1P1, d2P2).isExpected());
         putLink(linkId1, DIRECT, NDA1);
-        assertFalse("should not be durable", linkStore.getLink(d1P1, d2P2).isDurable());
+        assertFalse("should not be durable", linkStore.getLink(d1P1, d2P2).isExpected());
     }
 
     @Test
@@ -482,9 +482,9 @@ public class SimpleLinkStoreTest {
         LinkKey linkId1 = LinkKey.linkKey(d1P1, d2P2);
 
         putLink(linkId1, DIRECT, A1);
-        assertFalse("should not be durable", linkStore.getLink(d1P1, d2P2).isDurable());
+        assertFalse("should not be durable", linkStore.getLink(d1P1, d2P2).isExpected());
         putLink(linkId1, DIRECT, DA1);
-        assertTrue("should be durable", linkStore.getLink(d1P1, d2P2).isDurable());
+        assertTrue("should be durable", linkStore.getLink(d1P1, d2P2).isExpected());
     }
 
     // If Delegates should be called only on remote events,

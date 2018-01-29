@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,50 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.onosproject.store.primitives.impl;
 
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.google.common.base.Preconditions.*;
-
-import org.onosproject.store.primitives.MapUpdate;
 import org.onosproject.store.primitives.TransactionId;
-import org.onosproject.store.primitives.resources.impl.CommitResult;
-import org.onosproject.store.service.ConsistentMapBuilder;
+import org.onosproject.store.service.CommitStatus;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.TransactionContext;
 import org.onosproject.store.service.TransactionalMap;
+import org.onosproject.utils.MeteringAgent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.Futures;
+import static com.google.common.base.MoreObjects.toStringHelper;
+import static com.google.common.base.Preconditions.checkState;
 
 /**
- * Default TransactionContext implementation.
+ * Default implementation of transaction context.
  */
 public class DefaultTransactionContext implements TransactionContext {
-    private static final String TX_NOT_OPEN_ERROR = "Transaction Context is not open";
-
-    @SuppressWarnings("rawtypes")
-    private final Map<String, DefaultTransactionalMap> txMaps = Maps.newConcurrentMap();
-    private boolean isOpen = false;
-    private final Function<Transaction, CompletableFuture<CommitResult>> transactionCommitter;
+    private final Logger log = LoggerFactory.getLogger(getClass());
+    private final AtomicBoolean isOpen = new AtomicBoolean(false);
     private final TransactionId transactionId;
-    private final Supplier<ConsistentMapBuilder> mapBuilderSupplier;
+    private final TransactionCoordinator transactionCoordinator;
+    private final MeteringAgent monitor;
 
-    public DefaultTransactionContext(TransactionId transactionId,
-            Function<Transaction, CompletableFuture<CommitResult>> transactionCommitter,
-            Supplier<ConsistentMapBuilder> mapBuilderSupplier) {
+    public DefaultTransactionContext(TransactionId transactionId, TransactionCoordinator transactionCoordinator) {
         this.transactionId = transactionId;
-        this.transactionCommitter = checkNotNull(transactionCommitter);
-        this.mapBuilderSupplier = checkNotNull(mapBuilderSupplier);
+        this.transactionCoordinator = transactionCoordinator;
+        this.monitor = new MeteringAgent("transactionContext", "*", true);
+    }
+
+    @Override
+    public String name() {
+        return transactionId.toString();
     }
 
     @Override
@@ -65,80 +57,43 @@ public class DefaultTransactionContext implements TransactionContext {
     }
 
     @Override
-    public void begin() {
-        checkState(!isOpen, "Transaction Context is already open");
-        isOpen = true;
-    }
-
-    @Override
     public boolean isOpen() {
-        return isOpen;
+        return isOpen.get();
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <K, V> TransactionalMap<K, V> getTransactionalMap(String mapName,
-            Serializer serializer) {
-        checkState(isOpen, TX_NOT_OPEN_ERROR);
-        checkNotNull(mapName);
-        checkNotNull(serializer);
-        return txMaps.computeIfAbsent(mapName, name -> {
-            ConsistentMapBuilder mapBuilder =  (ConsistentMapBuilder) mapBuilderSupplier.get()
-                                                                                        .withName(name)
-                                                                                        .withSerializer(serializer);
-            return new DefaultTransactionalMap<>(
-                                name,
-                                mapBuilder.buildAsyncMap(),
-                                this,
-                                serializer);
-        });
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public boolean commit() {
-        // TODO: rework commit implementation to be more intuitive
-        checkState(isOpen, TX_NOT_OPEN_ERROR);
-        CommitResult result = null;
-        try {
-            List<MapUpdate<String, byte[]>> updates = Lists.newLinkedList();
-            txMaps.values().forEach(m -> updates.addAll(m.toMapUpdates()));
-            Transaction transaction = new Transaction(transactionId, updates);
-            result = Futures.getUnchecked(transactionCommitter.apply(transaction));
-            return result == CommitResult.OK;
-        } catch (Exception e) {
-            abort();
-            return false;
-        } finally {
-            isOpen = false;
+    public void begin() {
+        if (isOpen.compareAndSet(false, true)) {
+            log.trace("Opened transaction {}", transactionId);
+        } else {
+            throw new IllegalStateException("TransactionContext is already open");
         }
+    }
+
+    @Override
+    public CompletableFuture<CommitStatus> commit() {
+        checkState(isOpen.get(), "Transaction not open");
+        final MeteringAgent.Context timer = monitor.startTimer("commit");
+        log.debug("Committing transaction {}", transactionId);
+        return transactionCoordinator.commit().whenComplete((r, e) -> timer.stop(e));
     }
 
     @Override
     public void abort() {
-        if (isOpen) {
-            try {
-                txMaps.values().forEach(m -> m.abort());
-            } finally {
-                isOpen = false;
-            }
+        if (isOpen.compareAndSet(true, false)) {
+            log.debug("Aborted transaction {}", transactionId);
         }
     }
 
     @Override
-    public String toString() {
-        ToStringHelper s = MoreObjects.toStringHelper(this)
-             .add("transactionId", transactionId)
-             .add("isOpen", isOpen);
-
-        txMaps.entrySet().forEach(e -> {
-            s.add(e.getKey(), e.getValue());
-        });
-        return s.toString();
+    public <K, V> TransactionalMap<K, V> getTransactionalMap(String mapName, Serializer serializer) {
+        return transactionCoordinator.getTransactionalMap(mapName, serializer);
     }
 
     @Override
-    public String name() {
-        return transactionId.toString();
+    public String toString() {
+        return toStringHelper(this)
+                .add("transactionId", transactionId)
+                .toString();
     }
 }

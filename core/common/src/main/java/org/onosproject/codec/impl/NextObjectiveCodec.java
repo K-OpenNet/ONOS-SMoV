@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
@@ -37,12 +36,13 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Next Objective Codec.
  */
-public class NextObjectiveCodec extends JsonCodec<NextObjective> {
+public final class NextObjectiveCodec extends JsonCodec<NextObjective> {
 
     private final Logger log = getLogger(getClass());
 
     // JSON field names
     private static final String ID = "id";
+    private static final String APP_ID = "appId";
     private static final String TYPE = "type";
     private static final String OPERATION = "operation";
     private static final String TREATMENTS = "treatments";
@@ -53,10 +53,6 @@ public class NextObjectiveCodec extends JsonCodec<NextObjective> {
             " member is required in NextObjective";
     private static final String NOT_NULL_MESSAGE =
             "NextObjective cannot be null";
-    private static final String INVALID_TYPE_MESSAGE =
-            "The requested flag {} is not defined in NextObjective.";
-    private static final String INVALID_OP_MESSAGE =
-            "The requested operation {} is not defined for NextObjective.";
 
     public static final String REST_APP_ID = "org.onosproject.rest";
 
@@ -121,8 +117,9 @@ public class NextObjectiveCodec extends JsonCodec<NextObjective> {
         builder.withId(idJson.asInt());
 
         // decode application id
-        ApplicationId appId = coreService.registerApplication(REST_APP_ID);
-        builder.fromApp(appId);
+        JsonNode appIdJson = json.get(APP_ID);
+        String appId = appIdJson != null ? appIdJson.asText() : REST_APP_ID;
+        builder.fromApp(coreService.registerApplication(appId));
 
         // decode type
         String typeStr = nullIsIllegal(json.get(TYPE), TYPE + MISSING_MEMBER_MESSAGE).asText();
@@ -141,8 +138,8 @@ public class NextObjectiveCodec extends JsonCodec<NextObjective> {
                 builder.withType(NextObjective.Type.SIMPLE);
                 break;
             default:
-                log.warn(INVALID_TYPE_MESSAGE, typeStr);
-                return null;
+                throw new IllegalArgumentException("The requested type " + typeStr +
+                " is not defined for NextObjective.");
         }
 
         // decode treatments
@@ -174,8 +171,8 @@ public class NextObjectiveCodec extends JsonCodec<NextObjective> {
                 nextObjective = builder.remove();
                 break;
             default:
-                log.warn(INVALID_OP_MESSAGE, opStr);
-                return null;
+                throw new IllegalArgumentException("The requested operation " + opStr +
+                " is not defined for NextObjective.");
         }
 
         return nextObjective;

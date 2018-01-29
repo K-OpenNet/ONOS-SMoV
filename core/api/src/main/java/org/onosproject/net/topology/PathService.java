@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,11 @@ import org.onosproject.net.ElementId;
 import org.onosproject.net.Link;
 import org.onosproject.net.Path;
 
+import static org.onosproject.net.topology.HopCountLinkWeigher.DEFAULT_HOP_COUNT_WEIGHER;
+
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Service for obtaining pre-computed paths or for requesting computation of
@@ -49,8 +52,50 @@ public interface PathService {
      * @param dst    destination element
      * @param weight edge-weight entity
      * @return set of all shortest paths between the two element
+     *
+     * @deprecated in Junco (1.9.0), use version with LinkWeigher instead
      */
+    @Deprecated
     Set<Path> getPaths(ElementId src, ElementId dst, LinkWeight weight);
+
+    /**
+     * Returns the set of all shortest paths between the specified source and
+     * destination network elements.  The path is computed using the supplied
+     * edge-weight function.
+     *
+     * @param src     source element
+     * @param dst     destination element
+     * @param weigher edge-weight entity
+     * @return set of all shortest paths between the two element
+     */
+    Set<Path> getPaths(ElementId src, ElementId dst, LinkWeigher weigher);
+
+    /**
+     * Returns the k-shortest paths between source and
+     * destination devices.
+     *
+     * @param src    source device
+     * @param dst    destination device
+     * @return stream of k-shortest paths
+     */
+    default Stream<Path> getKShortestPaths(ElementId src, ElementId dst) {
+        return getKShortestPaths(src, dst, DEFAULT_HOP_COUNT_WEIGHER);
+    }
+
+    /**
+     * Returns the k-shortest paths between source and
+     * destination devices.
+     *
+     * @param src    source device
+     * @param dst    destination device
+     * @param weigher edge-weight entity
+     * @return stream of k-shortest paths
+     */
+    default Stream<Path> getKShortestPaths(ElementId src, ElementId dst,
+                                           LinkWeigher weigher) {
+        return getPaths(src, dst, weigher).stream();
+    }
+
 
     /**
      * Returns the set of all disjoint shortest path pairs between the
@@ -72,9 +117,25 @@ public interface PathService {
      * @param dst    destination device
      * @param weight edge-weight entity
      * @return set of all shortest paths between the two devices
+     *
+     * @deprecated in Junco (1.9.0), use version with LinkWeigher instead
      */
+    @Deprecated
     Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
                                        LinkWeight weight);
+
+    /**
+     * Returns the set of all disjoint shortest path pairs between the
+     * specified source and destination elements. The path is computed using
+     * the supplied edge-weight function.
+     *
+     * @param src     source device
+     * @param dst     destination device
+     * @param weigher edge-weight entity
+     * @return set of all shortest paths between the two devices
+     */
+    Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                       LinkWeigher weigher);
 
     /**
      * Returns the set of all disjoint shortest path pairs between the
@@ -101,9 +162,28 @@ public interface PathService {
      * @param weight      edge-weight entity
      * @param riskProfile map of edges to risk profiles
      * @return set of all shortest paths between the two devices
+     *
+     * @deprecated in Junco (1.9.0), use version with LinkWeigher instead
      */
+    @Deprecated
     Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
                                        LinkWeight weight,
+                                       Map<Link, Object> riskProfile);
+
+    /**
+     * Returns the set of all disjoint shortest path pairs between the
+     * specified source and destination elements and taking into consideration
+     * the provided risk profile. The path is computed using the supplied
+     * edge-weight function.
+     *
+     * @param src         source device
+     * @param dst         destination device
+     * @param weigher     edge-weight entity
+     * @param riskProfile map of edges to risk profiles
+     * @return set of all shortest paths between the two devices
+     */
+    Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                       LinkWeigher weigher,
                                        Map<Link, Object> riskProfile);
 
 }

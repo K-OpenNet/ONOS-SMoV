@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,17 +36,18 @@ public class DefaultLink extends AbstractProjectableModel implements Link {
     private final boolean isExpected;
 
     /**
-     * Creates an active infrastructure link using the supplied information.
+     * Creates an infrastructure link using the supplied information.
      *
      * @param providerId  provider identity
      * @param src         link source
      * @param dst         link destination
      * @param type        link type
+     * @param state       link state
      * @param annotations optional key/value annotations
      */
     protected DefaultLink(ProviderId providerId, ConnectPoint src, ConnectPoint dst,
-                       Type type, Annotations... annotations) {
-        this(providerId, src, dst, type, ACTIVE, false, annotations);
+                       Type type, State state, Annotations... annotations) {
+        this(providerId, src, dst, type, state, false, annotations);
     }
 
     /**
@@ -91,11 +92,6 @@ public class DefaultLink extends AbstractProjectableModel implements Link {
     @Override
     public State state() {
         return state;
-    }
-
-    @Override
-    public boolean isDurable() {
-        return isExpected();
     }
 
     @Override
@@ -148,7 +144,7 @@ public class DefaultLink extends AbstractProjectableModel implements Link {
     /**
      * Builder for DefaultLink objects.
      */
-    public static final class Builder {
+    public static class Builder {
         private ProviderId providerId;
         private Annotations annotations = EMPTY;
         private ConnectPoint src;
@@ -157,7 +153,7 @@ public class DefaultLink extends AbstractProjectableModel implements Link {
         private State state = ACTIVE;
         private boolean isExpected = false;
 
-        private Builder() {
+        protected Builder() {
             // Hide constructor
         }
 

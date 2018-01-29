@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,5 +104,15 @@ public interface ApplicationStore extends Store<ApplicationEvent, ApplicationSto
      * @param permissions set of granted permissions
      */
     void setPermissions(ApplicationId appId, Set<Permission> permissions);
+
+    /**
+     * Returns stream that contains the application OAR/JAR file contents.
+     *
+     * @param appId application identifier
+     * @return input stream containing the app OAR/JAR file
+     */
+    default InputStream getApplicationArchive(ApplicationId appId) {
+        return null;
+    }
 
 }

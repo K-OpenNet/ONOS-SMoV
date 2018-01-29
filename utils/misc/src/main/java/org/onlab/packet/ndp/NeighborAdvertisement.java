@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,19 @@ package org.onlab.packet.ndp;
 
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.Deserializer;
-import org.onlab.packet.IPacket;
+import org.onlab.packet.Ethernet;
+import org.onlab.packet.ICMP6;
+import org.onlab.packet.IPv6;
 import org.onlab.packet.Ip6Address;
+import org.onlab.packet.MacAddress;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onlab.packet.PacketUtils.checkInput;
 
 /**
@@ -32,6 +37,11 @@ import static org.onlab.packet.PacketUtils.checkInput;
  */
 public class NeighborAdvertisement extends BasePacket {
     public static final byte HEADER_LENGTH = 20; // bytes
+    // Constants for NDP reply
+    protected static final byte NDP_HOP_LIMIT = (byte) 0x255;
+    protected static final byte NDP_SOLICITED_FLAG = (byte) 0x1;
+    protected static final byte NDP_OVERRIDE_FLAG = (byte) 0x1;
+    protected static final byte RESERVED_CODE = (byte) 0x0;
 
     protected byte routerFlag;
     protected byte solicitedFlag;
@@ -170,22 +180,7 @@ public class NeighborAdvertisement extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(byte[] data, int offset, int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        int iscratch;
 
-        iscratch = bb.getInt();
-        this.routerFlag = (byte) (iscratch >> 31 & 0x1);
-        this.solicitedFlag = (byte) (iscratch >> 30 & 0x1);
-        this.overrideFlag = (byte) (iscratch >> 29 & 0x1);
-        bb.get(this.targetAddress, 0, Ip6Address.BYTE_LENGTH);
-
-        this.options.deserialize(data, bb.position(),
-                                 bb.limit() - bb.position());
-
-        return this;
-    }
 
     /*
      * (non-Javadoc)
@@ -286,4 +281,125 @@ public class NeighborAdvertisement extends BasePacket {
                 .add("targetAddress", Arrays.toString(targetAddress))
                 .toString();
     }
+
+    /**
+     * Builds an NDP reply based on a request.
+     *
+     * @param srcIp   the IP address to use as the reply source
+     * @param srcMac  the MAC address to use as the reply source
+     * @param request the Neighbor Solicitation request we got
+     * @return an Ethernet frame containing the Neighbor Advertisement reply
+     * @deprecated since 1.11.0
+     */
+    @Deprecated
+    public static Ethernet buildNdpAdv(byte[] srcIp,
+                                   byte[] srcMac,
+                                   Ethernet request) {
+
+        if (srcIp.length != Ip6Address.BYTE_LENGTH ||
+                srcMac.length != MacAddress.MAC_ADDRESS_LENGTH) {
+            return null;
+        }
+
+        if (request.getEtherType() != Ethernet.TYPE_IPV6) {
+            return null;
+        }
+
+        IPv6 ipv6Request = (IPv6) request.getPayload();
+
+        if (ipv6Request.getNextHeader() != IPv6.PROTOCOL_ICMP6) {
+            return null;
+        }
+
+        ICMP6 icmpv6 = (ICMP6) ipv6Request.getPayload();
+
+        if (icmpv6.getIcmpType() != ICMP6.NEIGHBOR_SOLICITATION) {
+            return null;
+        }
+
+        Ethernet eth = new Ethernet();
+        eth.setDestinationMACAddress(request.getSourceMAC());
+        eth.setSourceMACAddress(srcMac);
+        eth.setEtherType(Ethernet.TYPE_IPV6);
+        eth.setVlanID(request.getVlanID());
+
+        IPv6 ipv6 = new IPv6();
+        ipv6.setSourceAddress(srcIp);
+        ipv6.setDestinationAddress(ipv6Request.getSourceAddress());
+        ipv6.setHopLimit((byte) 255);
+
+        ICMP6 icmp6 = new ICMP6();
+        icmp6.setIcmpType(ICMP6.NEIGHBOR_ADVERTISEMENT);
+        icmp6.setIcmpCode((byte) 0);
+
+        NeighborAdvertisement nadv = new NeighborAdvertisement();
+        nadv.setTargetAddress(srcIp);
+        nadv.setSolicitedFlag((byte) 1);
+        nadv.setOverrideFlag((byte) 1);
+        nadv.addOption(NeighborDiscoveryOptions.TYPE_TARGET_LL_ADDRESS,
+                       srcMac);
+
+        icmp6.setPayload(nadv);
+        ipv6.setPayload(icmp6);
+        eth.setPayload(ipv6);
+        return eth;
+    }
+
+    /**
+     * Builds an NDP reply based on a request.
+     *
+     * @param srcIp   the IP address to use as the reply source
+     * @param srcMac  the MAC address to use as the reply source
+     * @param request the Neighbor Solicitation request we got
+     * @return an Ethernet frame containing the Neighbor Advertisement reply
+     */
+    public static Ethernet buildNdpAdv(Ip6Address srcIp,
+                                       MacAddress srcMac,
+                                       Ethernet request) {
+
+        checkNotNull(srcIp, "IP address cannot be null");
+        checkNotNull(srcMac, "MAC address cannot be null");
+        checkNotNull(request, "Request cannot be null");
+        checkArgument(request.getEtherType() == Ethernet.TYPE_IPV6,
+                "EtherType must be IPv6");
+
+        final IPv6 ipv6Request = (IPv6) request.getPayload();
+
+        checkArgument(ipv6Request.getNextHeader() == IPv6.PROTOCOL_ICMP6,
+                "Protocol must be ICMP6");
+
+        final ICMP6 icmpv6 = (ICMP6) ipv6Request.getPayload();
+
+        checkArgument(icmpv6.getIcmpType() == ICMP6.NEIGHBOR_SOLICITATION,
+                "ICMP6 type must be NEIGHBOR_SOLICITATION");
+
+        Ethernet eth = new Ethernet();
+        eth.setDestinationMACAddress(request.getSourceMAC());
+        eth.setSourceMACAddress(srcMac);
+        eth.setEtherType(Ethernet.TYPE_IPV6);
+        eth.setVlanID(request.getVlanID());
+
+        IPv6 ipv6 = new IPv6();
+        ipv6.setSourceAddress(srcIp.toOctets());
+        ipv6.setDestinationAddress(ipv6Request.getSourceAddress());
+        ipv6.setHopLimit(NDP_HOP_LIMIT);
+        ipv6.setNextHeader(IPv6.PROTOCOL_ICMP6);
+
+        ICMP6 icmp6 = new ICMP6();
+        icmp6.setIcmpType(ICMP6.NEIGHBOR_ADVERTISEMENT);
+        icmp6.setIcmpCode(RESERVED_CODE);
+
+        NeighborAdvertisement nadv = new NeighborAdvertisement();
+        nadv.setTargetAddress(srcIp.toOctets());
+        nadv.setSolicitedFlag(NDP_SOLICITED_FLAG);
+        nadv.setOverrideFlag(NDP_OVERRIDE_FLAG);
+        nadv.addOption(NeighborDiscoveryOptions.TYPE_TARGET_LL_ADDRESS,
+                srcMac.toBytes());
+
+        icmp6.setPayload(nadv);
+        ipv6.setPayload(icmp6);
+        eth.setPayload(ipv6);
+        return eth;
+    }
+
 }

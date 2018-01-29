@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 package org.onosproject.ui;
 
+import org.onosproject.ui.lion.LionBundle;
+
 import java.util.List;
 
 /**
@@ -25,19 +27,19 @@ public interface UiExtensionService {
     /**
      * Registers the specified user interface extension.
      *
-     * @param extension GUI extension to register
+     * @param extension UI extension to register
      */
     void register(UiExtension extension);
 
     /**
      * Unregisters the specified user interface extension.
      *
-     * @param extension GUI extension to unregister
+     * @param extension UI extension to unregister
      */
     void unregister(UiExtension extension);
 
     /**
-     * Returns the list of user interface extensions.
+     * Returns the list of registered user interface extensions.
      *
      * @return list of extensions
      */
@@ -47,7 +49,14 @@ public interface UiExtensionService {
      * Returns the user interface extension that contributed the specified view.
      *
      * @param viewId view identifier
-     * @return user interface extension
+     * @return contributing user interface extension
      */
     UiExtension getViewExtension(String viewId);
+
+    /**
+     * Returns the navigation pane localization bundle.
+     *
+     * @return the navigation localization bundle
+     */
+    LionBundle getNavLionBundle();
 }

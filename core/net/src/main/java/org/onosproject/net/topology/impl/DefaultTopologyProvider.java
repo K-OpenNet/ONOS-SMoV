@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,7 +124,7 @@ public class DefaultTopologyProvider extends AbstractProvider
     @Activate
     public synchronized void activate(ComponentContext context) {
         cfgService.registerProperties(DefaultTopologyProvider.class);
-        executor = newFixedThreadPool(MAX_THREADS, groupedThreads("onos/topo", "build-%d"));
+        executor = newFixedThreadPool(MAX_THREADS, groupedThreads("onos/topo", "build-%d", log));
         accumulator = new TopologyChangeAccumulator();
         logConfig("Configured");
 
@@ -198,7 +198,7 @@ public class DefaultTopologyProvider extends AbstractProvider
 
     @Override
     public void triggerRecompute() {
-        triggerTopologyBuild(Collections.<Event>emptyList());
+        triggerTopologyBuild(Collections.emptyList());
     }
 
     /**

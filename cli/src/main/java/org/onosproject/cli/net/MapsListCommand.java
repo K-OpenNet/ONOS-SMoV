@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,13 +60,12 @@ public class MapsListCommand extends AbstractShellCommand {
         ArrayNode maps = mapper.createArrayNode();
 
         // Create a JSON node for each map
-        mapInfo.stream()
-            .forEach(info -> {
-                ObjectNode map = mapper.createObjectNode();
-                map.put("name", info.name())
-                   .put("size", info.size());
-                maps.add(map);
-            });
+        mapInfo.forEach(info -> {
+            ObjectNode map = mapper.createObjectNode();
+            map.put("name", info.name())
+                    .put("size", info.size());
+            maps.add(map);
+        });
 
         return maps;
     }

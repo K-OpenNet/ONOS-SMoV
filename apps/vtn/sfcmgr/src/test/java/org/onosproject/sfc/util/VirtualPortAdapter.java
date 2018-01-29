@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,18 @@
 package org.onosproject.sfc.util;
 
 import java.util.Collection;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.onlab.packet.IpAddress;
+import org.onlab.packet.MacAddress;
 import org.onosproject.net.DeviceId;
 import org.onosproject.vtnrsc.FixedIp;
 import org.onosproject.vtnrsc.TenantId;
+import org.onosproject.vtnrsc.TenantNetworkId;
 import org.onosproject.vtnrsc.VirtualPort;
 import org.onosproject.vtnrsc.VirtualPortId;
-import org.onosproject.vtnrsc.TenantNetworkId;
+import org.onosproject.vtnrsc.virtualport.VirtualPortListener;
 import org.onosproject.vtnrsc.virtualport.VirtualPortService;
 
 /**
@@ -47,6 +49,11 @@ public class VirtualPortAdapter implements VirtualPortService {
 
     @Override
     public VirtualPort getPort(FixedIp fixedIP) {
+        return null;
+    }
+
+    @Override
+    public VirtualPort getPort(MacAddress mac) {
         return null;
     }
 
@@ -94,5 +101,13 @@ public class VirtualPortAdapter implements VirtualPortService {
     @Override
     public boolean removePorts(Iterable<VirtualPortId> vPortIds) {
         return true;
+    }
+
+    @Override
+    public void addListener(VirtualPortListener listener) {
+    }
+
+    @Override
+    public void removeListener(VirtualPortListener listener) {
     }
 }

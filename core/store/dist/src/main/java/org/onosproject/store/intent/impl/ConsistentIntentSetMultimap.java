@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,13 +41,13 @@ import static org.slf4j.LoggerFactory.getLogger;
  * A collection that maps Intent IDs as keys to values as Intent IDs,
  * where each key may associated with multiple values without duplication.
  */
-@Component(immediate = true, enabled = true)
+@Component(immediate = true)
 @Service
 @Beta
 public class ConsistentIntentSetMultimap implements IntentSetMultimap {
     private final Logger log = getLogger(getClass());
 
-    private static final String INTENT_MAPPING = "IntentMapping";
+    private static final String INTENT_MAPPING = "onos-intent-mapping";
 
     private static final Serializer SERIALIZER = Serializer.using(KryoNamespaces.API);
 

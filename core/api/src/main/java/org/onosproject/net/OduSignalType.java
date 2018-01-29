@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,22 @@ package org.onosproject.net;
  * </p>
  */
 public enum OduSignalType {
-    /** bit rate in Mbps. */
+    // bit rate in Mbps
     ODU0(1_250),
     ODU1(2_500),
     ODU2(10_000),
     ODU2e(10_000),
     ODU3(40_000),
-    ODU4(100_000);
+    ODU4(100_000),
+    ODUC1(100_000),
+    ODUC2(200_000),
+    ODUC3(300_000),
+    ODUC4(400_000),
+    ODUC5(500_000),
+    ODUC6(600_000),
+    ODUC7(700_000),
+    ODUC8(800_000),
+    ODUC9(900_000);
 
     private final long bitRate;
 

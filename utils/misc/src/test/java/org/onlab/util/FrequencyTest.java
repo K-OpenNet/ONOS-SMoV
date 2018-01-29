@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,4 +104,97 @@ public class FrequencyTest {
 
         assertThat(frequency.multiply(5), is(expected));
     }
+    /**
+     * Tests floorDivision operation of Frequency.
+     */
+    @Test
+    public void testfloorDivision() {
+        Frequency frequency = Frequency.ofGHz(1);
+        long factor = 5;
+        Frequency expected = Frequency.ofMHz(200);
+
+        assertThat(frequency.floorDivision(factor), is(expected));
+    }
+    /**
+     * Tests asHz operation of Frequency.
+     */
+    @Test
+    public void testasHz() {
+        Frequency frequency = Frequency.ofKHz(1);
+
+        assertThat(frequency.asHz(), is(1000L));
+    }
+    /**
+     * Tests asKHz operation of Frequency.
+     */
+    @Test
+    public void testasKHz() {
+        Frequency frequency = Frequency.ofMHz(1);
+
+        assertThat(frequency.asKHz(), is(1000.0));
+    }
+    /**
+     * Tests asMHz operation of Frequency.
+     */
+    @Test
+    public void testasMHz() {
+        Frequency frequency = Frequency.ofGHz(1);
+
+        assertThat(frequency.asMHz(), is(1000.0));
+    }
+    /**
+     * Tests asGHz operation of Frequency.
+     */
+    @Test
+    public void testasGHz() {
+        Frequency frequency = Frequency.ofTHz(1);
+
+        assertThat(frequency.asGHz(), is(1000.0));
+    }
+    /**
+     * Tests asThz operation of Frequency.
+     */
+    @Test
+    public void testasTHz() {
+        Frequency frequency = Frequency.ofHz(1_000_000_000_000L);
+
+        assertThat(frequency.asTHz(), is(1.0));
+    }
+
+    /**
+     * Tests the ofKHz (with a double parameter) operation of Frequency.
+     */
+    @Test
+    public void testofKHz() {
+        Frequency frequency = Frequency.ofKHz(1.0);
+        assertThat(frequency.asHz(), is(1000L));
+    }
+    /**
+     * Tests the ofMHz (with a double parameter) operation of Frequency.
+     */
+    @Test
+    public void testofMHz() {
+        Frequency frequency = Frequency.ofMHz(1.0);
+        assertThat(frequency.asKHz(), is(1000.0));
+    }
+    /**
+     * Tests the ofGHz (with a double parameter) operation of Frequency.
+     */
+    @Test
+    public void testofGHz() {
+        Frequency frequency = Frequency.ofGHz(1.0);
+        assertThat(frequency.asMHz(), is(1000.0));
+    }
+    /**
+     * Tests the ofTHz (with a double parameter) operation of Frequency.
+     */
+    @Test
+    public void testofTHz() {
+        Frequency frequency = Frequency.ofTHz(1.0);
+        assertThat(frequency.asGHz(), is(1000.0));
+    }
+
+
+
 }
+

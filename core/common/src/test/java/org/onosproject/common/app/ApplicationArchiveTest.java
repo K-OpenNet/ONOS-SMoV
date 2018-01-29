@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import static org.onosproject.app.DefaultApplicationDescriptionTest.*;
 public class ApplicationArchiveTest {
 
     static final File STORE = Files.createTempDir();
+    static final String SYSTEM = "system";
 
     private ApplicationArchive aar = new ApplicationArchive();
 
@@ -52,6 +53,7 @@ public class ApplicationArchiveTest {
     public void tearDown() throws IOException {
         if (STORE.exists()) {
             Tools.removeDirectory(STORE);
+            Tools.removeDirectory(SYSTEM);
         }
     }
 
@@ -83,6 +85,14 @@ public class ApplicationArchiveTest {
     @Test
     public void savePlainApp() throws IOException {
         InputStream stream = getClass().getResourceAsStream("app.xml");
+        ApplicationDescription app = aar.saveApplication(stream);
+        validate(app);
+        stream.close();
+    }
+
+    @Test
+    public void saveSelfContainedApp() throws IOException {
+        InputStream stream = getClass().getResourceAsStream("app.scj");
         ApplicationDescription app = aar.saveApplication(stream);
         validate(app);
         stream.close();

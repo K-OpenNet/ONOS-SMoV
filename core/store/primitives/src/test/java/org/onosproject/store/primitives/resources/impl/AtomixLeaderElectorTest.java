@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,81 +20,76 @@ import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import org.junit.Ignore;
+import io.atomix.protocols.raft.proxy.RaftProxy;
+import io.atomix.protocols.raft.service.RaftService;
 import org.junit.Test;
-
-import static org.junit.Assert.*;
-
 import org.onosproject.cluster.Leadership;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.event.Change;
 
-import io.atomix.Atomix;
-import io.atomix.resource.ResourceType;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Unit tests for {@link AtomixLeaderElector}.
  */
-@Ignore
-public class AtomixLeaderElectorTest extends AtomixTestBase {
+public class AtomixLeaderElectorTest extends AtomixTestBase<AtomixLeaderElector> {
 
-    NodeId node1 = new NodeId("node1");
-    NodeId node2 = new NodeId("node2");
-    NodeId node3 = new NodeId("node3");
+    NodeId node1 = new NodeId("4");
+    NodeId node2 = new NodeId("5");
+    NodeId node3 = new NodeId("6");
 
     @Override
-    protected ResourceType resourceType() {
-        return new ResourceType(AtomixLeaderElector.class);
+    protected RaftService createService() {
+        return new AtomixLeaderElectorService();
+    }
+
+    @Override
+    protected AtomixLeaderElector createPrimitive(RaftProxy proxy) {
+        return new AtomixLeaderElector(proxy);
     }
 
     @Test
     public void testRun() throws Throwable {
-        leaderElectorRunTests(1);
-        clearTests();
-        leaderElectorRunTests(2);
-        clearTests();
-        leaderElectorRunTests(3);
-        clearTests();
+        leaderElectorRunTests();
     }
 
-    private void leaderElectorRunTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorRunTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-run");
         elector1.run("foo", node1).thenAccept(result -> {
             assertEquals(node1, result.leaderNodeId());
             assertEquals(1, result.leader().term());
             assertEquals(1, result.candidates().size());
             assertEquals(node1, result.candidates().get(0));
         }).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
-        elector2.run("foo", node2).thenAccept(result -> {
+
+        elector1.run("bar", node1).thenAccept(result -> {
             assertEquals(node1, result.leaderNodeId());
             assertEquals(1, result.leader().term());
-            assertEquals(2, result.candidates().size());
+            assertEquals(1, result.candidates().size());
             assertEquals(node1, result.candidates().get(0));
-            assertEquals(node2, result.candidates().get(1));
+        }).join();
+
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-run");
+        elector2.run("bar", node2).thenAccept(result -> {
+            assertEquals(node2, result.leaderNodeId());
+            assertEquals(2, result.leader().term());
+            assertEquals(2, result.candidates().size());
+            assertEquals(node2, result.candidates().get(0));
+            assertEquals(node1, result.candidates().get(1));
         }).join();
     }
 
     @Test
     public void testWithdraw() throws Throwable {
-        leaderElectorWithdrawTests(1);
-        clearTests();
-        leaderElectorWithdrawTests(2);
-        clearTests();
-        leaderElectorWithdrawTests(3);
-        clearTests();
+        leaderElectorWithdrawTests();
     }
 
-    private void leaderElectorWithdrawTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorWithdrawTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-withdraw");
         elector1.run("foo", node1).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-withdraw");
         elector2.run("foo", node2).join();
 
         LeaderEventListener listener1 = new LeaderEventListener();
@@ -118,26 +113,25 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
             assertEquals(1, result.newValue().candidates().size());
             assertEquals(node2, result.newValue().candidates().get(0));
         }).join();
+
+        Leadership leadership1 = elector1.getLeadership("foo").join();
+        assertEquals(node2, leadership1.leader().nodeId());
+        assertEquals(1, leadership1.candidates().size());
+
+        Leadership leadership2 = elector2.getLeadership("foo").join();
+        assertEquals(node2, leadership2.leader().nodeId());
+        assertEquals(1, leadership2.candidates().size());
     }
 
     @Test
     public void testAnoint() throws Throwable {
-        leaderElectorAnointTests(1);
-        clearTests();
-        leaderElectorAnointTests(2);
-        clearTests();
-        leaderElectorAnointTests(3);
-        clearTests();
+        leaderElectorAnointTests();
     }
 
-    private void leaderElectorAnointTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
-        Atomix client3 = createAtomixClient();
-        AtomixLeaderElector elector3 = client3.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorAnointTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-anoint");
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-anoint");
+        AtomixLeaderElector elector3 = newPrimitive("test-elector-anoint");
         elector1.run("foo", node1).join();
         elector2.run("foo", node2).join();
 
@@ -158,9 +152,6 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
         elector3.anoint("foo", node2).thenAccept(result -> {
             assertTrue(result);
         }).join();
-        assertTrue(listener1.hasEvent());
-        assertTrue(listener2.hasEvent());
-        assertTrue(listener3.hasEvent());
 
         listener1.nextEvent().thenAccept(result -> {
             assertEquals(node2, result.newValue().leaderNodeId());
@@ -184,22 +175,13 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
 
     @Test
     public void testPromote() throws Throwable {
-        leaderElectorPromoteTests(1);
-        clearTests();
-        leaderElectorPromoteTests(2);
-        clearTests();
-        leaderElectorPromoteTests(3);
-        clearTests();
+        leaderElectorPromoteTests();
     }
 
-    private void leaderElectorPromoteTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
-        Atomix client3 = createAtomixClient();
-        AtomixLeaderElector elector3 = client3.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorPromoteTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-promote");
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-promote");
+        AtomixLeaderElector elector3 = newPrimitive("test-elector-promote");
         elector1.run("foo", node1).join();
         elector2.run("foo", node2).join();
 
@@ -220,9 +202,15 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
 
         elector3.run("foo", node3).join();
 
-        listener1.clearEvents();
-        listener2.clearEvents();
-        listener3.clearEvents();
+        listener1.nextEvent().thenAccept(result -> {
+            assertEquals(node3, result.newValue().candidates().get(2));
+        }).join();
+        listener2.nextEvent().thenAccept(result -> {
+            assertEquals(node3, result.newValue().candidates().get(2));
+        }).join();
+        listener3.nextEvent().thenAccept(result -> {
+            assertEquals(node3, result.newValue().candidates().get(2));
+        }).join();
 
         elector3.promote("foo", node3).thenAccept(result -> {
             assertTrue(result);
@@ -241,25 +229,17 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
 
     @Test
     public void testLeaderSessionClose() throws Throwable {
-        leaderElectorLeaderSessionCloseTests(1);
-        clearTests();
-        leaderElectorLeaderSessionCloseTests(2);
-        clearTests();
-        leaderElectorLeaderSessionCloseTests(3);
-        clearTests();
+        leaderElectorLeaderSessionCloseTests();
     }
 
-    private void leaderElectorLeaderSessionCloseTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorLeaderSessionCloseTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-leader-session-close");
         elector1.run("foo", node1).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-leader-session-close");
         LeaderEventListener listener = new LeaderEventListener();
         elector2.run("foo", node2).join();
         elector2.addChangeListener(listener).join();
-        client1.close();
+        elector1.proxy.close();
         listener.nextEvent().thenAccept(result -> {
             assertEquals(node2, result.newValue().leaderNodeId());
             assertEquals(1, result.newValue().candidates().size());
@@ -269,25 +249,17 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
 
     @Test
     public void testNonLeaderSessionClose() throws Throwable {
-        leaderElectorNonLeaderSessionCloseTests(1);
-        clearTests();
-        leaderElectorNonLeaderSessionCloseTests(2);
-        clearTests();
-        leaderElectorNonLeaderSessionCloseTests(3);
-        clearTests();
+        leaderElectorNonLeaderSessionCloseTests();
     }
 
-    private void leaderElectorNonLeaderSessionCloseTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
+    private void leaderElectorNonLeaderSessionCloseTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-non-leader-session-close");
         elector1.run("foo", node1).join();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-non-leader-session-close");
         LeaderEventListener listener = new LeaderEventListener();
         elector2.run("foo", node2).join();
         elector1.addChangeListener(listener).join();
-        client2.close().join();
+        elector2.proxy.close().join();
         listener.nextEvent().thenAccept(result -> {
             assertEquals(node1, result.newValue().leaderNodeId());
             assertEquals(1, result.newValue().candidates().size());
@@ -296,21 +268,57 @@ public class AtomixLeaderElectorTest extends AtomixTestBase {
     }
 
     @Test
-    public void testQueries() throws Throwable {
-        leaderElectorQueryTests(1);
-        clearTests();
-        leaderElectorQueryTests(2);
-        clearTests();
-        leaderElectorQueryTests(3);
-        clearTests();
+    public void testLeaderBalance() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-leader-session-close");
+        elector1.run("foo", node1).join();
+        elector1.run("bar", node1).join();
+        elector1.run("baz", node1).join();
+
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-leader-session-close");
+        elector2.run("foo", node2).join();
+        elector2.run("bar", node2).join();
+        elector2.run("baz", node2).join();
+
+        AtomixLeaderElector elector3 = newPrimitive("test-elector-leader-session-close");
+        elector3.run("foo", node3).join();
+        elector3.run("bar", node3).join();
+        elector3.run("baz", node3).join();
+
+        LeaderEventListener listener = new LeaderEventListener();
+        elector2.addChangeListener(listener).join();
+
+        elector1.proxy.close();
+
+        listener.nextEvent().thenAccept(result -> {
+            assertEquals(node3, result.newValue().leaderNodeId());
+            assertEquals(2, result.newValue().candidates().size());
+            assertEquals(node3, result.newValue().candidates().get(0));
+            assertEquals(node2, result.newValue().candidates().get(1));
+        }).join();
+
+        listener.nextEvent().thenAccept(result -> {
+            assertEquals(node2, result.newValue().leaderNodeId());
+            assertEquals(2, result.newValue().candidates().size());
+            assertEquals(node2, result.newValue().candidates().get(0));
+            assertEquals(node3, result.newValue().candidates().get(1));
+        });
+
+        listener.nextEvent().thenAccept(result -> {
+            assertEquals(node2, result.newValue().leaderNodeId());
+            assertEquals(2, result.newValue().candidates().size());
+            assertEquals(node2, result.newValue().candidates().get(0));
+            assertEquals(node3, result.newValue().candidates().get(1));
+        }).join();
     }
 
-    private void leaderElectorQueryTests(int numServers) throws Throwable {
-        createCopycatServers(numServers);
-        Atomix client1 = createAtomixClient();
-        Atomix client2 = createAtomixClient();
-        AtomixLeaderElector elector1 = client1.get("test-elector", AtomixLeaderElector.class).join();
-        AtomixLeaderElector elector2 = client2.get("test-elector", AtomixLeaderElector.class).join();
+    @Test
+    public void testQueries() throws Throwable {
+        leaderElectorQueryTests();
+    }
+
+    private void leaderElectorQueryTests() throws Throwable {
+        AtomixLeaderElector elector1 = newPrimitive("test-elector-query");
+        AtomixLeaderElector elector2 = newPrimitive("test-elector-query");
         elector1.run("foo", node1).join();
         elector2.run("foo", node2).join();
         elector2.run("bar", node2).join();

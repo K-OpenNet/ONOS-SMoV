@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.onosproject.event.ListenerService;
 /**
  * Basis for components which need to export listener mechanism.
  */
-@Component(componentAbstract = true)
+@Component
 public abstract class AbstractListenerProviderRegistry<E extends Event, L extends EventListener<E>,
                                                        P extends Provider, S extends ProviderService<P>>
         extends AbstractProviderRegistry<P, S> implements ListenerService<E, L> {

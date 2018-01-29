@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
 import org.onosproject.net.MastershipRole;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceAdminService;
 import org.onosproject.net.device.DeviceProvider;
 import org.onosproject.net.device.DeviceProviderRegistry;
@@ -151,7 +152,7 @@ public class NullProviders {
             label = "Number of host to generate per device")
     private int hostCount = DEFAULT_HOST_COUNT;
 
-    private static final int DEFAULT_PACKET_RATE = 5;
+    private static final int DEFAULT_PACKET_RATE = 0;
     @Property(name = "packetRate", intValue = DEFAULT_PACKET_RATE,
             label = "Packet-in/s rate; 0 for no packets")
     private int packetRate = DEFAULT_PACKET_RATE;
@@ -267,6 +268,15 @@ public class NullProviders {
     }
 
     /**
+     * Returns the currently active topology simulator.
+     *
+     * @return current simulator; null if none is active
+     */
+    public TopologySimulator currentSimulator() {
+        return simulator;
+    }
+
+    /**
      * Severs the link between the specified end-points in both directions.
      *
      * @param one link endpoint
@@ -328,10 +338,10 @@ public class NullProviders {
                        new DefaultServiceDirectory(),
                        deviceProviderService, hostProviderService,
                        linkProviderService);
-        simulator.setUpTopology();
         flowRuleProvider.start(flowRuleProviderService);
         packetProvider.start(packetRate, hostService, deviceService,
                              packetProviderService);
+        simulator.setUpTopology();
         topologyMutationDriver.start(mutationRate, linkService, deviceService,
                                      linkProviderService, deviceProviderService,
                                      simulator);
@@ -355,6 +365,12 @@ public class NullProviders {
             return new MeshTopologySimulator();
         } else if (topoShape.matches("grid([,].*|$)")) {
             return new GridTopologySimulator();
+        } else if (topoShape.matches("fattree([,].*|$)")) {
+            return new FatTreeTopologySimulator();
+        } else if (topoShape.matches("chordal([,].*|$)")) {
+            return new ChordalTopologySimulator();
+        } else if (topoShape.matches("custom([,].*|$)")) {
+            return new CustomTopologySimulator();
         } else {
             return new ConfiguredTopologySimulator();
         }
@@ -423,13 +439,19 @@ public class NullProviders {
 
         @Override
         public boolean isReachable(DeviceId deviceId) {
-            return topoShape.equals("configured") ||
+            return topoShape.equals("custom") ||
                     (simulator != null && simulator.contains(deviceId) &&
                             topologyMutationDriver.isReachable(deviceId));
         }
 
         @Override
         public void triggerProbe(DeviceId deviceId) {
+        }
+
+        @Override
+        public void changePortState(DeviceId deviceId, PortNumber portNumber,
+                                    boolean enable) {
+            // TODO maybe required
         }
     }
 

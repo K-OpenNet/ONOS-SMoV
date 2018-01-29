@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the 'License');
  * you may not use this file except in compliance with the License.
@@ -22,51 +22,70 @@
     'use strict';
 
     // injected refs
-    var $log, $scope, wss, fs, ks, ps, is;
+    var $log, $scope, wss, fs, ks, ps, is, ls;
 
     // internal state
-    var  detailsPanel,
-         pStartY,
-         pHeight,
-         top,
-         middle,
-         bottom,
-         wSize = false;
+    var detailsPanel,
+        pStartY,
+        pHeight,
+        top,
+        middle,
+        bottom,
+        wSize = false,
+        activateImmediately = '';
 
     // constants
     var INSTALLED = 'INSTALLED',
         ACTIVE = 'ACTIVE',
         appMgmtReq = 'appManagementRequest',
-        topPdg = 50,
-        panelWidth = 500,
+        topPdg = 60,
+        panelWidth = 540,
         pName = 'application-details-panel',
         detailsReq = 'appDetailsRequest',
         detailsResp = 'appDetailsResponse',
         fileUploadUrl = 'applications/upload',
-        iconUrlPrefix = 'rs/applications/',
+        activateOption = '?activate=true',
+        appUrlPrefix = 'rs/applications/',
         iconUrlSuffix = '/icon',
+        downloadSuffix = '/download',
         dialogId = 'app-dialog',
         dialogOpts = {
-            edge: 'right'
+            edge: 'right',
+            width: 400,
         },
         strongWarning = {
-            'org.onosproject.drivers': true
+            'org.onosproject.drivers': true,
         },
-        discouragement = 'Deactivating or uninstalling this component can' +
-        ' have serious negative consequences! Do so at your own risk!!',
-        propOrder = ['id', 'state', 'category', 'version', 'origin', 'role'],
-        friendlyProps = ['App ID', 'State', 'Category', 'Version', 'Origin', 'Role'];
+        propOrder = ['id', 'state', 'category', 'version', 'origin', 'role'];
         // note: url is handled separately
+
+    // deferred localization strings
+    var warnDeactivate,
+        warnOwnRisk,
+        friendlyProps,
+        lion;
+
+    function doLion() {
+        lion = ls.bundle('core.view.App');
+
+        warnDeactivate = lion('dlg_warn_deactivate');
+        warnOwnRisk = lion('dlg_warn_own_risk');
+
+        friendlyProps = [
+            lion('app_id'), lion('state'), lion('category'), lion('version'),
+            lion('origin'), lion('role'),
+        ];
+    }
 
     function createDetailsPane() {
         detailsPanel = ps.createPanel(pName, {
             width: wSize.width,
             margin: 0,
-            hideMargin: 0
+            hideMargin: 0,
         });
         detailsPanel.el().style({
             position: 'absolute',
-            top: pStartY + 'px'
+            top: pStartY + 'px',
         });
         $scope.hidePanel = function () { detailsPanel.hide(); };
         detailsPanel.hide();
@@ -82,8 +101,7 @@
     }
 
     function addCloseBtn(div) {
-        is.loadEmbeddedIcon(div, 'plus', 30);
-        div.select('g').attr('transform', 'translate(25, 0) rotate(45)');
+        is.loadEmbeddedIcon(div, 'close', 26);
         div.on('click', closePanel);
     }
 
@@ -102,7 +120,7 @@
         div = top.append('div').classed('top-content', true);
 
         function ndiv(cls, tcls) {
-            var  d = div.append('div').classed(cls, true);
+            var d = div.append('div').classed(cls, true);
             if (tcls) {
                 d.append('table').classed(tcls, true);
             }
@@ -124,33 +142,33 @@
         bottom = container.append('div').classed('bottom', true);
 
         function nTable(hdr, cls) {
-            bottom.append('h2').html(hdr);
+            bottom.append('h2').text(hdr);
             bottom.append('div').classed(cls, true).append('table');
         }
 
-        nTable('Features', 'features');
-        nTable('Required Apps', 'required-apps');
-        nTable('Permissions', 'permissions');
+        nTable(lion('dp_features'), 'features');
+        nTable(lion('dp_required_apps'), 'required-apps');
+        nTable(lion('dp_permissions'), 'permissions');
     }
 
     function addProp(tbody, index, value) {
-        var tr = tbody.append('tr'),
-            vcls = index ? 'value' : 'value-bold';
+        var tr = tbody.append('tr');
 
         function addCell(cls, txt) {
-            tr.append('td').attr('class', cls).html(txt);
+            tr.append('td').attr('class', cls).text(txt);
         }
 
         addCell('label', friendlyProps[index] + ':');
-        addCell(vcls, value);
+        addCell('value', value);
     }
 
     function urlize(u) {
-        return '<i>URL:</i> <a href="' + u + '" target="_blank">' + u + '</a>';
+        u = fs.sanitize(u);
+        return '<a href="' + u + '" target="_blank">' + u + '</a>';
     }
 
     function addIcon(elem, value) {
-        elem.append('img').attr('src', iconUrlPrefix + value + iconUrlSuffix);
+        elem.append('img').attr('src', appUrlPrefix + value + iconUrlSuffix);
     }
 
     function populateTop(details) {
@@ -181,7 +199,7 @@
                 tbody = table.append('tbody');
 
             items.forEach(function (item) {
-                tbody.append('tr').append('td').html(item);
+                tbody.append('tr').append('td').text(item);
             });
         }
 
@@ -200,16 +218,20 @@
 
     function respDetailsCb(data) {
         $scope.panelData = data.details;
+        $scope.selId = data.details.id;
+        $scope.ctrlBtnState.selection = data.details.id;
         $scope.$apply();
     }
 
     angular.module('ovApp', [])
     .controller('OvAppCtrl',
-        ['$log', '$scope', '$http',
+        ['$log', '$scope', '$http', '$timeout',
          'WebSocketService', 'FnService', 'KeyService', 'PanelService',
          'IconService', 'UrlFnService', 'DialogService', 'TableBuilderService',
+         'LionService',
 
-    function (_$log_, _$scope_, $http, _wss_, _fs_, _ks_, _ps_, _is_, ufs, ds, tbs) {
+    function (_$log_, _$scope_, $http, $timeout, _wss_, _fs_, _ks_, _ps_, _is_,
+              ufs, ds, tbs, _ls_) {
         $log = _$log_;
         $scope = _$scope_;
         wss = _wss_;
@@ -217,12 +239,20 @@
         ks = _ks_;
         ps = _ps_;
         is = _is_;
+        ls = _ls_;
+
+        doLion();
+
+        $scope.lion = lion;
+
         $scope.panelData = {};
         $scope.ctrlBtnState = {};
-        $scope.uploadTip = 'Upload an application (.oar file)';
-        $scope.activateTip = 'Activate selected application';
-        $scope.deactivateTip = 'Deactivate selected application';
-        $scope.uninstallTip = 'Uninstall selected application';
+        $scope.uploadTip = lion('tt_ctl_upload');
+        $scope.activateTip = lion('tt_ctl_activate');
+        $scope.deactivateTip = lion('tt_ctl_deactivate');
+        $scope.uninstallTip = lion('tt_ctl_uninstall');
+        $scope.downloadTip = lion('tt_ctl_download');
+
 
         var handlers = {};
 
@@ -234,7 +264,7 @@
             // $scope.selId is set by code in tableBuilder
             $scope.ctrlBtnState.selection = !!$scope.selId;
             refreshCtrls();
-            ds.closeDialog();  // don't want dialog from previous selection
+            ds.closeDialog(); // don't want dialog from previous selection
 
             if ($scope.selId) {
                 wss.sendEvent(detailsReq, { id: row.id });
@@ -267,25 +297,29 @@
                 firstCol: 'state',
                 firstDir: 'desc',
                 secondCol: 'title',
-                secondDir: 'asc'
-            }
+                secondDir: 'asc',
+            },
+            lion_toggle_auto_refresh: lion('tt_ctl_auto_refresh'),
         });
 
-        // TODO: reexamine where keybindings should be - directive or controller?
         ks.keyBindings({
-            esc: [$scope.selectCallback, 'Deselect application'],
-            _helpFormat: ['esc']
+            esc: [$scope.selectCallback, lion('qh_hint_esc')],
+            _helpFormat: ['esc'],
         });
         ks.gestureNotes([
-            ['click row', 'Select / deselect application'],
-            ['scroll down', 'See more applications']
+            [lion('click_row'), lion('qh_hint_click_row')],
+            [lion('scroll_down'), lion('qh_hint_scroll_down')],
         ]);
 
         function createConfirmationText(action, itemId) {
             var content = ds.createDiv();
-            content.append('p').text(fs.cap(action) + ' ' + itemId);
+            content.append('p').text(lion(action) + ' ' + itemId);
             if (strongWarning[itemId]) {
-                content.append('p').text(discouragement).classed('strong', true);
+                content.append('p').html(
+                    fs.sanitize(warnDeactivate) +
+                    '<br>' +
+                    fs.sanitize(warnOwnRisk)
+                ).classed('strong', true);
             }
             return content;
         }
@@ -300,8 +334,13 @@
                     action: action,
                     name: itemId,
                     sortCol: spar.sortCol,
-                    sortDir: spar.sortDir
+                    sortDir: spar.sortDir,
                 });
+                if (action === 'uninstall') {
+                    detailsPanel.hide();
+                } else {
+                    wss.sendEvent(detailsReq, { id: itemId });
+                }
             }
 
             function dCancel() {
@@ -309,7 +348,7 @@
             }
 
             ds.openDialog(dialogId, dialogOpts)
-                .setTitle('Confirm Action')
+                .setTitle(lion('dlg_confirm_action'))
                 .addContent(createConfirmationText(action, itemId))
                 .addOk(dOk)
                 .addCancel(dCancel)
@@ -322,27 +361,55 @@
             }
         };
 
+        $scope.downloadApp = function () {
+            if ($scope.ctrlBtnState.selection) {
+                window.location = appUrlPrefix + $scope.selId + downloadSuffix;
+            }
+        };
+
         $scope.$on('FileChanged', function () {
-            var formData = new FormData();
+            var formData = new FormData(),
+                url;
+
             if ($scope.appFile) {
                 formData.append('file', $scope.appFile);
-                $http.post(ufs.rsUrl(fileUploadUrl), formData, {
+                url = fileUploadUrl + activateImmediately;
+
+                $http.post(ufs.rsUrl(url), formData, {
                     transformRequest: angular.identity,
                     headers: {
-                        'Content-Type': undefined
-                    }
+                        'Content-Type': undefined,
+                    },
                 })
-                    .finally(function () {
-                        $scope.sortCallback($scope.sortParams);
-                        document.getElementById('inputFileForm').reset();
-                    });
+                .finally(function () {
+                    activateImmediately = '';
+                    $scope.sortCallback($scope.sortParams);
+                    document.getElementById('inputFileForm').reset();
+                    $timeout(function () { wss.sendEvent(detailsReq); }, 250);
+                });
             }
         });
+
+        $scope.appDropped = function () {
+            activateImmediately = activateOption;
+            $scope.$emit('FileChanged');
+            $scope.appFile = null;
+        };
 
         $scope.$on('$destroy', function () {
             ks.unbindKeys();
             wss.unbindHandlers(handlers);
+            ds.closeDialog();
         });
+
+        Object.defineProperty($scope, 'queryFilter', {
+            get: function () {
+                var out = {};
+                out[$scope.queryBy || '$'] = $scope.queryTxt;
+                return out;
+            },
+        });
+
 
         $log.log('OvAppCtrl has been created');
     }])
@@ -356,27 +423,65 @@
                     document.getElementById('uploadFile')
                         .dispatchEvent(new MouseEvent('click'));
                 });
-            }
+            },
         };
     })
 
     // binds the model file to the scope in scope.appFile
     // sends upload request to the server
     .directive('fileModel', ['$parse',
-            function ($parse) {
+        function ($parse) {
+            return {
+                restrict: 'A',
+                link: function (scope, elem, attrs) {
+                    var model = $parse(attrs.fileModel),
+                        modelSetter = model.assign;
+
+                    elem.bind('change', function () {
+                        scope.$apply(function () {
+                            modelSetter(scope, elem[0].files[0]);
+                        });
+                        scope.$emit('FileChanged');
+                    });
+                },
+            };
+        }])
+
+    .directive('filedrop', ['$parse', '$document', function ($parse, $document) {
         return {
             restrict: 'A',
-            link: function (scope, elem, attrs) {
-                var model = $parse(attrs.fileModel),
-                    modelSetter = model.assign;
+            link: function (scope, element, attrs) {
+                var onAppDrop = $parse(attrs.onFileDrop);
 
-                elem.bind('change', function () {
-                    scope.$apply(function () {
-                        modelSetter(scope, elem[0].files[0]);
+                // When an item is dragged over the document
+                var onDragOver = function (e) {
+                    d3.select('#frame').classed('dropping', true);
+                    e.preventDefault();
+                };
+
+                // When the user leaves the window, cancels the drag or drops the item
+                var onDragEnd = function (e) {
+                    d3.select('#frame').classed('dropping', false);
+                    e.preventDefault();
+                };
+
+                // When a file is dropped
+                var loadFile = function (file) {
+                    scope.appFile = file;
+                    scope.$apply(onAppDrop(scope));
+                };
+
+                // Dragging begins on the document
+                $document.bind('dragover', onDragOver);
+
+                // Dragging ends on the overlay, which takes the whole window
+                element.bind('dragleave', onDragEnd)
+                    .bind('drop', function (e) {
+                        $log.info('Drag leave', e);
+                        loadFile(e.dataTransfer.files[0]);
+                        onDragEnd(e);
                     });
-                    scope.$emit('FileChanged');
-                });
-            }
+            },
         };
     }])
 
@@ -408,12 +513,14 @@
                 }
                 // create key bindings to handle panel
                 ks.keyBindings({
-                    esc: [closePanel, 'Close the details panel'],
-                    _helpFormat: ['esc']
+                    esc: [closePanel, lion('qh_hint_close_detail')],
+                    _helpFormat: ['esc'],
                 });
+
+                // TODO: Review - why are we doing this in the detail panel...?
                 ks.gestureNotes([
-                    ['click', 'Select a row to show application details'],
-                    ['scroll down', 'See more application']
+                    [lion('click_row'), lion('qh_hint_click_row')],
+                    [lion('scroll_down'), lion('qh_hint_scroll_down')],
                 ]);
 
                 // if the panelData changes
@@ -429,7 +536,7 @@
                     function () {
                         return {
                             h: $window.innerHeight,
-                            w: $window.innerWidth
+                            w: $window.innerWidth,
                         };
                     }, function () {
                         if (!fs.isEmptyObject(scope.panelData)) {

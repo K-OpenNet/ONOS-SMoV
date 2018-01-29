@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.onosproject.bgp.controller;
 import org.onosproject.bgpio.exceptions.BgpParseException;
 import org.onosproject.bgpio.protocol.BgpMessage;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -61,7 +62,7 @@ public interface BgpController {
      * Send a message to a particular bgp peer.
      *
      * @param bgpId the id of the peer to send message.
-     * @param msg the message to send
+     * @param msg   the message to send
      */
     void writeMsg(BgpId bgpId, BgpMessage msg);
 
@@ -69,14 +70,13 @@ public interface BgpController {
      * Process a message and notify the appropriate listeners.
      *
      * @param bgpId id of the peer the message arrived on
-     * @param msg the message to process.
+     * @param msg   the message to process.
      * @throws BgpParseException on data processing error
      */
     void processBgpPacket(BgpId bgpId, BgpMessage msg) throws BgpParseException;
 
     /**
      * Close all connected BGP peers.
-     *
      */
     void closeConnectedPeers();
 
@@ -128,4 +128,76 @@ public interface BgpController {
      * @return node listener
      */
     Set<BgpNodeListener> listener();
+
+    /**
+     * Register a listener for BGP message events.
+     *
+     * @param listener the listener to notify
+     */
+    void addLinkListener(BgpLinkListener listener);
+
+    /**
+     * Unregister a listener.
+     *
+     * @param listener the listener to unregister
+     */
+    void removeLinkListener(BgpLinkListener listener);
+
+    /**
+     * Return BGP link listener.
+     *
+     * @return link listener
+     */
+    Set<BgpLinkListener> linkListener();
+
+    /**
+     * Stores the exceptions occurred during an active session.
+     *
+     * @param peerId BGP peer id
+     * @param exception exceptions based on the peer id.
+     */
+    void activeSessionExceptionAdd(String peerId, String exception);
+
+    /**
+     * Stores the exceptions occurred during an closed session.
+     *
+     * @param peerId BGP peer id
+     * @param exception exceptions based on the peer id
+     */
+    void closedSessionExceptionAdd(String peerId, String exception);
+
+    /**
+     * Return active session exceptions.
+     *
+     * @return activeSessionMap
+     */
+    Map<String, List<String>> activeSessionMap();
+
+    /**
+     * Return closed session exceptions.
+     *
+     * @return closedSessionMap
+     */
+    Map<String, List<String>> closedSessionMap();
+    /**
+     * Register a listener for BGP message events.
+     *
+     * @param listener the listener to notify
+     */
+    void addRouteListener(BgpRouteListener listener);
+
+    /**
+     * Unregister a listener.
+     *
+     * @param listener the listener to unregister
+     */
+    void removeRouteListener(BgpRouteListener listener);
+
+    /**
+     * Return BGP route listener.
+     *
+     * @return route listener
+     */
+    Set<BgpRouteListener> routeListener();
+
 }

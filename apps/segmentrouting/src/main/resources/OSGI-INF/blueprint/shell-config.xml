@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0">
 
     <command-bundle xmlns="http://karaf.apache.org/xmlns/shell/v1.1.0">
+        <!-- XXX revisit when we formally add policies
         <command>
             <action class="org.onosproject.segmentrouting.cli.TunnelListCommand"/>
         </command>
@@ -34,7 +35,42 @@
         <command>
             <action class="org.onosproject.segmentrouting.cli.TunnelRemoveCommand"/>
         </command>
+        -->
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.RerouteNetworkCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.DeviceSubnetListCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.EcmpGraphCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.NextHopCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.VerifyGroupsCommand"/>
+            <completers>
+                <ref component-id="deviceIdCompleter"/>
+            </completers>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.PseudowireListCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.PseudowireRemoveCommand"/>
+            <completers>
+                <ref component-id="pseudowireIdCompleter"/>
+            </completers>
+        </command>
+        <command>
+            <action class="org.onosproject.segmentrouting.cli.PseudowireAddCommand"/>
+        </command>
     </command-bundle>
+
+    <bean id="deviceIdCompleter" class="org.onosproject.cli.net.DeviceIdCompleter"/>
+    <bean id="pseudowireIdCompleter" class="org.onosproject.segmentrouting.cli.PseudowireIdCompleter"/>
+
 </blueprint>
 
 

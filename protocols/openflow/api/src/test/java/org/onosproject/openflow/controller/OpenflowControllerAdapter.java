@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onosproject.openflow.controller;
 
 import org.projectfloodlight.openflow.protocol.OFMessage;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Test adapter for the OpenFlow controller interface.
@@ -52,15 +54,21 @@ public class OpenflowControllerAdapter implements OpenFlowController {
     }
 
     @Override
-    public void monitorAllEvents(boolean monitor) {
-    }
-
-    @Override
     public void addListener(OpenFlowSwitchListener listener) {
     }
 
     @Override
     public void removeListener(OpenFlowSwitchListener listener) {
+    }
+
+    @Override
+    public void addMessageListener(OpenFlowMessageListener listener) {
+
+    }
+
+    @Override
+    public void removeMessageListener(OpenFlowMessageListener listener) {
+
     }
 
     @Override
@@ -73,6 +81,11 @@ public class OpenflowControllerAdapter implements OpenFlowController {
 
     @Override
     public void write(Dpid dpid, OFMessage msg) {
+    }
+
+    @Override
+    public CompletableFuture<OFMessage> writeResponse(Dpid dpid, OFMessage msg) {
+        return null;
     }
 
     @Override

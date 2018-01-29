@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,21 @@
  */
 package org.onosproject.cli.net;
 
-import java.util.Set;
-
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.common.collect.ImmutableList;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.commands.Option;
 import org.onosproject.cli.AbstractShellCommand;
+import org.onosproject.net.driver.Behaviour;
 import org.onosproject.net.driver.Driver;
-import org.onosproject.net.driver.DriverAdminService;
+import org.onosproject.net.driver.DriverService;
 
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Lists device drivers.
@@ -40,17 +46,28 @@ public class DriversListCommand extends AbstractShellCommand {
             required = false, multiValued = false)
     String driverName = null;
 
+    @Option(name = "-s", aliases = "--sort", description = "Sort output by driver name",
+            required = false, multiValued = false)
+    private boolean sort = false;
+
+    @Option(name = "-n", aliases = "--name", description = "Show driver name only",
+            required = false, multiValued = false)
+    private boolean nameOnly = false;
+
     @Override
     protected void execute() {
-        DriverAdminService service = get(DriverAdminService.class);
+        DriverService service = get(DriverService.class);
 
         if (driverName != null) {
-            printDriver(service.getDriver(driverName));
+            printDriver(service.getDriver(driverName), true);
         } else {
             if (outputJson()) {
                 json(service.getDrivers());
             } else {
-                service.getDrivers().forEach(this::printDriver);
+                service.getDrivers()
+                    .stream()
+                    .sorted(Comparator.comparing(Driver::name))
+                    .forEach(d -> printDriver(d, true));
             }
         }
     }
@@ -65,17 +82,36 @@ public class DriversListCommand extends AbstractShellCommand {
         print("%s", result.toString());
     }
 
-    private void printDriver(Driver driver) {
+    private void printDriver(Driver driver, boolean first) {
         if (outputJson()) {
             json(driver);
+        } else if (nameOnly) {
+            print("%s", driver.name());
         } else {
-            Driver parent = driver.parent();
-            print(FMT, driver.name(), parent != null ? parent.name() : "none",
-                    driver.manufacturer(), driver.hwVersion(), driver.swVersion());
-            driver.behaviours().forEach(b -> print(FMT_B, b.getCanonicalName(),
-                    driver.implementation(b).getCanonicalName()));
+            List<Driver> parents = Optional.ofNullable(driver.parents())
+                    .orElse(ImmutableList.of());
+
+            List<String> parentsNames = parents.stream()
+                    .map(Driver::name).collect(Collectors.toList());
+
+            if (first) {
+                print(FMT, driver.name(), parentsNames,
+                      driver.manufacturer(), driver.hwVersion(), driver.swVersion());
+            } else {
+                print("   Inherited from %s", driver.name());
+            }
+
+            driver.behaviours().forEach(b -> printBehaviour(b, driver));
             driver.properties().forEach((k, v) -> print(FMT_P, k, v));
+
+            //recursion call to print each parent
+            parents.stream().forEach(parent -> printDriver(parent, false));
         }
+    }
+
+    private void printBehaviour(Class<? extends Behaviour> behaviour, Driver driver) {
+        print(FMT_B, behaviour.getCanonicalName(),
+              driver.implementation(behaviour).getCanonicalName());
     }
 
 }

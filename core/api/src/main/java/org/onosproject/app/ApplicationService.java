@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.onosproject.core.ApplicationId;
 import org.onosproject.event.ListenerService;
 import org.onosproject.security.Permission;
 
+import java.io.InputStream;
 import java.util.Set;
 
 /**
@@ -74,4 +75,14 @@ public interface ApplicationService
      * @param hook  pre-deactivation hook
      */
     void registerDeactivateHook(ApplicationId appId, Runnable hook);
+
+    /**
+     * Returns stream that contains the application OAR/JAR file contents.
+     *
+     * @param appId application identifier
+     * @return input stream containing the app OAR/JAR file
+     */
+    default InputStream getApplicationArchive(ApplicationId appId) {
+        return null;
+    }
 }

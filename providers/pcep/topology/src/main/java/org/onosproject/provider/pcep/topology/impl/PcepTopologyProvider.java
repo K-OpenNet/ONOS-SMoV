@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,19 +21,19 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.ChassisId;
-import org.onosproject.cluster.ClusterService;
-import org.onosproject.mastership.MastershipAdminService;
-import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Link.Type;
+import org.onosproject.net.SparseAnnotations;
+import org.onosproject.net.config.ConfigFactory;
+import org.onosproject.net.config.NetworkConfigRegistry;
+import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.MastershipRole;
-import org.onosproject.net.OchPort;
-import org.onosproject.net.OduCltPort;
-import org.onosproject.net.OmsPort;
 import org.onosproject.net.Port;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DefaultDeviceDescription;
 import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DeviceDescription;
@@ -41,26 +41,26 @@ import org.onosproject.net.device.DeviceProvider;
 import org.onosproject.net.device.DeviceProviderRegistry;
 import org.onosproject.net.device.DeviceProviderService;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.device.OchPortDescription;
-import org.onosproject.net.device.OduCltPortDescription;
-import org.onosproject.net.device.OmsPortDescription;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.link.DefaultLinkDescription;
 import org.onosproject.net.link.LinkDescription;
 import org.onosproject.net.link.LinkProvider;
 import org.onosproject.net.link.LinkProviderRegistry;
 import org.onosproject.net.link.LinkProviderService;
-import org.onosproject.net.link.LinkService;
 import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
+import org.onosproject.pcep.api.DeviceCapability;
 import org.onosproject.pcep.api.PcepController;
 import org.onosproject.pcep.api.PcepDpid;
 import org.onosproject.pcep.api.PcepLink;
-import org.onosproject.pcep.api.PcepLink.PortType;
 import org.onosproject.pcep.api.PcepLinkListener;
 import org.onosproject.pcep.api.PcepOperator.OperationType;
 import org.onosproject.pcep.api.PcepSwitch;
 import org.onosproject.pcep.api.PcepSwitchListener;
+import org.onosproject.pcep.server.PccId;
+import org.onosproject.pcep.server.PcepClient;
+import org.onosproject.pcep.server.PcepClientController;
+import org.onosproject.pcep.server.PcepNodeListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,8 +80,13 @@ import static org.onosproject.pcep.api.PcepDpid.uri;
 public class PcepTopologyProvider extends AbstractProvider
         implements LinkProvider, DeviceProvider {
 
+    /**
+     * Creates instance of PCEP topology provider.
+     */
     public PcepTopologyProvider() {
-        super(new ProviderId("pcep", "org.onosproject.provider.pcep"));
+        //In BGP-PCEP app, since both BGP and PCEP topology provider have same scheme
+        //so BGP will be primary and PCEP topology provider will be ancillary.
+        super(new ProviderId("l3", "org.onosproject.provider.pcep", true));
     }
 
     private static final Logger log = LoggerFactory
@@ -100,16 +105,13 @@ public class PcepTopologyProvider extends AbstractProvider
     protected DeviceService deviceService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected LinkService linkService;
+    protected PcepClientController pcepClientController;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected MastershipAdminService mastershipAdminService;
+    protected NetworkConfigRegistry netConfigRegistry;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected MastershipService mastershipService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected ClusterService clusterService;
+    protected NetworkConfigService netConfigService;
 
     private DeviceProviderService deviceProviderService;
     private LinkProviderService linkProviderService;
@@ -117,12 +119,24 @@ public class PcepTopologyProvider extends AbstractProvider
     private HashMap<Long, List<PortDescription>> portMap = new HashMap<>();
     private InternalLinkProvider listener = new InternalLinkProvider();
 
+    private final ConfigFactory<DeviceId, DeviceCapability> configFactory =
+            new ConfigFactory<DeviceId, DeviceCapability>(SubjectFactories.DEVICE_SUBJECT_FACTORY,
+                    DeviceCapability.class, "deviceCapability", false) {
+                @Override
+                public DeviceCapability createConfig() {
+                    return new DeviceCapability();
+                }
+            };
+
     @Activate
     public void activate() {
         linkProviderService = linkProviderRegistry.register(this);
         deviceProviderService = deviceProviderRegistry.register(this);
         controller.addListener(listener);
         controller.addLinkListener(listener);
+        pcepClientController.addNodeListener(listener);
+        netConfigRegistry.registerConfigFactory(configFactory);
+        log.info("Started");
     }
 
     @Deactivate
@@ -131,11 +145,13 @@ public class PcepTopologyProvider extends AbstractProvider
         linkProviderService = null;
         controller.removeListener(listener);
         controller.removeLinkListener(listener);
+        pcepClientController.removeNodeListener(listener);
+        netConfigRegistry.unregisterConfigFactory(configFactory);
+        log.info("Stopped");
     }
 
     private List<PortDescription> buildPortDescriptions(PcepDpid dpid,
-                                                        Port port,
-                                                        PortType portType) {
+                                                        Port port) {
 
         List<PortDescription> portList;
 
@@ -144,39 +160,16 @@ public class PcepTopologyProvider extends AbstractProvider
         } else {
             portList = new ArrayList<>();
         }
-        if (port != null && portType != null) {
-            portList.add(buildPortDescription(port, portType));
+        if (port != null) {
+            SparseAnnotations annotations = DefaultAnnotations.builder()
+                    .putAll(port.annotations()).build();
+            portList.add(new DefaultPortDescription(port.number(), port.isEnabled(),
+                                                    port.type(), port.portSpeed(),
+                                                    annotations));
         }
 
         portMap.put(dpid.value(), portList);
         return portList;
-    }
-
-    private PortDescription buildPortDescription(Port port, PortType portType) {
-        PortDescription portDescription;
-
-        switch (portType) {
-            case OCH_PORT:
-                OchPort ochp = (OchPort) port;
-                portDescription = new OchPortDescription(ochp.number(), ochp.isEnabled(),
-                        ochp.signalType(), ochp.isTunable(),
-                        ochp.lambda());
-                break;
-            case ODU_PORT:
-                OduCltPort odup = (OduCltPort) port;
-                portDescription = new OduCltPortDescription(odup.number(), odup.isEnabled(),
-                        odup.signalType());
-                break;
-            case OMS_PORT:
-                OmsPort op = (OmsPort) port;
-                portDescription = new OmsPortDescription(op.number(), op.isEnabled(), op.minFrequency(),
-                        op.maxFrequency(), op.grid());
-                break;
-            default:
-                portDescription = new DefaultPortDescription(port.number(), port.isEnabled());
-                break;
-        }
-        return portDescription;
     }
 
     /**
@@ -194,12 +187,12 @@ public class PcepTopologyProvider extends AbstractProvider
         deviceProviderService
                 .updatePorts(srcDeviceID,
                         buildPortDescriptions(pceLink.linkSrcDeviceID(),
-                                pceLink.linkSrcPort(), pceLink.portType()));
+                                pceLink.linkSrcPort()));
 
         deviceProviderService
                 .updatePorts(dstDeviceID,
                         buildPortDescriptions(pceLink.linkDstDeviceId(),
-                                pceLink.linkDstPort(), pceLink.portType()));
+                                pceLink.linkDstPort()));
 
         ConnectPoint src = new ConnectPoint(srcDeviceID, pceLink.linkSrcPort().number());
 
@@ -221,7 +214,7 @@ public class PcepTopologyProvider extends AbstractProvider
     }
 
     private class InternalLinkProvider
-            implements PcepSwitchListener, PcepLinkListener {
+            implements PcepSwitchListener, PcepLinkListener, PcepNodeListener {
 
         @Override
         public void switchAdded(PcepDpid dpid) {
@@ -302,6 +295,29 @@ public class PcepTopologyProvider extends AbstractProvider
             }
         }
 
+        @Override
+        public void addDevicePcepConfig(PcepClient pc) {
+            if (netConfigRegistry == null) {
+                log.error("Cannot add PCEP device capability as network config service is not available.");
+                return;
+            }
+            DeviceId pccDeviceId = DeviceId.deviceId(String.valueOf(pc.getPccId().ipAddress()));
+            DeviceCapability deviceCap = netConfigService.addConfig(pccDeviceId, DeviceCapability.class);
+            deviceCap.setLabelStackCap(pc.capability().labelStackCapability())
+                .setLocalLabelCap(pc.capability().pceccCapability())
+                .setSrCap(pc.capability().srCapability())
+                .apply();
+        }
+
+        @Override
+        public void deleteDevicePcepConfig(PccId pccId) {
+            if (netConfigRegistry == null) {
+                log.error("Cannot remove PCEP device capability as network config service is not available.");
+                return;
+            }
+            DeviceId pccDeviceId = DeviceId.deviceId(String.valueOf(pccId.ipAddress()));
+            netConfigService.removeConfig(pccDeviceId, DeviceCapability.class);
+        }
     }
 
     @Override
@@ -317,5 +333,11 @@ public class PcepTopologyProvider extends AbstractProvider
     public boolean isReachable(DeviceId deviceId) {
         // TODO Auto-generated method stub
         return true;
+    }
+
+    @Override
+    public void changePortState(DeviceId deviceId, PortNumber portNumber,
+                                boolean enable) {
+        // TODO Auto-generated method stub
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.onosproject.net.device;
 
 import org.onosproject.event.ListenerService;
+import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
@@ -36,6 +37,15 @@ public interface DeviceService
      * @return number of infrastructure devices
      */
     int getDeviceCount();
+
+    /**
+     * Returns the number of currently available devices known to the system.
+     *
+     * @return number of available devices
+     */
+    default int getAvailableDeviceCount() {
+        return getDeviceCount();
+    }
 
     /**
      * Returns a collection of the currently known infrastructure
@@ -113,6 +123,28 @@ public interface DeviceService
     List<PortStatistics> getPortDeltaStatistics(DeviceId deviceId);
 
     /**
+     * Returns the port specific port statistics associated with the device and port.
+     *
+     * @param deviceId device identifier
+     * @param portNumber port identifier
+     * @return port statistics of specified port
+     */
+    default PortStatistics getStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        return null;
+    }
+
+    /**
+     * Returns the port specific port delta statistics associated with the device and port.
+     *
+     * @param deviceId device identifier
+     * @param portNumber port identifier
+     * @return port delta statistics of specified port
+     */
+    default PortStatistics getDeltaStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        return null;
+    }
+
+    /**
      * Returns the port with the specified number and hosted by the given device.
      *
      * @param deviceId   device identifier
@@ -122,11 +154,35 @@ public interface DeviceService
     Port getPort(DeviceId deviceId, PortNumber portNumber);
 
     /**
+     * Returns the port with the specified connect point.
+     *
+     * @param cp connect point
+     * @return device port
+     */
+    default Port getPort(ConnectPoint cp) {
+        return getPort(cp.deviceId(), cp.port());
+    }
+
+    /**
      * Indicates whether or not the device is presently online and available.
+     * Availability, unlike reachability, denotes whether ANY node in the
+     * cluster can discover that this device is in an operational state,
+     * this does not necessarily mean that there exists a node that can
+     * control this device.
      *
      * @param deviceId device identifier
      * @return true if the device is available
      */
     boolean isAvailable(DeviceId deviceId);
+
+    /**
+     * Indicates how long ago the device connected or disconnected from this
+     * controller instance.
+     *
+     * @param deviceId device identifier
+     * @return a human readable string indicating the time since the device
+     *          connected-to or disconnected-from this controller instance.
+     */
+    String localStatus(DeviceId deviceId);
 
 }

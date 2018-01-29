@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import org.onosproject.core.ApplicationId;
 import java.security.Permission;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Security-Mode ONOS service.
@@ -53,6 +54,8 @@ public interface SecurityAdminService {
      * @param appId application identifier
      */
     void register(ApplicationId appId);
+
+    void updatePolicy(ApplicationId appId, Set<org.onosproject.security.Permission> permissions);
 
     /**
      * Returns sorted developer specified permission Map.

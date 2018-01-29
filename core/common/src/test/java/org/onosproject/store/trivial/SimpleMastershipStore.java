@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
 import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,7 +37,6 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
-import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cluster.ClusterEventListener;
 import org.onosproject.cluster.ClusterService;
@@ -45,6 +45,8 @@ import org.onosproject.cluster.ControllerNode.State;
 import org.onosproject.cluster.DefaultControllerNode;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.RoleInfo;
+import org.onosproject.core.Version;
+import org.onosproject.core.VersionService;
 import org.onosproject.mastership.MastershipEvent;
 import org.onosproject.mastership.MastershipStore;
 import org.onosproject.mastership.MastershipStoreDelegate;
@@ -75,6 +77,9 @@ public class SimpleMastershipStore
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected VersionService versionService;
+
     //devices mapped to their masters, to emulate multiple nodes
     protected final Map<DeviceId, NodeId> masterMap = new HashMap<>();
     //emulate backups with pile of nodes
@@ -92,7 +97,7 @@ public class SimpleMastershipStore
 
             clusterService = new ClusterService() {
 
-                private final DateTime creationTime = DateTime.now();
+                private final Instant creationTime = Instant.now();
 
                 @Override
                 public ControllerNode getLocalNode() {
@@ -122,7 +127,15 @@ public class SimpleMastershipStore
                 }
 
                 @Override
-                public DateTime getLastUpdated(NodeId nodeId) {
+                public Version getVersion(NodeId nodeId) {
+                    if (instance.id().equals(nodeId)) {
+                        return versionService.version();
+                    }
+                    return null;
+                }
+
+                @Override
+                public Instant getLastUpdatedInstant(NodeId nodeId) {
                     return creationTime;
                 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import org.apache.felix.scr.annotations.Service;
 import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Link.Type;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
@@ -43,8 +44,6 @@ import org.onosproject.net.link.LinkService;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.PacketService;
-import org.onosproject.net.topology.Topology;
-import org.onosproject.net.topology.TopologyService;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -52,12 +51,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static org.onosproject.net.device.DeviceEvent.Type.*;
+import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_ADDED;
+import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_AVAILABILITY_CHANGED;
+import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_REMOVED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_STATS_UPDATED;
+import static org.onosproject.net.device.DeviceEvent.Type.PORT_UPDATED;
 import static org.onosproject.net.edge.EdgePortEvent.Type.EDGE_PORT_ADDED;
 import static org.onosproject.net.edge.EdgePortEvent.Type.EDGE_PORT_REMOVED;
-import static org.slf4j.LoggerFactory.getLogger;
 import static org.onosproject.security.AppGuard.checkPermission;
-import static org.onosproject.security.AppPermission.Type.*;
+import static org.onosproject.security.AppPermission.Type.PACKET_WRITE;
+import static org.onosproject.security.AppPermission.Type.TOPOLOGY_READ;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * This is an implementation of the edge net service.
@@ -70,22 +74,17 @@ public class EdgeManager
 
     private final Logger log = getLogger(getClass());
 
-    private Topology topology;
-
+    // Set of edge ConnectPoints per Device.
     private final Map<DeviceId, Set<ConnectPoint>> connectionPoints = Maps.newConcurrentMap();
 
-    private final LinkListener linkListener = new InnerLinkListener();
-
     private final DeviceListener deviceListener = new InnerDeviceListener();
+    private final LinkListener linkListener = new InnerLinkListener();
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PacketService packetService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected TopologyService topologyService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LinkService linkService;
@@ -101,16 +100,17 @@ public class EdgeManager
 
     @Deactivate
     public void deactivate() {
-        eventDispatcher.removeSink(EdgePortEvent.class);
         deviceService.removeListener(deviceListener);
         linkService.removeListener(linkListener);
+        eventDispatcher.removeSink(EdgePortEvent.class);
         log.info("Stopped");
     }
 
     @Override
     public boolean isEdgePoint(ConnectPoint point) {
         checkPermission(TOPOLOGY_READ);
-        return !topologyService.isInfrastructure(topologyService.currentTopology(), point);
+        Set<ConnectPoint> connectPoints = connectionPoints.get(point.deviceId());
+        return connectPoints != null && connectPoints.contains(point);
     }
 
     @Override
@@ -154,38 +154,44 @@ public class EdgeManager
     }
 
     private class InnerLinkListener implements LinkListener {
-
         @Override
         public void event(LinkEvent event) {
-            topology = topologyService.currentTopology();
             processLinkEvent(event);
         }
     }
 
     private class InnerDeviceListener implements DeviceListener {
-
         @Override
         public void event(DeviceEvent event) {
-            topology = topologyService.currentTopology();
+            if (event.type() == PORT_STATS_UPDATED) {
+                return;
+            }
             processDeviceEvent(event);
         }
     }
 
     // Initial loading of the edge port cache.
     private void loadAllEdgePorts() {
-        topology = topologyService.currentTopology();
         deviceService.getAvailableDevices().forEach(d -> deviceService.getPorts(d.id())
                 .forEach(p -> addEdgePort(new ConnectPoint(d.id(), p.number()))));
     }
 
     // Processes a link event by adding or removing its end-points in our cache.
     private void processLinkEvent(LinkEvent event) {
-        if (event.type() == LinkEvent.Type.LINK_ADDED) {
-            removeEdgePort(event.subject().src());
-            removeEdgePort(event.subject().dst());
-        } else if (event.type() == LinkEvent.Type.LINK_REMOVED) {
+        // negative Link event can result in increase of edge ports
+        boolean addEdgePort = event.type() == LinkEvent.Type.LINK_REMOVED;
+
+        // but if the Link is an Edge type, it will be the opposite
+        if (event.subject().type() == Type.EDGE) {
+            addEdgePort = !addEdgePort;
+        }
+
+        if (addEdgePort) {
             addEdgePort(event.subject().src());
             addEdgePort(event.subject().dst());
+        } else {
+            removeEdgePort(event.subject().src());
+            removeEdgePort(event.subject().dst());
         }
     }
 
@@ -202,10 +208,11 @@ public class EdgeManager
                     .forEach(p -> addEdgePort(new ConnectPoint(id, p.number())));
         } else if (type == DEVICE_REMOVED ||
                 type == DEVICE_AVAILABILITY_CHANGED && !deviceService.isAvailable(id)) {
-            // When device is removed or becomes unavailable, remove all its ports
-            deviceService.getPorts(event.subject().id())
-                    .forEach(p -> removeEdgePort(new ConnectPoint(id, p.number())));
-            connectionPoints.remove(id);
+            // When device is removed or becomes unavailable, remove all its ports.
+            // Note: cannot rely on Device subsystem, ports may be gone.
+            Optional.ofNullable(connectionPoints.remove(id))
+                .orElse(ImmutableSet.of())
+                .forEach(point -> post(new EdgePortEvent(EDGE_PORT_REMOVED, point)));
 
         } else if (type == DeviceEvent.Type.PORT_ADDED ||
                 type == PORT_UPDATED && event.port().isEnabled()) {
@@ -216,14 +223,20 @@ public class EdgeManager
         }
     }
 
+    private boolean isEdgePort(ConnectPoint point) {
+        // Logical ports are not counted as edge ports nor are infrastructure
+        // ports. Ports that have only edge links are considered edge ports.
+        return !point.port().isLogical() &&
+                deviceService.getPort(point) != null &&
+                linkService.getLinks(point).stream()
+                        .allMatch(link -> link.type() == Type.EDGE);
+    }
+
     // Adds the specified connection point to the edge points if needed.
     private void addEdgePort(ConnectPoint point) {
-        if (!topologyService.isInfrastructure(topology, point) && !point.port().isLogical()) {
-            Set<ConnectPoint> set = connectionPoints.get(point.deviceId());
-            if (set == null) {
-                set = Sets.newConcurrentHashSet();
-                connectionPoints.put(point.deviceId(), set);
-            }
+        if (isEdgePort(point)) {
+            Set<ConnectPoint> set = connectionPoints.computeIfAbsent(point.deviceId(),
+                                                                     (k) -> Sets.newConcurrentHashSet());
             if (set.add(point)) {
                 post(new EdgePortEvent(EDGE_PORT_ADDED, point));
             }
@@ -232,6 +245,7 @@ public class EdgeManager
 
     // Removes the specified connection point from the edge points.
     private void removeEdgePort(ConnectPoint point) {
+        // trying to remove edge ports, so we shouldn't check if it's EdgePoint
         if (!point.port().isLogical()) {
             Set<ConnectPoint> set = connectionPoints.get(point.deviceId());
             if (set == null) {
@@ -241,7 +255,13 @@ public class EdgeManager
                 post(new EdgePortEvent(EDGE_PORT_REMOVED, point));
             }
             if (set.isEmpty()) {
-                connectionPoints.remove(point.deviceId());
+                connectionPoints.computeIfPresent(point.deviceId(), (k, v) -> {
+                    if (v.isEmpty()) {
+                        return null;
+                    } else {
+                        return v;
+                    }
+                });
             }
         }
     }

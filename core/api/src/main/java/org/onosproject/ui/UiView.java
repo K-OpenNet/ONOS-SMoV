@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,56 +20,47 @@ import com.google.common.base.MoreObjects;
 import java.util.Objects;
 
 /**
- * Represents user interface view addition.
+ * Represents a user interface view addition.
  */
 public class UiView {
 
+    private static final  String DEFAULT_HELP_PAGE_URL =
+            "https://wiki.onosproject.org/display/ONOS/The+ONOS+Web+GUI";
+
     /**
-     * Designates navigation menu category.
+     * Designates the navigation menu category.
      */
     public enum Category {
+        // NOTE: human readable strings for the categories are now applied
+        //       externally, with the appropriate localization bundle.
         /**
          * Represents platform related views.
          */
-        PLATFORM("Platform"),
+        PLATFORM,
 
         /**
          * Represents network-control related views.
          */
-        NETWORK("Network"),
+        NETWORK,
 
         /**
          * Represents miscellaneous views.
          */
-        OTHER("Other"),
+        OTHER,
 
         /**
          * Represents views that do not show in the navigation menu.
          * This category should not be specified directly; rather, use
          * the {@link UiViewHidden} constructor instead of {@link UiView}.
          */
-        HIDDEN("(hidden)");
-
-        private final String label;
-
-        Category(String label) {
-            this.label = label;
-        }
-
-        /**
-         * Returns display label for the category.
-         *
-         * @return display label
-         */
-        public String label() {
-            return label;
-        }
+        HIDDEN
     }
 
     private final Category category;
     private final String id;
     private final String label;
     private final String iconId;
+    private final String helpPageUrl;
 
     /**
      * Creates a new user interface view descriptor. The navigation item
@@ -80,13 +71,16 @@ public class UiView {
      * @param label    view label
      */
     public UiView(Category category, String id, String label) {
-        this(category, id, label, null);
+        this(category, id, label, null, null);
     }
 
     /**
      * Creates a new user interface view descriptor. The navigation item
      * will appear in the navigation menu under the specified category,
      * with the specified icon adornment.
+     * <p>
+     * Note: see the {@code glyphMapping} structure in {@code icon.js} for
+     * valid icon identifiers.
      *
      * @param category view category
      * @param id       view identifier
@@ -94,10 +88,31 @@ public class UiView {
      * @param iconId   icon id
      */
     public UiView(Category category, String id, String label, String iconId) {
+        this(category, id, label, iconId, null);
+    }
+
+    /**
+     * Creates a new user interface view descriptor. The navigation item
+     * will appear in the navigation menu under the specified category,
+     * with the specified icon adornment and specified help page.
+     * <p>
+     * Note: see the {@code glyphMapping} structure in {@code icon.js} for
+     * valid icon identifiers.
+     *
+     * @param category view category
+     * @param id       view identifier
+     * @param label    view label
+     * @param iconId   icon id
+     * @param helpPageUrl help page URL
+     */
+    public UiView(Category category, String id, String label, String iconId,
+                  String helpPageUrl) {
         this.category = category;
         this.id = id;
         this.label = label;
         this.iconId = iconId;
+        this.helpPageUrl = (helpPageUrl == null) ?
+                DEFAULT_HELP_PAGE_URL : helpPageUrl;
     }
 
     /**
@@ -112,7 +127,7 @@ public class UiView {
     /**
      * Returns the view identifier.
      *
-     * @return view id
+     * @return view ID
      */
     public String id() {
         return id;
@@ -128,12 +143,21 @@ public class UiView {
     }
 
     /**
-     * Returns the icon ID.
+     * Returns the icon identifier.
      *
      * @return icon ID
      */
     public String iconId() {
         return iconId;
+    }
+
+    /**
+     * Returns the help page URL for a specific view.
+     *
+     * @return help page URL
+     */
+    public String helpPageUrl() {
+        return helpPageUrl;
     }
 
     @Override
@@ -149,7 +173,7 @@ public class UiView {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        final UiView other = (UiView) obj;
+        UiView other = (UiView) obj;
         return Objects.equals(this.id, other.id);
     }
 

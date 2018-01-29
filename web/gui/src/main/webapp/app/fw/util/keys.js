@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
     'use strict';
 
     // references to injected services
-    var $log, $timeout, fs, ts, ns, ee, qhs;
+    var $log, fs, ts, ns, ee, qhs, ls;
 
     // internal state
     var enabled = true,
@@ -32,7 +32,7 @@
             dialogKeys: {},
             viewKeys: {},
             viewFn: null,
-            viewGestures: []
+            viewGestures: [],
         },
         seq = {},
         matching = false,
@@ -40,7 +40,7 @@
         lookup;
 
     function matchSeq(key) {
-        if (!matching && key === 'shift') {
+        if (!matching && key === 'shift-shift') {
             matching = true;
             return true;
         }
@@ -66,16 +66,12 @@
             case 9: return 'tab';
             case 13: return 'enter';
             case 16: return 'shift';
-            case 17: return 'ctrl';
-            case 18: return 'alt';
             case 27: return 'esc';
             case 32: return 'space';
             case 37: return 'leftArrow';
             case 38: return 'upArrow';
             case 39: return 'rightArrow';
             case 40: return 'downArrow';
-            case 91: return 'cmdLeft';
-            case 93: return 'cmdRight';
             case 186: return 'semicolon';
             case 187: return 'equals';
             case 188: return 'comma';
@@ -94,15 +90,43 @@
                 } else if (code >= 112 && code <= 123) {
                     return 'F' + (code - 111);
                 }
-                return '.';
+                return null;
         }
+    }
+
+    var textFieldDoesNotBlock = {
+        enter: 1,
+        esc: 1,
+    };
+
+    function textFieldInput() {
+        var t = d3.event.target.tagName.toLowerCase();
+        return t === 'input' || t === 'textarea';
     }
 
     function keyIn() {
         var event = d3.event,
             keyCode = event.keyCode,
             key = whatKey(keyCode),
-            kh = keyHandler,
+            textBlockable = !textFieldDoesNotBlock[key],
+            modifiers = [];
+
+        event.metaKey && modifiers.push('cmd');
+        event.altKey && modifiers.push('alt');
+        event.shiftKey && modifiers.push('shift');
+
+        if (!key) {
+            return;
+        }
+
+        modifiers.push(key);
+        key = modifiers.join('-');
+
+        if (textBlockable && textFieldInput()) {
+            return;
+        }
+
+        var kh = keyHandler,
             gk = kh.globalKeys[key],
             gcb = fs.isF(gk) || (fs.isA(gk) && fs.isF(gk[0])),
             dk = kh.dialogKeys[key],
@@ -110,9 +134,9 @@
             vk = kh.viewKeys[key],
             kl = fs.isF(kh.viewKeys._keyListener),
             vcb = fs.isF(vk) || (fs.isA(vk) && fs.isF(vk[0])) || fs.isF(kh.viewFn),
-            token = 'keyev';    // indicate this was a key-pressed event
+            token = 'keyev'; // indicate this was a key-pressed event
 
-        d3.event.stopPropagation();
+        event.stopPropagation();
 
         if (enabled) {
             if (matchSeq(key)) return;
@@ -138,23 +162,40 @@
         }
     }
 
+    // functions to obtain localized strings deferred from the setup of the
+    //  global key data structures.
+    function qhlion() {
+        return ls.bundle('core.fw.QuickHelp');
+    }
+    function qhlionShowHide() {
+        return qhlion()('qh_hint_show_hide_qh');
+    }
+
+    function qhlionHintEsc() {
+        return qhlion()('qh_hint_esc');
+    }
+
+    function qhlionHintT() {
+        return qhlion()('qh_hint_t');
+    }
+
     function setupGlobalKeys() {
         angular.extend(keyHandler, {
             globalKeys: {
-                backSlash: [quickHelp, 'Show / hide Quick Help'],
-                slash: [quickHelp, 'Show / hide Quick Help'],
-                esc: [escapeKey, 'Dismiss dialog or cancel selections'],
-                T: [toggleTheme, "Toggle theme"]
+                backSlash: [quickHelp, qhlionShowHide],
+                slash: [quickHelp, qhlionShowHide],
+                esc: [escapeKey, qhlionHintEsc],
+                T: [toggleTheme, qhlionHintT],
             },
             globalFormat: ['backSlash', 'slash', 'esc', 'T'],
 
             // Masked keys are global key handlers that always return true.
             // That is, the view will never see the event for that key.
             maskedKeys: {
-                slash: true,
-                backSlash: true,
-                T: true
-            }
+                slash: 1,
+                backSlash: 1,
+                T: 1,
+            },
         });
     }
 
@@ -203,7 +244,7 @@
     }
 
     function unexParam(fname, x) {
-        $log.warn(fname, ": unexpected parameter-- ", x);
+        $log.warn(fname, ': unexpected parameter-- ', x);
     }
 
     function setKeyBindings(keyArg) {
@@ -232,7 +273,7 @@
             globalKeys: gkeys,
             maskedKeys: masked,
             viewKeys: vkeys,
-            viewFunction: vfn
+            viewFunction: vfn,
         };
     }
 
@@ -277,16 +318,16 @@
 
     angular.module('onosUtil')
     .factory('KeyService',
-        ['$log', '$timeout', 'FnService', 'ThemeService', 'NavService',
-            'EeService',
+        ['$log', 'FnService', 'ThemeService', 'NavService',
+            'EeService', 'LionService',
 
-        function (_$log_, _$timeout_, _fs_, _ts_, _ns_, _ee_) {
+        function (_$log_, _fs_, _ts_, _ns_, _ee_, _ls_) {
             $log = _$log_;
-            $timeout = _$timeout_;
             fs = _fs_;
             ts = _ts_;
             ns = _ns_;
             ee = _ee_;
+            ls = _ls_;
 
             return {
                 bindQhs: function (_qhs_) {
@@ -330,7 +371,7 @@
                 enableGlobalKeys: function (b) {
                     globalEnabled = b;
                 },
-                checkNotGlobal: checkNotGlobal
+                checkNotGlobal: checkNotGlobal,
             };
     }]);
 

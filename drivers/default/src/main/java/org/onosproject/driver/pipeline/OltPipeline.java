@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
-import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.FlowRuleOperations;
 import org.onosproject.net.flow.FlowRuleOperationsContext;
@@ -51,6 +50,7 @@ import org.onosproject.net.flow.criteria.EthTypeCriterion;
 import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.IPProtocolCriterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
+import org.onosproject.net.flow.criteria.UdpPortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.instructions.Instruction;
 import org.onosproject.net.flow.instructions.Instructions;
@@ -73,7 +73,6 @@ import org.onosproject.net.group.GroupKey;
 import org.onosproject.net.group.GroupListener;
 import org.onosproject.net.group.GroupService;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.onosproject.store.service.AtomicCounter;
 import org.onosproject.store.service.StorageService;
 import org.slf4j.Logger;
 
@@ -105,9 +104,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
 
     private DeviceId deviceId;
     private ApplicationId appId;
-    // NOTE: OLT currently has some issue with cookie 0. Pick something larger
-    //       to avoid collision
-    private AtomicCounter counter;
+
 
     protected FlowObjectiveStore flowObjectiveStore;
 
@@ -118,8 +115,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
             .register(GroupKey.class)
             .register(DefaultGroupKey.class)
             .register(OLTPipelineGroup.class)
-            .register(byte[].class)
-            .build();
+            .build("OltPipeline");
 
     @Override
     public void init(DeviceId deviceId, PipelinerContext context) {
@@ -132,18 +128,6 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         groupService = serviceDirectory.get(GroupService.class);
         flowObjectiveStore = context.store();
         storageService = serviceDirectory.get(StorageService.class);
-
-        counter = storageService.atomicCounterBuilder()
-                .withName(String.format(OLTCOOKIES, deviceId))
-                .build()
-                .asAtomicCounter();
-
-        /*
-        magic olt number to make sure we don't collide with it's internal
-        processing
-         */
-        counter.set(123);
-
 
         appId = coreService.registerApplication(
                 "org.onosproject.driver.OLTPipeline");
@@ -172,7 +156,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                     .findFirst().get();
 
             if (output == null || !output.port().equals(PortNumber.CONTROLLER)) {
-                log.error("OLT can only filter packet to controller");
+                log.warn("OLT can only filter packet to controller");
                 fail(filter, ObjectiveError.UNSUPPORTED);
                 return;
             }
@@ -199,14 +183,33 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         } else if (ethType.ethType().equals(EthType.EtherType.IPV4.ethType())) {
             IPProtocolCriterion ipProto = (IPProtocolCriterion)
                     filterForCriterion(filter.conditions(), Criterion.Type.IP_PROTO);
+            if (ipProto == null) {
+                log.warn("OLT can only filter IGMP and DHCP");
+                fail(filter, ObjectiveError.UNSUPPORTED);
+                return;
+            }
             if (ipProto.protocol() == IPv4.PROTOCOL_IGMP) {
                 provisionIgmp(filter, ethType, ipProto, output);
+            } else if (ipProto.protocol() == IPv4.PROTOCOL_UDP) {
+                UdpPortCriterion udpSrcPort = (UdpPortCriterion)
+                        filterForCriterion(filter.conditions(), Criterion.Type.UDP_SRC);
+
+                UdpPortCriterion udpDstPort = (UdpPortCriterion)
+                        filterForCriterion(filter.conditions(), Criterion.Type.UDP_DST);
+
+                if (udpSrcPort.udpPort().toInt() != 68 || udpDstPort.udpPort().toInt() != 67) {
+                    log.warn("OLT can only filter DHCP, wrong UDP Src or Dst Port");
+                    fail(filter, ObjectiveError.UNSUPPORTED);
+                }
+                provisionDhcp(filter, ethType, ipProto, udpSrcPort, udpDstPort, output);
             } else {
-                log.error("OLT can only filter igmp");
+                log.warn("OLT can only filter IGMP and DHCP");
                 fail(filter, ObjectiveError.UNSUPPORTED);
             }
         } else {
-            log.error("OLT can only filter eapol and igmp");
+            log.warn("\nOnly the following are Supported in OLT for filter ->\n"
+                    + "ETH TYPE : EAPOL and IPV4\n"
+                    + "IPV4 TYPE: IGMP and UDP (for DHCP)");
             fail(filter, ObjectiveError.UNSUPPORTED);
         }
 
@@ -326,7 +329,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 buildTreatment(Instructions.createGroup(group.id()));
 
         FlowRule rule = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .forTable(0)
                 .makePermanent()
@@ -407,7 +410,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         Criterion innerVid = Criteria.matchVlanId(((VlanIdCriterion) innerVlan).vlanId());
 
         FlowRule.Builder outer = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .makePermanent()
                 .withPriority(fwd.priority())
@@ -416,7 +419,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                                               Instructions.transition(QQ_TABLE)));
 
         FlowRule.Builder inner = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .forTable(QQ_TABLE)
                 .makePermanent()
@@ -449,7 +452,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         Pair<Instruction, Instruction> outerPair = vlanOps.remove(0);
 
         FlowRule.Builder inner = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .makePermanent()
                 .withPriority(fwd.priority())
@@ -464,7 +467,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 innerPair.getRight()).vlanId();
 
         FlowRule.Builder outer = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(fwd.appId())
                 .forDevice(deviceId)
                 .forTable(QQ_TABLE)
                 .makePermanent()
@@ -557,10 +560,19 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
         buildAndApplyRule(filter, selector, treatment);
     }
 
+    private void provisionDhcp(FilteringObjective filter, EthTypeCriterion ethType,
+                               IPProtocolCriterion ipProto,
+                               UdpPortCriterion udpSrcPort,
+                               UdpPortCriterion udpDstPort,
+                               Instructions.OutputInstruction output) {
+        TrafficSelector selector = buildSelector(filter.key(), ethType, ipProto, udpSrcPort, udpDstPort);
+        TrafficTreatment treatment = buildTreatment(output);
+        buildAndApplyRule(filter, selector, treatment);
+    }
     private void buildAndApplyRule(FilteringObjective filter, TrafficSelector selector,
                                    TrafficTreatment treatment) {
         FlowRule rule = DefaultFlowRule.builder()
-                .withCookie(counter.getAndIncrement())
+                .fromApp(filter.appId())
                 .forDevice(deviceId)
                 .forTable(0)
                 .makePermanent()
@@ -594,12 +606,7 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
                 builder.add(inner.build()).add(outer.build());
                 break;
             case REMOVE:
-                Iterable<FlowEntry> flows = flowRuleService.getFlowEntries(deviceId);
-                for (FlowEntry fe : flows) {
-                    if (fe.equals(inner.build()) || fe.equals(outer.build())) {
-                        builder.remove(fe);
-                    }
-                }
+                builder.remove(inner.build()).remove(outer.build());
                 break;
             case ADD_TO_EXISTING:
                 break;
@@ -671,7 +678,8 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
     private class InnerGroupListener implements GroupListener {
         @Override
         public void event(GroupEvent event) {
-            if (event.type() == GroupEvent.Type.GROUP_ADDED) {
+            if (event.type() == GroupEvent.Type.GROUP_ADDED ||
+                event.type() == GroupEvent.Type.GROUP_UPDATED) {
                 GroupKey key = event.subject().appCookie();
 
                 NextObjective obj = pendingGroups.getIfPresent(key);
@@ -701,5 +709,11 @@ public class OltPipeline extends AbstractHandlerBehaviour implements Pipeliner {
             return appKryo.serialize(key);
         }
 
+    }
+
+    @Override
+    public List<String> getNextMappings(NextGroup nextGroup) {
+        // TODO Implementation deferred to vendor
+        return null;
     }
 }

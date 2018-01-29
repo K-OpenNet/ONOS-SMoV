@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,10 @@ package org.onosproject.net.meter;
  */
 public interface Band {
 
+    short MIN_PRECEDENCE = 0;
+    short MAX_PRECEDENCE = 255;
+    String ERR_MSG = "Precedence out of range";
+
     /**
      * Specifies the type of band.
      */
@@ -31,12 +35,17 @@ public interface Band {
         DROP,
 
         /**
-         * defines a simple DiffServ policer that remark
-         * the drop precedence of the DSCP field in the
+         * Defines a simple DiffServ policer that remark
+         * the drop precedence of the DSCP field in the
          * IP header of the packets that exceed the band
          * rate value.
          */
-        REMARK
+        REMARK,
+
+        /**
+         * Defines an experimental meter band.
+         */
+        EXPERIMENTAL
     }
 
     /**
@@ -113,7 +122,7 @@ public interface Band {
         Builder dropPrecedence(short prec);
 
         /**
-         * Assigns the @See Type of this band.
+         * Assigns the {@link Type} of this band.
          *
          * @param type a band type
          * @return this

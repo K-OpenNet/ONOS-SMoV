@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ package org.onosproject.cli.net;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.incubator.net.intf.InterfaceAdminService;
+import org.onosproject.net.intf.InterfaceAdminService;
 import org.onosproject.net.ConnectPoint;
 
 /**
  * Removes an interface configuration.
  */
-@Command(scope = "onos", name = "remove-interface",
+@Command(scope = "onos", name = "interface-remove",
         description = "Removes a configured interface")
 public class InterfaceRemoveCommand extends AbstractShellCommand {
 

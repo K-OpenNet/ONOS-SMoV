@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,22 @@
 
 package org.onosproject.netconf;
 
-import com.google.common.base.Preconditions;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
+import org.onosproject.netconf.config.NetconfDeviceConfig;
+import org.onosproject.netconf.config.NetconfSshClientLib;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * Represents a Netconf device information.
@@ -39,7 +45,14 @@ public class NetconfDeviceInfo {
     private String password;
     private IpAddress ipAddress;
     private int port;
+    private char[] key;
+    //File keyFile @deprecated 1.9.0
+    @Deprecated
     private File keyFile;
+    private Optional<NetconfSshClientLib> sshClientLib;
+    private OptionalInt connectTimeoutSec;
+    private OptionalInt replyTimeoutSec;
+    private OptionalInt idleTimeoutSec;
     private DeviceId deviceId;
 
 
@@ -53,13 +66,17 @@ public class NetconfDeviceInfo {
      */
     public NetconfDeviceInfo(String name, String password, IpAddress ipAddress,
                              int port) {
-        Preconditions.checkArgument(!name.equals(""), "Empty device name");
-        Preconditions.checkNotNull(port > 0, "Negative port");
-        Preconditions.checkNotNull(ipAddress, "Null ip address");
+        checkArgument(!name.equals(""), "Empty device username");
+        checkNotNull(port > 0, "Negative port");
+        checkNotNull(ipAddress, "Null ip address");
         this.name = name;
         this.password = password;
         this.ipAddress = ipAddress;
         this.port = port;
+        this.sshClientLib = Optional.empty();
+        this.connectTimeoutSec = OptionalInt.empty();
+        this.replyTimeoutSec = OptionalInt.empty();
+        this.idleTimeoutSec = OptionalInt.empty();
     }
 
     /**
@@ -69,18 +86,91 @@ public class NetconfDeviceInfo {
      * @param password  the password for the device
      * @param ipAddress the ip address
      * @param port      the tcp port
-     * @param keyString the string containing the key.
+     * @param keyString the string containing a DSA or RSA private key
+     *                  of the user in OpenSSH key format
+     *                  <br>
+     *                  (Pre 1.9.0 behaviour: {@code keyString} can be file path
+     *                  to a file containing DSA or RSA private key of the user
+     *                  in OpenSSH key format)
      */
     public NetconfDeviceInfo(String name, String password, IpAddress ipAddress,
                              int port, String keyString) {
-        Preconditions.checkArgument(!name.equals(""), "Empty device name");
-        Preconditions.checkNotNull(port > 0, "Negative port");
-        Preconditions.checkNotNull(ipAddress, "Null ip address");
+        checkArgument(!name.equals(""), "Empty device name");
+        checkNotNull(port > 0, "Negative port");
+        checkNotNull(ipAddress, "Null ip address");
         this.name = name;
         this.password = password;
         this.ipAddress = ipAddress;
         this.port = port;
+        this.key = keyString.toCharArray();
         this.keyFile = new File(keyString);
+        this.sshClientLib = Optional.empty();
+        this.connectTimeoutSec = OptionalInt.empty();
+        this.replyTimeoutSec = OptionalInt.empty();
+        this.idleTimeoutSec = OptionalInt.empty();
+    }
+
+    /**
+     * Convenieince constructor that converts all known fields from NetCfg data.
+     * @param netconfConfig NetCf configuration
+     */
+    public NetconfDeviceInfo(NetconfDeviceConfig netconfConfig) {
+        checkArgument(!netconfConfig.username().isEmpty(), "Empty device name");
+        checkNotNull(netconfConfig.port() > 0, "Negative port");
+        checkNotNull(netconfConfig.ip(), "Null ip address");
+
+        this.name = netconfConfig.username();
+        this.password = netconfConfig.password();
+        this.ipAddress = netconfConfig.ip();
+        this.port = netconfConfig.port();
+        if (netconfConfig.sshKey() != null && !netconfConfig.sshKey().isEmpty()) {
+            this.key = netconfConfig.sshKey().toCharArray();
+        }
+        this.keyFile = new File(netconfConfig.sshKey());
+        if (netconfConfig.sshClient().isPresent()) {
+            this.sshClientLib = Optional.of(NetconfSshClientLib.getEnum(netconfConfig.sshClient().get()));
+        } else {
+            this.sshClientLib = Optional.empty();
+        }
+        this.connectTimeoutSec = netconfConfig.connectTimeout();
+        this.replyTimeoutSec = netconfConfig.replyTimeout();
+        this.idleTimeoutSec = netconfConfig.idleTimeout();
+    }
+
+    /**
+     * Allows the NETCONF SSH Client library to be set.
+     *
+     * @param sshClientLib An enumerated value
+     */
+    public void setSshClientLib(Optional<NetconfSshClientLib> sshClientLib) {
+        this.sshClientLib = sshClientLib;
+    }
+
+    /**
+     * Allows the NETCONF SSH session initial connect timeout to be set.
+     *
+     * @param connectTimeoutSec value in seconds
+     */
+    public void setConnectTimeoutSec(OptionalInt connectTimeoutSec) {
+        this.connectTimeoutSec = connectTimeoutSec;
+    }
+
+    /**
+     * Allows the NETCONF SSH session replies timeout to be set.
+     *
+     * @param replyTimeoutSec value in seconds
+     */
+    public void setReplyTimeoutSec(OptionalInt replyTimeoutSec) {
+        this.replyTimeoutSec = replyTimeoutSec;
+    }
+
+    /**
+     * Allows the NETCONF SSH session idle timeout to be set.
+     *
+     * @param idleTimeoutSec value in seconds
+     */
+    public void setIdleTimeoutSec(OptionalInt idleTimeoutSec) {
+        this.idleTimeoutSec = idleTimeoutSec;
     }
 
     /**
@@ -113,19 +203,70 @@ public class NetconfDeviceInfo {
     /**
      * Exposes the port of the controller.
      *
-     * @return int port address
+     * @return port number
      */
     public int port() {
         return port;
     }
 
     /**
+     * Exposes the key of the controller.
+     *
+     * @return {@code char[]} containing a DSA or RSA private key of the user
+     *         in OpenSSH key format
+     *         or null if device is not configured to use public key authentication
+     */
+    public char[] getKey() {
+        return key;
+    }
+
+    /**
      * Exposes the keyFile of the controller.
      *
-     * @return int port address
+     * @return File object pointing to a file containing a DSA or RSA
+     *         private key of the user in OpenSSH key format,
+     *         or null if device is not configured to use public key authentication
+     * @deprecated 1.9.0
      */
+    @Deprecated
     public File getKeyFile() {
         return keyFile;
+    }
+
+    /**
+     * Exposes the Client library implementation.
+     *
+     * @return Enumerated value
+     */
+    public Optional<NetconfSshClientLib> sshClientLib() {
+        return sshClientLib;
+    }
+
+    /**
+     * Exposes the device specific connect timeout.
+     *
+     * @return The timeout value in seconds
+     */
+    public OptionalInt getConnectTimeoutSec() {
+        return connectTimeoutSec;
+    }
+
+    /**
+     * Exposes the device specific reply timeout.
+     *
+     * @return The timeout value in seconds
+     */
+    public OptionalInt getReplyTimeoutSec() {
+        return replyTimeoutSec;
+    }
+
+    /**
+     * Exposes the device specific idle timeout.
+     *
+     * @return The timeout value in seconds
+     */
+    public OptionalInt getIdleTimeoutSec() {
+        return idleTimeoutSec;
     }
 
     /**
@@ -134,6 +275,7 @@ public class NetconfDeviceInfo {
      *
      * @return String device info
      */
+    @Override
     public String toString() {
         return "netconf:" + name + "@" + ipAddress + ":" + port;
     }

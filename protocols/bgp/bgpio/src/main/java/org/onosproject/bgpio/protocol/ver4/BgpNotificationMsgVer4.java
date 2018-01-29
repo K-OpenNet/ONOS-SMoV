@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -198,7 +198,7 @@ class BgpNotificationMsgVer4 implements BgpNotificationMsg {
                 cb.writeBytes(message.data);
             }
 
-            //Update message length field in notification message
+            log.debug("Update message length field in notification message");
             int length = cb.writerIndex() - msgStartIndex;
             cb.setShort(headerLenIndex, (short) length);
             message.bgpHeader.setLength((short) length);

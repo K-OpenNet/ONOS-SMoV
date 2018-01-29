@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,7 @@
  */
 package org.onosproject.codec.impl;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.onosproject.codec.impl.InstructionJsonMatcher.matchesInstruction;
-
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.packet.Ip4Address;
@@ -30,7 +27,6 @@ import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.GridType;
-import org.onosproject.net.IndexedLambda;
 import org.onosproject.net.Lambda;
 import org.onosproject.net.OduSignalId;
 import org.onosproject.net.PortNumber;
@@ -41,7 +37,9 @@ import org.onosproject.net.flow.instructions.L1ModificationInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.onosproject.codec.impl.InstructionJsonMatcher.matchesInstruction;
 
 /**
  * Unit tests for Instruction codec.
@@ -61,12 +59,12 @@ public class InstructionCodecTest {
     }
 
     /**
-     * Tests the encoding of push header instructions.
+     * Tests the encoding of push mpls header instructions.
      */
     @Test
     public void pushHeaderInstructionsTest() {
-        final L2ModificationInstruction.PushHeaderInstructions instruction =
-                (L2ModificationInstruction.PushHeaderInstructions) Instructions.pushMpls();
+        final L2ModificationInstruction.ModMplsHeaderInstruction instruction =
+                (L2ModificationInstruction.ModMplsHeaderInstruction) Instructions.pushMpls();
         final ObjectNode instructionJson = instructionCodec.encode(instruction, context);
 
         assertThat(instructionJson, matchesInstruction(instruction));
@@ -79,19 +77,6 @@ public class InstructionCodecTest {
     public void outputInstructionTest() {
         final Instructions.OutputInstruction instruction =
                 Instructions.createOutput(PortNumber.portNumber(22));
-        final ObjectNode instructionJson =
-                instructionCodec.encode(instruction, context);
-        assertThat(instructionJson, matchesInstruction(instruction));
-    }
-
-    /**
-     * Tests the encoding of mod lambda instructions.
-     */
-    @Test
-    public void modLambdaInstructionTest() {
-        final L0ModificationInstruction.ModLambdaInstruction instruction =
-                (L0ModificationInstruction.ModLambdaInstruction)
-                        Instructions.modL0Lambda(new IndexedLambda(55));
         final ObjectNode instructionJson =
                 instructionCodec.encode(instruction, context);
         assertThat(instructionJson, matchesInstruction(instruction));

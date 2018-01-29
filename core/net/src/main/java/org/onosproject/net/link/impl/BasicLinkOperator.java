@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,11 +58,11 @@ public final class BasicLinkOperator implements ConfigOperator {
             return descr;
         }
 
-        // cfg.type() defaults to DIRECT, so there is a risk of unwanted override.
-        // do we want this behavior?
         Link.Type type = descr.type();
-        if (cfg.type() != type) {
-            type = cfg.type();
+        if (cfg.isTypeConfigured()) {
+            if (cfg.type() != type) {
+                type = cfg.type();
+            }
         }
 
         SparseAnnotations sa = combine(cfg, descr.annotations());
@@ -78,11 +78,14 @@ public final class BasicLinkOperator implements ConfigOperator {
      */
     public static SparseAnnotations combine(BasicLinkConfig cfg, SparseAnnotations an) {
         DefaultAnnotations.Builder b = DefaultAnnotations.builder();
+        b.putAll(an);
         if (cfg.metric() != DEF_METRIC) {
             b.set(AnnotationKeys.METRIC, String.valueOf(cfg.metric()));
         }
-        if (cfg.latency() != DEF_DURATION) {
-            b.set(AnnotationKeys.LATENCY, cfg.latency().toString());
+        if (!cfg.latency().equals(DEF_DURATION)) {
+            //Convert the latency from Duration to long,
+            //so that it's computable in the latencyConstraint.
+            b.set(AnnotationKeys.LATENCY, String.valueOf(cfg.latency().toNanos()));
         }
         if (cfg.bandwidth() != DEF_BANDWIDTH) {
             b.set(AnnotationKeys.BANDWIDTH, String.valueOf(cfg.bandwidth()));
@@ -90,7 +93,7 @@ public final class BasicLinkOperator implements ConfigOperator {
         if (cfg.isDurable() != null) {
             b.set(AnnotationKeys.DURABLE, String.valueOf(cfg.isDurable()));
         }
-        return DefaultAnnotations.union(an, b.build());
+        return b.build();
     }
 
     /**
@@ -108,7 +111,9 @@ public final class BasicLinkOperator implements ConfigOperator {
         checkNotNull(dst, "Must supply a destination endpoint");
         checkNotNull(link, "Must supply a link");
         return new DefaultLinkDescription(
-                src, dst, link.type(), (SparseAnnotations) link.annotations());
+                src, dst, link.type(),
+                link.isExpected(),
+                (SparseAnnotations) link.annotations());
     }
 
     /**
@@ -126,7 +131,11 @@ public final class BasicLinkOperator implements ConfigOperator {
         checkNotNull(src, "Must supply a source endpoint");
         checkNotNull(dst, "Must supply a destination endpoint");
         checkNotNull(link, "Must supply a link config");
+        // Only allowed link is expected link
+        boolean expected = link.isAllowed();
         return new DefaultLinkDescription(
-                src, dst, link.type(), combine(link, DefaultAnnotations.EMPTY));
+                src, dst, link.type(),
+                expected,
+                combine(link, DefaultAnnotations.EMPTY));
     }
 }

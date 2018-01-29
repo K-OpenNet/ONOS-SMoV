@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.apache.karaf.shell.commands.Option;
+import org.onlab.util.StringFilter;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.cli.Comparators;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.Device;
@@ -33,15 +33,22 @@ import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowEntry.FlowEntryState;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.TrafficTreatment;
+import org.onosproject.utils.Comparators;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.google.common.collect.Lists.newArrayList;
+
 
 /**
  * Lists all currently-known flows.
@@ -55,7 +62,7 @@ public class FlowsListCommand extends AbstractShellCommand {
     public static final String ANY = "any";
 
     private static final String LONG_FORMAT = "    id=%s, state=%s, bytes=%s, "
-            + "packets=%s, duration=%s, priority=%s, tableId=%s, appId=%s, "
+            + "packets=%s, duration=%s, liveType=%s, priority=%s, tableId=%s, appId=%s, "
             + "payLoad=%s, selector=%s, treatment=%s";
 
     private static final String SHORT_FORMAT = "    %s, bytes=%s, packets=%s, "
@@ -78,28 +85,92 @@ public class FlowsListCommand extends AbstractShellCommand {
             required = false, multiValued = false)
     private boolean shortOutput = false;
 
+    @Option(name = "-n", aliases = "--no-core-flows",
+            description = "Suppress core flows from output",
+            required = false, multiValued = false)
+    private boolean suppressCoreOutput = false;
+
     @Option(name = "-c", aliases = "--count",
             description = "Print flow count only",
             required = false, multiValued = false)
     private boolean countOnly = false;
 
+    @Option(name = "-f", aliases = "--filter",
+            description = "Filter flows by specific keyword",
+            required = false, multiValued = true)
+    private List<String> filter = new ArrayList<>();
+
+    @Option(name = "-r", aliases = "--remove",
+            description = "Remove flows by specific keyword",
+            required = false, multiValued = false)
+    private String remove = null;
+
     private Predicate<FlowEntry> predicate = TRUE_PREDICATE;
+
+    private StringFilter contentFilter;
 
     @Override
     protected void execute() {
         CoreService coreService = get(CoreService.class);
         DeviceService deviceService = get(DeviceService.class);
         FlowRuleService service = get(FlowRuleService.class);
+        contentFilter = new StringFilter(filter, StringFilter.Strategy.AND);
 
         compilePredicate();
 
-        SortedMap<Device, List<FlowEntry>> flows = getSortedFlows(deviceService, service);
+        SortedMap<Device, List<FlowEntry>> flows = getSortedFlows(deviceService, service, coreService);
 
+        // Remove flows
+        if (remove != null) {
+            flows.values().forEach(flowList -> {
+                if (!remove.isEmpty()) {
+                    filter.add(remove);
+                    contentFilter = new StringFilter(filter, StringFilter.Strategy.AND);
+                }
+                if (!filter.isEmpty() || (remove != null && !remove.isEmpty())) {
+                    flowList = filterFlows(flowList);
+                    this.removeFlowsInteractive(flowList, service, coreService);
+                }
+            });
+            return;
+        }
+
+        // Show flows
         if (outputJson()) {
             print("%s", json(flows.keySet(), flows));
         } else {
             flows.forEach((device, flow) -> printFlows(device, flow, coreService));
         }
+    }
+
+    /**
+     * Removes the flows passed as argument after confirmation is provided
+     * for each of them.
+     * If no explicit confirmation is provided, the flow is not removed.
+     *
+     * @param flows       list of flows to remove
+     * @param flowService FlowRuleService object
+     * @param coreService CoreService object
+     */
+    public void removeFlowsInteractive(Iterable<FlowEntry> flows,
+                                       FlowRuleService flowService, CoreService coreService) {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        flows.forEach(flow -> {
+            ApplicationId appId = coreService.getAppId(flow.appId());
+            System.out.print(String.format("Id=%s, AppId=%s. Remove? [y/N]: ",
+                                           flow.id(), appId != null ? appId.name() : "<none>"));
+            String response;
+            try {
+                response = br.readLine();
+                response = response.trim().replace("\n", "");
+                if ("y".equals(response)) {
+                    flowService.removeFlowRules(flow);
+                }
+            } catch (IOException e) {
+                response = "";
+            }
+            print(response);
+        });
     }
 
     /**
@@ -154,10 +225,11 @@ public class FlowsListCommand extends AbstractShellCommand {
      *
      * @param deviceService device service
      * @param service flow rule service
+     * @param coreService core service
      * @return sorted device list
      */
     protected SortedMap<Device, List<FlowEntry>> getSortedFlows(DeviceService deviceService,
-                                                          FlowRuleService service) {
+                                                          FlowRuleService service, CoreService coreService) {
         SortedMap<Device, List<FlowEntry>> flows = new TreeMap<>(Comparators.ELEMENT_COMPARATOR);
         List<FlowEntry> rules;
 
@@ -182,9 +254,27 @@ public class FlowsListCommand extends AbstractShellCommand {
                 }
             }
             rules.sort(Comparators.FLOW_RULE_COMPARATOR);
+
+            if (suppressCoreOutput) {
+                short coreAppId = coreService.getAppId("org.onosproject.core").id();
+                rules = rules.stream()
+                        .filter(f -> f.appId() != coreAppId)
+                        .collect(Collectors.toList());
+            }
             flows.put(d, rules);
         }
         return flows;
+    }
+
+    /**
+     * Filter a given list of flows based on the existing content filter.
+     *
+     * @param flows list of flows to filter
+     * @return further filtered list of flows
+     */
+    private List<FlowEntry> filterFlows(List<FlowEntry> flows) {
+        return flows.stream().
+                filter(f -> contentFilter.filter(f)).collect(Collectors.toList());
     }
 
     /**
@@ -196,21 +286,22 @@ public class FlowsListCommand extends AbstractShellCommand {
      */
     protected void printFlows(Device d, List<FlowEntry> flows,
                               CoreService coreService) {
-        boolean empty = flows == null || flows.isEmpty();
-        print("deviceId=%s, flowRuleCount=%d", d.id(), empty ? 0 : flows.size());
+        List<FlowEntry> filteredFlows = filterFlows(flows);
+        boolean empty = filteredFlows == null || filteredFlows.isEmpty();
+        print("deviceId=%s, flowRuleCount=%d", d.id(), empty ? 0 : filteredFlows.size());
         if (empty || countOnly) {
             return;
         }
 
-        for (FlowEntry f : flows) {
+        for (FlowEntry f : filteredFlows) {
             if (shortOutput) {
                 print(SHORT_FORMAT, f.state(), f.bytes(), f.packets(),
-                        f.tableId(), f.priority(), f.selector().criteria(),
+                        f.table(), f.priority(), f.selector().criteria(),
                         printTreatment(f.treatment()));
             } else {
                 ApplicationId appId = coreService.getAppId(f.appId());
                 print(LONG_FORMAT, Long.toHexString(f.id().value()), f.state(),
-                        f.bytes(), f.packets(), f.life(), f.priority(), f.tableId(),
+                        f.bytes(), f.packets(), f.life(), f.liveType(), f.priority(), f.table(),
                         appId != null ? appId.name() : "<none>",
                         f.payLoad() == null ? null : f.payLoad().payLoad().toString(),
                         f.selector().criteria(), f.treatment());
@@ -244,5 +335,4 @@ public class FlowsListCommand extends AbstractShellCommand {
         builder.append("]");
         return builder.toString();
     }
-
 }

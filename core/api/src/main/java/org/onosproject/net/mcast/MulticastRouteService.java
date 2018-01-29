@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package org.onosproject.net.mcast;
 
-import com.google.common.annotations.Beta;
 import org.onosproject.event.ListenerService;
 import org.onosproject.net.ConnectPoint;
 
@@ -23,8 +22,10 @@ import java.util.Set;
 
 /**
  * A service interface for maintaining multicast information.
+ *
+ * @deprecated in 1.11 ("Loon") release. To be moved into an app.
  */
-@Beta
+@Deprecated
 public interface MulticastRouteService
         extends ListenerService<McastEvent, McastListener> {
 

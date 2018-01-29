@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ public final class GroupJsonMatcher extends TypeSafeDiagnosingMatcher<JsonNode> 
     public boolean matchesSafely(JsonNode jsonGroup, Description description) {
         // check id
         String jsonGroupId = jsonGroup.get("id").asText();
-        String groupId = group.id().toString();
+        String groupId = group.id().id().toString();
         if (!jsonGroupId.equals(groupId)) {
             description.appendText("group id was " + jsonGroupId);
             return false;

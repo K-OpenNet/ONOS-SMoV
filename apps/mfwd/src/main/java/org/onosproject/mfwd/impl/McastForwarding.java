@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -235,7 +235,7 @@ public class McastForwarding {
 
             ArrayList<ConnectPoint> egressList = (ArrayList<ConnectPoint>) mcastRouteManager.fetchSinks(mRoute);
             //If there are no egress ports set return, otherwise forward the packets to their expected port.
-            if (egressList.size() == 0) {
+            if (egressList.isEmpty()) {
                 return;
             }
 

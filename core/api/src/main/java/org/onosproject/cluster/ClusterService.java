@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,18 @@
  */
 package org.onosproject.cluster;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 
 import org.joda.time.DateTime;
+import org.onosproject.core.Version;
 import org.onosproject.event.ListenerService;
 
 /**
- * Service for obtaining information about the individual nodes within
- * the controller cluster.
+ * Service for obtaining information about the individual nodes within the controller cluster.
  */
-public interface ClusterService
-    extends ListenerService<ClusterEvent, ClusterEventListener> {
+public interface ClusterService extends ListenerService<ClusterEvent, ClusterEventListener> {
 
     /**
      * Returns the local controller node.
@@ -50,7 +51,9 @@ public interface ClusterService
     ControllerNode getNode(NodeId nodeId);
 
     /**
-     * Returns the availability state of the specified controller node.
+     * Returns the availability state of the specified controller node. Note
+     * that this does not imply that all the core and application components
+     * have been fully activated; only that the node has joined the cluster.
      *
      * @param nodeId controller node identifier
      * @return availability state
@@ -58,11 +61,40 @@ public interface ClusterService
     ControllerNode.State getState(NodeId nodeId);
 
     /**
+     * Returns the version of the given controller node.
+     *
+     * @param nodeId controller node identifier
+     * @return controller version
+     */
+    Version getVersion(NodeId nodeId);
+
+    /**
      * Returns the system time when the availability state was last updated.
      *
      * @param nodeId controller node identifier
      * @return system time when the availability state was last updated.
      */
-    DateTime getLastUpdated(NodeId nodeId);
+    default Instant getLastUpdatedInstant(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdated(nodeId))
+                    .map(DateTime::getMillis)
+                    .map(Instant::ofEpochMilli)
+                    .orElse(null);
+    }
+
+    /**
+     * Returns the system time when the availability state was last updated.
+     *
+     * @param nodeId controller node identifier
+     * @return system time when the availability state was last updated.
+     *
+     * @deprecated in 1.12.0
+     */
+    @Deprecated
+    default DateTime getLastUpdated(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdatedInstant(nodeId))
+                .map(Instant::toEpochMilli)
+                .map(DateTime::new)
+                .orElse(null);
+    }
 
 }

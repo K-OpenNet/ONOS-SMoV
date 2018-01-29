@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Service;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.ApplicationIdStore;
+import org.onosproject.app.ApplicationIdStore;
 import org.onosproject.core.DefaultApplicationId;
 
 import java.util.Map;
@@ -42,7 +42,7 @@ public class SimpleApplicationIdStore implements ApplicationIdStore {
 
     @Override
     public Set<ApplicationId> getAppIds() {
-        return ImmutableSet.<ApplicationId>copyOf(appIds.values());
+        return ImmutableSet.copyOf(appIds.values());
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,13 +36,12 @@
         'onosWidget'
     ];
 
-    // view IDs.. injected via the servlet
-    var viewIds = [
-        // {INJECTED-VIEW-IDS-START}
-        // {INJECTED-VIEW-IDS-END}
-        // dummy entry
-        ''
-    ];
+    // view ID to help page url map.. injected via the servlet
+    var viewMap = {
+        // {INJECTED-VIEW-DATA-START}
+        // {INJECTED-VIEW-DATA-END}
+    },
+    viewIds = [];
 
     // secret sauce
     var sauce = [
@@ -56,11 +55,21 @@
         '7:667186698384',
         '1:857780888778876787',
         '20:70717066',
-        '24:886774868469'
+        '24:886774868469',
+        '17:7487696973687580739078',
+        '14:70777086',
+        '17:7287687967',
+        '11:65678869706783687184',
+        '1:80777778',
+        '9:72696982',
+        '7:857165828967'
+        // Add more sauce...
     ];
 
     var defaultView = 'topo',
         viewDependencies = [];
+
+    viewIds = d3.map(viewMap).keys();
 
     viewIds.forEach(function (id) {
         if (id) {
@@ -85,12 +94,13 @@
 
         .controller('OnosCtrl', [
             '$log', '$scope', '$route', '$routeParams', '$location',
+            'LionService',
             'KeyService', 'ThemeService', 'GlyphService', 'VeilService',
             'PanelService', 'FlashService', 'QuickHelpService', 'EeService',
-            'WebSocketService',
+            'WebSocketService', 'SpriteService',
 
             function (_$log_, $scope, $route, $routeParams, $location,
-                      ks, ts, gs, vs, ps, flash, qhs, ee, wss) {
+                      lion, ks, ts, gs, vs, ps, flash, qhs, ee, wss, ss) {
                 var self = this;
                 $log = _$log_;
 
@@ -101,12 +111,15 @@
 
                 // shared object inherited by all views:
                 $scope.onos = {};
+                $scope.onos['viewMap'] = viewMap;
 
                 // initialize services...
+                lion.init();
                 ts.init();
                 ks.installOn(d3.select('body'));
                 ks.bindQhs(qhs);
                 gs.init();
+                ss.init();
                 vs.init();
                 ps.init();
                 saucy(ee, ks);
@@ -145,7 +158,13 @@
                     $routeProvider.when('/' + vid, {
                         controller: viewCtrlName(vid),
                         controllerAs: 'ctrl',
-                        templateUrl: viewTemplateUrl(vid)
+                        templateUrl: viewTemplateUrl(vid),
+
+                        // Disable reload on $loc.hash() changes for bookmarked topo regions
+                        reloadOnSearch: (vid !== 'topo2')
+                        // <SDH> assume this is not needed for ?regionId=... query string
+                        // <SBM> Yes this is still needed. Without it the page will reload when navigating between
+                        //       regions which loads the new regions without a clean transition to it.
                     });
                 }
             });

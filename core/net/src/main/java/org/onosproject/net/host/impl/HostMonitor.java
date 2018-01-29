@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,23 @@
  */
 package org.onosproject.net.host.impl;
 
-import org.jboss.netty.util.Timeout;
-import org.jboss.netty.util.TimerTask;
 import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
-import org.onlab.packet.ICMP6;
 import org.onlab.packet.IPv6;
+import org.onlab.packet.Ip4Address;
+import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
-import org.onlab.packet.ndp.NeighborDiscoveryOptions;
 import org.onlab.packet.ndp.NeighborSolicitation;
-import org.onlab.util.Timer;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onlab.util.SharedScheduledExecutors;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.edge.EdgePortService;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.host.HostProvider;
-import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.PacketService;
@@ -48,6 +44,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -58,7 +55,7 @@ import java.util.concurrent.TimeUnit;
  * probe for hosts that have not yet been detected (specified by IP address).
  * </p>
  */
-public class HostMonitor implements TimerTask {
+public class HostMonitor implements Runnable {
 
     private Logger log = LoggerFactory.getLogger(getClass());
 
@@ -75,7 +72,7 @@ public class HostMonitor implements TimerTask {
     private static final byte[] ZERO_MAC_ADDRESS = MacAddress.ZERO.toBytes();
     private long probeRate = DEFAULT_PROBE_RATE;
 
-    private Timeout timeout;
+    private ScheduledFuture<?> timeout;
 
     /**
      * Creates a new host monitor.
@@ -106,7 +103,9 @@ public class HostMonitor implements TimerTask {
      * @param ip IP address of the host to monitor
      */
     void addMonitoringFor(IpAddress ip) {
-        monitoredAddresses.add(ip);
+        if (monitoredAddresses.add(ip)) {
+            probe(ip);
+        }
     }
 
     /**
@@ -124,7 +123,7 @@ public class HostMonitor implements TimerTask {
     void start() {
         synchronized (this) {
             if (timeout == null) {
-                timeout = Timer.getTimer().newTimeout(this, 0, TimeUnit.MILLISECONDS);
+                timeout = SharedScheduledExecutors.newTimeout(this, 0, TimeUnit.MILLISECONDS);
             }
         }
     }
@@ -134,9 +133,16 @@ public class HostMonitor implements TimerTask {
      */
     void shutdown() {
         synchronized (this) {
-            timeout.cancel();
+            timeout.cancel(true);
             timeout = null;
         }
+    }
+
+    /*
+     * Sets the probe rate.
+     */
+    void setProbeRate(long probeRate) {
+        this.probeRate = probeRate;
     }
 
     /**
@@ -150,26 +156,28 @@ public class HostMonitor implements TimerTask {
     }
 
     @Override
-    public void run(Timeout timeout) throws Exception {
-        for (IpAddress ip : monitoredAddresses) {
-            Set<Host> hosts = hostManager.getHostsByIp(ip);
-
-            if (hosts.isEmpty()) {
-                sendRequest(ip);
-            } else {
-                for (Host host : hosts) {
-                    HostProvider provider = hostProviders.get(host.providerId());
-                    if (provider == null) {
-                        hostProviders.remove(host.providerId(), null);
-                    } else {
-                        provider.triggerProbe(host);
-                    }
-                }
-            }
-        }
+    public void run() {
+        monitoredAddresses.forEach(this::probe);
 
         synchronized (this) {
-            this.timeout = Timer.getTimer().newTimeout(this, probeRate, TimeUnit.MILLISECONDS);
+            this.timeout = SharedScheduledExecutors.newTimeout(this, probeRate, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void probe(IpAddress ip) {
+        Set<Host> hosts = hostManager.getHostsByIp(ip);
+
+        if (hosts.isEmpty()) {
+            sendRequest(ip);
+        } else {
+            for (Host host : hosts) {
+                HostProvider provider = hostProviders.get(host.providerId());
+                if (provider == null) {
+                    hostProviders.remove(host.providerId(), null);
+                } else {
+                    provider.triggerProbe(host);
+                }
+            }
         }
     }
 
@@ -179,37 +187,58 @@ public class HostMonitor implements TimerTask {
      * @param targetIp IP address to send the request for
      */
     private void sendRequest(IpAddress targetIp) {
-        Interface intf = interfaceService.getMatchingInterface(targetIp);
-
-        if (intf == null) {
-            return;
-        }
-
-        if (!edgePortService.isEdgePoint(intf.connectPoint())) {
-            log.warn("Attempt to send probe out non-edge port: {}", intf);
-            return;
-        }
-
-        for (InterfaceIpAddress ia : intf.ipAddresses()) {
-            if (ia.subnetAddress().contains(targetIp)) {
-                sendProbe(intf.connectPoint(), targetIp, ia.ipAddress(),
-                        intf.mac(), intf.vlan());
+        interfaceService.getMatchingInterfaces(targetIp).forEach(intf -> {
+            if (!edgePortService.isEdgePoint(intf.connectPoint())) {
+                log.warn("Aborting attempt to send probe out non-edge port: {}", intf);
+                return;
             }
-        }
+
+            intf.ipAddressesList().stream()
+                    .filter(ia -> ia.subnetAddress().contains(targetIp))
+                    .forEach(ia -> {
+                        MacAddress probeMac = intf.mac();
+                        IpAddress probeIp = !probeMac.equals(MacAddress.ONOS) ?
+                                ia.ipAddress() :
+                                (ia.ipAddress().isIp4() ? Ip4Address.ZERO : Ip6Address.ZERO);
+                        sendProbe(intf.connectPoint(), targetIp, probeIp, probeMac, intf.vlan());
+
+                        // account for use-cases where tagged-vlan config is used
+                        if (!intf.vlanTagged().isEmpty()) {
+                            intf.vlanTagged().forEach(tag -> {
+                                sendProbe(intf.connectPoint(), targetIp, probeIp, probeMac, tag);
+                            });
+                        }
+                    });
+        });
     }
 
-    private void sendProbe(ConnectPoint connectPoint,
-                           IpAddress targetIp,
-                           IpAddress sourceIp, MacAddress sourceMac,
-                           VlanId vlan) {
-        Ethernet probePacket = null;
+    public void sendProbe(ConnectPoint connectPoint, IpAddress targetIp, IpAddress sourceIp,
+                          MacAddress sourceMac, VlanId vlan) {
+        log.debug("Sending probe for target:{} out of intf:{} vlan:{}", targetIp, connectPoint, vlan);
+
+        Ethernet probePacket;
 
         if (targetIp.isIp4()) {
             // IPv4: Use ARP
             probePacket = buildArpRequest(targetIp, sourceIp, sourceMac, vlan);
         } else {
-            // IPv6: Use Neighbor Discovery
-            probePacket = buildNdpRequest(targetIp, sourceIp, sourceMac, vlan);
+             // IPv6: Use Neighbor Discovery. According to the NDP protocol,
+             // we should use the solicitation node address as IPv6 destination
+             // and the multicast mac address as Ethernet destination.
+            byte[] destIp = IPv6.getSolicitNodeAddress(targetIp.toOctets());
+            probePacket = NeighborSolicitation.buildNdpSolicit(
+                    targetIp.toOctets(),
+                    sourceIp.toOctets(),
+                    destIp,
+                    sourceMac.toBytes(),
+                    IPv6.getMCastMacAddress(destIp),
+                    vlan
+            );
+        }
+
+        if (probePacket == null) {
+            log.warn("Not able to build the probe packet");
+            return;
         }
 
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
@@ -253,43 +282,4 @@ public class HostMonitor implements TimerTask {
         return ethernet;
     }
 
-    private Ethernet buildNdpRequest(IpAddress targetIp, IpAddress sourceIp,
-                                     MacAddress sourceMac, VlanId vlan) {
-
-        // Create the Ethernet packet
-        Ethernet ethernet = new Ethernet();
-        ethernet.setEtherType(Ethernet.TYPE_IPV6)
-                .setDestinationMACAddress(MacAddress.BROADCAST)
-                .setSourceMACAddress(sourceMac);
-        if (!vlan.equals(VlanId.NONE)) {
-            ethernet.setVlanID(vlan.toShort());
-        }
-
-        //
-        // Create the IPv6 packet
-        //
-        // TODO: The destination IP address should be the
-        // solicited-node multicast address
-        IPv6 ipv6 = new IPv6();
-        ipv6.setSourceAddress(sourceIp.toOctets());
-        ipv6.setDestinationAddress(targetIp.toOctets());
-        ipv6.setHopLimit((byte) 255);
-
-        // Create the ICMPv6 packet
-        ICMP6 icmp6 = new ICMP6();
-        icmp6.setIcmpType(ICMP6.NEIGHBOR_SOLICITATION);
-        icmp6.setIcmpCode((byte) 0);
-
-        // Create the Neighbor Solicitation packet
-        NeighborSolicitation ns = new NeighborSolicitation();
-        ns.setTargetAddress(targetIp.toOctets());
-        ns.addOption(NeighborDiscoveryOptions.TYPE_SOURCE_LL_ADDRESS,
-                     sourceMac.toBytes());
-
-        icmp6.setPayload(ns);
-        ipv6.setPayload(icmp6);
-        ethernet.setPayload(ipv6);
-
-        return ethernet;
-    }
 }

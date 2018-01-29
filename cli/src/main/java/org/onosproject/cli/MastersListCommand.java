@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,11 @@ import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.device.DeviceService;
+import org.onosproject.utils.Comparators;
 
 import java.util.Collections;
 import java.util.List;
-
 import static com.google.common.collect.Lists.newArrayList;
 
 /**
@@ -41,6 +42,7 @@ public class MastersListCommand extends AbstractShellCommand {
     protected void execute() {
         ClusterService service = get(ClusterService.class);
         MastershipService mastershipService = get(MastershipService.class);
+        DeviceService deviceService = get(DeviceService.class);
         List<ControllerNode> nodes = newArrayList(service.getNodes());
         Collections.sort(nodes, Comparators.NODE_COMPARATOR);
 
@@ -49,6 +51,7 @@ public class MastersListCommand extends AbstractShellCommand {
         } else {
             for (ControllerNode node : nodes) {
                 List<DeviceId> ids = Lists.newArrayList(mastershipService.getDevicesOf(node.id()));
+                ids.removeIf(did -> deviceService.getDevice(did) == null);
                 Collections.sort(ids, Comparators.ELEMENT_ID_COMPARATOR);
                 print("%s: %d devices", node.id(), ids.size());
                 for (DeviceId deviceId : ids) {
@@ -63,7 +66,6 @@ public class MastersListCommand extends AbstractShellCommand {
                           List<ControllerNode> nodes) {
         ObjectMapper mapper = new ObjectMapper();
         ArrayNode result = mapper.createArrayNode();
-        ControllerNode self = service.getLocalNode();
         for (ControllerNode node : nodes) {
             List<DeviceId> ids = Lists.newArrayList(mastershipService.getDevicesOf(node.id()));
             result.add(mapper.createObjectNode()

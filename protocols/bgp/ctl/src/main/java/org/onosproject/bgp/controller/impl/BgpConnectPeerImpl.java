@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -42,6 +42,38 @@ public class BgpConnectPeerImpl implements BgpConnectPeer {
     private int connectRetryTime;
     private ChannelPipelineFactory pfact;
     private ClientBootstrap peerBootstrap;
+    public String getPeerHost() {
+        return peerHost;
+    }
+    public static int getRetryInterval() {
+        return RETRY_INTERVAL;
+    }
+
+    @Override
+    public int getPeerPort() {
+        return peerPort;
+    }
+    @Override
+    public int getConnectRetryCounter() {
+        return connectRetryCounter;
+    }
+
+    public void setConnectRetryCounter(int connectRetryCounter) {
+        this.connectRetryCounter = connectRetryCounter;
+    }
+
+    public void setConnectRetryTime(int connectRetryTime) {
+        this.connectRetryTime = connectRetryTime;
+    }
+
+    public BgpCfg getBgpconfig() {
+        return bgpconfig;
+    }
+
+    public void setBgpconfig(BgpCfg bgpconfig) {
+        this.bgpconfig = bgpconfig;
+    }
+
     private BgpCfg bgpconfig;
 
     /**
@@ -118,14 +150,14 @@ public class BgpConnectPeerImpl implements BgpConnectPeer {
                         } else {
 
                             connectRetryCounter++;
-                            log.info("Connected to remote host {}, Connect Counter {}", peerHost, connectRetryCounter);
+                            log.debug("Connected to remote host {}, Connect Counter {}", peerHost, connectRetryCounter);
                             disconnectPeer();
                             return;
                         }
                     }
                 });
             } catch (Exception e) {
-                log.info("Connect peer exception : " + e.toString());
+                log.debug("Connect peer exception : " + e.toString());
                 disconnectPeer();
             }
         }

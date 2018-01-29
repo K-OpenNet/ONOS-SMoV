@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.onosproject.cli.net;
 import org.apache.karaf.shell.console.Completer;
 import org.apache.karaf.shell.console.completer.StringsCompleter;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.net.driver.DriverAdminService;
+import org.onosproject.net.driver.DriverService;
 
 import java.util.List;
 import java.util.SortedSet;
@@ -34,7 +34,7 @@ public class DriverNameCompleter implements Completer {
         SortedSet<String> strings = delegate.getStrings();
 
         // Fetch our service and feed it's offerings to the string completer
-        DriverAdminService service = AbstractShellCommand.get(DriverAdminService.class);
+        DriverService service = AbstractShellCommand.get(DriverService.class);
         service.getDrivers().forEach(d -> strings.add(d.name()));
 
         // Now let the completer do the work for figuring out what to offer.

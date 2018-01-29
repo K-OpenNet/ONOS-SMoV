@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import static org.onosproject.cli.app.ApplicationCommand.*;
 public class ApplicationCommandCompleter extends AbstractChoicesCompleter {
     @Override
     public List<String> choices() {
-        return ImmutableList.of(INSTALL, UNINSTALL, ACTIVATE, DEACTIVATE);
+        return ImmutableList.of(INSTALL, UNINSTALL, ACTIVATE, DEACTIVATE, DOWNLOAD);
     }
 
 }

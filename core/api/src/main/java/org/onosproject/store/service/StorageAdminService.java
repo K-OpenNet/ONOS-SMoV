@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,32 +46,17 @@ public interface StorageAdminService {
 
     /**
      * Returns information about all the atomic counters in the system.
-     * If 2 counters belonging to 2 different databases have the same name,
-     * then only one counter from one database is returned.
      *
      * @return mapping from counter name to that counter's next value
-     * @deprecated 1.5.0 Falcon Release
      */
-    @Deprecated
     Map<String, Long> getCounters();
 
     /**
-     * Returns information about all the atomic partitioned database counters in the system.
+     * Returns statistics for all the work queues in the system.
      *
-     * @return mapping from counter name to that counter's next value
-     * @deprecated 1.5.0 Falcon Release
+     * @return mapping from queue name to that queue's stats
      */
-    @Deprecated
-    Map<String, Long> getPartitionedDatabaseCounters();
-
-    /**
-     * Returns information about all the atomic in-memory database counters in the system.
-     *
-     * @return mapping from counter name to that counter's next value
-     * @deprecated 1.5.0 Falcon Release
-     */
-    @Deprecated
-    Map<String, Long> getInMemoryDatabaseCounters();
+    Map<String, WorkQueueStats> getQueueStats();
 
     /**
      * Returns all pending transactions.

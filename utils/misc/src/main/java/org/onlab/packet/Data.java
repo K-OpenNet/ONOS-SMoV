@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,13 +63,6 @@ public class Data extends BasePacket {
     @Override
     public byte[] serialize() {
         return this.data;
-    }
-
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        this.data = Arrays.copyOfRange(data, offset, data.length);
-        return this;
     }
 
     /*

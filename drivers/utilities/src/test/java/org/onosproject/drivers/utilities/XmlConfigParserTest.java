@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ public class XmlConfigParserTest {
         InputStream stream = getClass().getResourceAsStream("/testConfig.xml");
         String switchId = XmlConfigParser.parseSwitchId(XmlConfigParser
                                                                 .loadXml(stream));
-        assertTrue(switchId.equals("ofc-bridge"));
+        assertTrue("ofc-bridge".equals(switchId));
     }
 
     @Test
@@ -59,7 +59,7 @@ public class XmlConfigParserTest {
         InputStream stream = getClass().getResourceAsStream("/testConfig.xml");
         String capableSwitchId = XmlConfigParser
                 .parseCapableSwitchId(XmlConfigParser.loadXml(stream));
-        assertTrue(capableSwitchId.equals("openvswitch"));
+        assertTrue("openvswitch".equals(capableSwitchId));
     }
 
     @Test

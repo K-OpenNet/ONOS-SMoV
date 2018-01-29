@@ -1,15 +1,5 @@
-SM-ONOS VN: Security-Mode ONOS on Virtual Networks
+ONOS : Open Network Operating System
 ====================================
-
-### What is SM-ONOS VN?
-SM-ONOS VN is a new extension of SM-ONOS for virtual network environment. 
-
-### Top-Level Features
-* Fine-grained access control mechansim per virtual network.
-* Per application tenant strategy.
-* Transparency of a virtual network access control.
-* Receive inheritance from the nature of SM-ONOS.
-
 
 ### What is ONOS?
 ONOS is a new SDN network operating system designed for high availability,
@@ -33,6 +23,5 @@ performance, scale-out.
   controlled by distributed routing protocols such as BGP.
 * IP-Optical use case demonstration.
 
-Checkout out our [website](http://www.onosproject.org) and our
+Checkout our [website](http://www.onosproject.org) and our
 [tools](http://www.onosproject.org/software/#tools)
-

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,564 +13,301 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.onosproject.vpls;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import org.onlab.packet.Ip4Address;
+import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.TestApplicationId;
-import org.onosproject.app.ApplicationService;
+import org.onosproject.cluster.LeadershipEvent;
+import org.onosproject.cluster.LeadershipEventListener;
+import org.onosproject.cluster.LeadershipServiceAdapter;
+import org.onosproject.cluster.NodeId;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.CoreService;
-import org.onosproject.core.IdGenerator;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.core.CoreServiceAdapter;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceListener;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultHost;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.EncapsulationType;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostId;
 import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.flow.DefaultTrafficSelector;
-import org.onosproject.net.flow.DefaultTrafficTreatment;
-import org.onosproject.net.flow.TrafficSelector;
-import org.onosproject.net.flow.TrafficTreatment;
+import org.onosproject.net.config.Config;
+import org.onosproject.net.config.ConfigApplyDelegate;
+import org.onosproject.net.config.NetworkConfigEvent;
+import org.onosproject.net.config.NetworkConfigListener;
+import org.onosproject.net.config.NetworkConfigServiceAdapter;
 import org.onosproject.net.host.HostEvent;
 import org.onosproject.net.host.HostListener;
-import org.onosproject.net.host.HostService;
 import org.onosproject.net.host.HostServiceAdapter;
 import org.onosproject.net.intent.Intent;
-import org.onosproject.net.intent.IntentService;
+import org.onosproject.net.intent.IntentData;
+import org.onosproject.net.intent.IntentEvent;
+import org.onosproject.net.intent.IntentListener;
 import org.onosproject.net.intent.IntentServiceAdapter;
-import org.onosproject.net.intent.IntentUtils;
-import org.onosproject.net.intent.Key;
-import org.onosproject.net.intent.MultiPointToSinglePointIntent;
-import org.onosproject.net.intent.SinglePointToMultiPointIntent;
+import org.onosproject.net.intent.IntentState;
 import org.onosproject.net.provider.ProviderId;
-import org.onosproject.routing.IntentSynchronizationAdminService;
-import org.onosproject.routing.IntentSynchronizationService;
+import org.onosproject.store.StoreDelegate;
+import org.onosproject.store.service.WallClockTimestamp;
+import org.onosproject.vpls.api.Vpls;
+import org.onosproject.vpls.api.VplsData;
+import org.onosproject.vpls.config.VplsAppConfig;
+import org.onosproject.vpls.config.VplsAppConfigTest;
+import org.onosproject.vpls.config.VplsConfig;
+import org.onosproject.vpls.store.VplsStoreAdapter;
+import org.onosproject.vpls.store.VplsStoreEvent;
 
-import java.util.ArrayList;
+import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import static java.lang.String.format;
-import static org.easymock.EasyMock.createMock;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.replay;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 /**
- * Tests for the {@link Vpls} class.
+ * Class provides data for VPLS testing.
  */
-public class VplsTest {
+public abstract class VplsTest {
+    protected static final String APP_NAME = "org.onosproject.vpls";
+    protected static final ApplicationId APPID = TestApplicationId.create(APP_NAME);
+    protected static final String DASH = "-";
+    protected static final int PRIORITY_OFFSET = 1000;
+    protected static final String VPLS1 = "vpls1";
+    protected static final String VPLS2 = "vpls2";
+    protected static final String VPLS3 = "vpls3";
+    protected static final String VPLS4 = "vpls4";
 
-    private static final int NUM_DEVICES = 7;
+    protected static final PortNumber P1 = PortNumber.portNumber(1);
+    protected static final PortNumber P2 = PortNumber.portNumber(2);
 
-    private static final MacAddress MAC1 = MacAddress.valueOf("00:00:00:00:00:01");
-    private static final MacAddress MAC2 = MacAddress.valueOf("00:00:00:00:00:02");
-    private static final MacAddress MAC3 = MacAddress.valueOf("00:00:00:00:00:03");
-    private static final MacAddress MAC4 = MacAddress.valueOf("00:00:00:00:00:04");
-    private static final MacAddress MAC5 = MacAddress.valueOf("00:00:00:00:00:05");
-    private static final MacAddress MAC6 = MacAddress.valueOf("00:00:00:00:00:06");
-    private static final MacAddress MAC7 = MacAddress.valueOf("00:00:00:00:00:07");
+    protected static final DeviceId DID1 = getDeviceId(1);
+    protected static final DeviceId DID2 = getDeviceId(2);
+    protected static final DeviceId DID3 = getDeviceId(3);
+    protected static final DeviceId DID4 = getDeviceId(4);
+    protected static final DeviceId DID5 = getDeviceId(5);
+    protected static final DeviceId DID6 = getDeviceId(6);
 
-    private static final Ip4Address IP1 = Ip4Address.valueOf("192.168.1.1");
-    private static final Ip4Address IP2 = Ip4Address.valueOf("192.168.1.2");
+    protected static final ConnectPoint CP1 = new ConnectPoint(DID1, P1);
+    protected static final ConnectPoint CP2 = new ConnectPoint(DID2, P1);
+    protected static final ConnectPoint CP3 = new ConnectPoint(DID3, P1);
+    protected static final ConnectPoint CP4 = new ConnectPoint(DID4, P1);
+    protected static final ConnectPoint CP5 = new ConnectPoint(DID5, P1);
+    protected static final ConnectPoint CP6 = new ConnectPoint(DID6, P1);
+    protected static final ConnectPoint CP7 = new ConnectPoint(DID4, P2);
+    protected static final ConnectPoint CP8 = new ConnectPoint(DID3, P2);
+    protected static final ConnectPoint CP9 = new ConnectPoint(DID5, P1);
+    protected static final ConnectPoint CP10 = new ConnectPoint(DID5, P2);
 
-    private static final PortNumber P1 = PortNumber.portNumber(1);
+    protected static final VlanId VLAN100 = VlanId.vlanId((short) 100);
+    protected static final VlanId VLAN200 = VlanId.vlanId((short) 200);
+    protected static final VlanId VLAN300 = VlanId.vlanId((short) 300);
+    protected static final VlanId VLAN400 = VlanId.vlanId((short) 400);
+    protected static final VlanId VLAN_NONE = VlanId.NONE;
 
-    private static final VlanId VLAN1 = VlanId.vlanId((short) 1);
-    private static final VlanId VLAN2 = VlanId.vlanId((short) 2);
+    protected static final MacAddress MAC1 = getMac(1);
+    protected static final MacAddress MAC2 = getMac(2);
+    protected static final MacAddress MAC3 = getMac(3);
+    protected static final MacAddress MAC4 = getMac(4);
+    protected static final MacAddress MAC5 = getMac(5);
+    protected static final MacAddress MAC6 = getMac(6);
+    protected static final MacAddress MAC7 = getMac(7);
+    protected static final MacAddress MAC8 = getMac(8);
+    protected static final MacAddress MAC9 = getMac(9);
+    protected static final MacAddress MAC10 = getMac(10);
+    protected static final MacAddress MAC11 = getMac(11);
 
-    private static final int PRIORITY_OFFSET = 1000;
-    private static final String PREFIX_BROADCAST = "brc";
-    private static final String PREFIX_UNICAST = "uni";
+    protected static final Ip4Address IP1 = Ip4Address.valueOf("192.168.1.1");
+    protected static final Ip4Address IP2 = Ip4Address.valueOf("192.168.1.2");
 
-    private static final DeviceId DID1 = getDeviceId(1);
-    private static final DeviceId DID2 = getDeviceId(2);
-    private static final DeviceId DID3 = getDeviceId(3);
-    private static final DeviceId DID4 = getDeviceId(4);
-    private static final DeviceId DID5 = getDeviceId(5);
-    private static final DeviceId DID6 = getDeviceId(6);
+    protected static final HostId HID1 = HostId.hostId(MAC1, VLAN100);
+    protected static final HostId HID2 = HostId.hostId(MAC2, VLAN100);
+    protected static final HostId HID3 = HostId.hostId(MAC3, VLAN200);
+    protected static final HostId HID4 = HostId.hostId(MAC4, VLAN200);
+    protected static final HostId HID5 = HostId.hostId(MAC5, VLAN300);
+    protected static final HostId HID6 = HostId.hostId(MAC6, VLAN300);
+    protected static final HostId HID7 = HostId.hostId(MAC7, VLAN300);
+    protected static final HostId HID8 = HostId.hostId(MAC8, VLAN400);
+    protected static final HostId HID9 = HostId.hostId(MAC9);
+    protected static final HostId HID10 = HostId.hostId(MAC10);
+    protected static final HostId HID11 = HostId.hostId(MAC11);
 
-    private static final ConnectPoint C1 = new ConnectPoint(DID1, P1);
-    private static final ConnectPoint C2 = new ConnectPoint(DID2, P1);
-    private static final ConnectPoint C3 = new ConnectPoint(DID3, P1);
-    private static final ConnectPoint C4 = new ConnectPoint(DID4, P1);
-    private static final ConnectPoint C5 = new ConnectPoint(DID5, P1);
-    private static final ConnectPoint C6 = new ConnectPoint(DID6, P1);
+    protected static final ProviderId PID = new ProviderId("of", "foo");
 
-    private static final HostId HID1 = HostId.hostId(MAC1, VLAN1);
-    private static final HostId HID2 = HostId.hostId(MAC2, VLAN1);
-    private static final HostId HID3 = HostId.hostId(MAC3, VLAN1);
-    private static final HostId HID4 = HostId.hostId(MAC4, VLAN2);
-    private static final HostId HID5 = HostId.hostId(MAC5, VLAN2);
-    private static final HostId HID6 = HostId.hostId(MAC6, VLAN2);
-    private static final HostId HID7 = HostId.hostId(MAC7, VlanId.NONE);
+    protected static final NodeId NODE_ID_1 = new NodeId("Node1");
+    protected static final NodeId NODE_ID_2 = new NodeId("Node2");
 
-    private ApplicationService applicationService;
-    private CoreService coreService;
-    private HostListener hostListener;
-    private Set<Host> hostsAvailable;
-    private HostService hostService;
-    private IntentService intentService;
-    private InterfaceService interfaceService;
-    private Vpls vpls;
+    protected static final Interface V100H1 =
+            new Interface("v100h1", CP1, null, null, VLAN100);
+    protected static final Interface V100H2 =
+            new Interface("v100h2", CP2, null, null, VLAN100);
+    protected static final Interface V200H1 =
+            new Interface("v200h1", CP3, null, null, VLAN200);
+    protected static final Interface V200H2 =
+            new Interface("v200h2", CP4, null, null, VLAN200);
+    protected static final Interface V300H1 =
+            new Interface("v300h1", CP5, null, null, VLAN300);
+    protected static final Interface V300H2 =
+            new Interface("v300h2", CP6, null, null, VLAN300);
+    protected static final Interface V400H1 =
+            new Interface("v400h1", CP7, null, null, VLAN400);
 
-    private static final String APP_NAME = "org.onosproject.vpls";
-    private static final ApplicationId APPID = TestApplicationId.create(APP_NAME);
+    protected static final Interface VNONEH1 =
+            new Interface("vNoneh1", CP8, null, null, VLAN_NONE);
+    protected static final Interface VNONEH2 =
+            new Interface("vNoneh2", CP9, null, null, VLAN_NONE);
+    protected static final Interface VNONEH3 =
+            new Interface("vNoneh3", CP10, null, null, VLAN_NONE);
 
-    private static final ProviderId PID = new ProviderId("of", "foo");
+    protected static final Host V100HOST1 =
+            new DefaultHost(PID, HID1, MAC1, VLAN100,
+                            getLocation(1), Collections.singleton(IP1));
+    protected static final Host V100HOST2 =
+            new DefaultHost(PID, HID2, MAC2, VLAN100,
+                            getLocation(2), Sets.newHashSet());
+    protected static final Host V200HOST1 =
+            new DefaultHost(PID, HID3, MAC3, VLAN200,
+                            getLocation(3), Collections.singleton(IP2));
+    protected static final Host V200HOST2 =
+            new DefaultHost(PID, HID4, MAC4, VLAN200,
+                            getLocation(4), Sets.newHashSet());
+    protected static final Host V300HOST1 =
+            new DefaultHost(PID, HID5, MAC5, VLAN300,
+                            getLocation(5), Sets.newHashSet());
+    protected static final Host V300HOST2 =
+            new DefaultHost(PID, HID6, MAC6, VLAN300,
+                            getLocation(6), Sets.newHashSet());
+    protected static final Host V300HOST3 =
+            new DefaultHost(PID, HID7, MAC7, VLAN300,
+                            getLocation(7), Sets.newHashSet());
+    protected static final Host V400HOST1 =
+            new DefaultHost(PID, HID8, MAC8, VLAN400,
+                            getLocation(4, 2), Sets.newHashSet());
 
-    @BeforeClass
-    public static void setUpClass() {
-        IdGenerator idGenerator = new TestIdGenerator();
-        Intent.bindIdGenerator(idGenerator);
-    }
+    protected static final Host VNONEHOST1 =
+            new DefaultHost(PID, HID9, MAC9, VlanId.NONE,
+                            getLocation(3, 2), Sets.newHashSet());
+    protected static final Host VNONEHOST2 =
+            new DefaultHost(PID, HID10, MAC10, VlanId.NONE,
+                            getLocation(5, 1), Sets.newHashSet());
+    protected static final Host VNONEHOST3 =
+            new DefaultHost(PID, HID11, MAC11, VlanId.NONE,
+                            getLocation(5, 2), Sets.newHashSet());
 
-    @Before
-    public void setUp() throws Exception {
-        applicationService = createMock(ApplicationService.class);
+    protected static final Set<Interface> AVAILABLE_INTERFACES =
+            ImmutableSet.of(V100H1, V100H2, V200H1, V200H2, V300H1, V300H2,
+                            V400H1, VNONEH1, VNONEH2, VNONEH3);
 
-        coreService = createMock(CoreService.class);
-        expect(coreService.registerApplication(APP_NAME))
-                .andReturn(APPID);
-        replay(coreService);
+    protected static final Set<Host> AVAILABLE_HOSTS =
+            ImmutableSet.of(V100HOST1, V100HOST2, V200HOST1,
+                            V200HOST2, V300HOST1, V300HOST2, V300HOST3,
+                            VNONEHOST1, VNONEHOST2,
+                            V400HOST1, VNONEHOST3);
 
-        hostsAvailable = Sets.newHashSet();
-        hostService = new TestHostService(hostsAvailable);
-
-        intentService = new TestIntentService();
-
-        TestIntentSynchronizer intentSynchronizer =
-                new TestIntentSynchronizer(intentService);
-
-        interfaceService = createMock(InterfaceService.class);
-        addIntfConfig();
-
-        vpls = new Vpls();
-        vpls.applicationService = applicationService;
-        vpls.coreService = coreService;
-        vpls.hostService = hostService;
-        vpls.intentService = intentService;
-        vpls.interfaceService = interfaceService;
-        vpls.intentSynchronizer = intentSynchronizer;
-        vpls.intentSynchronizerAdmin = intentSynchronizer;
-    }
-
-    /**
-     * Creates the interface configuration. On devices 1, 2 and 3 is configured
-     * an interface on port 1 with vlan 1. On devices 4, 5 and 6 is configured
-     * an interface on port 1 with vlan 2. On device 5 no interfaces are
-     * configured.
-     */
-    private void addIntfConfig() {
-        Set<Interface> interfaces = Sets.newHashSet();
-        Set<Interface> vlanOneSet = new HashSet<>();
-        Set<Interface> vlanTwoSet = new HashSet<>();
-
-        for (int i = 1; i <= NUM_DEVICES - 1; i++) {
-            ConnectPoint cp = new ConnectPoint(getDeviceId(i), P1);
-
-            Interface intf =
-                    new Interface(cp, Collections.emptySet(), null, VlanId.NONE);
-
-            if (i <= 3) {
-                intf = new Interface(cp, Collections.emptySet(), null, VLAN1);
-                interfaces.add(intf);
-                vlanOneSet.add(intf);
-            } else if (i > 3 && i <= 6) {
-                intf = new Interface(cp, Collections.emptySet(), null, VLAN2);
-                interfaces.add(intf);
-                vlanTwoSet.add(intf);
-            }
-            expect(interfaceService.getInterfacesByPort(cp))
-                    .andReturn(Sets.newHashSet(intf)).anyTimes();
-        }
-        expect(interfaceService.getInterfacesByVlan(VLAN1))
-                .andReturn(vlanOneSet).anyTimes();
-        expect(interfaceService.getInterfacesByVlan(VLAN2))
-                .andReturn(vlanTwoSet).anyTimes();
-        expect(interfaceService.getInterfaces()).andReturn(interfaces).anyTimes();
-
-        replay(interfaceService);
-    }
-
-    /**
-     * Checks the case in which six ports are configured with VLANs but no
-     * hosts are registered by the HostService. The first three ports have an
-     * interface configured on VLAN1, the other three on VLAN2. The number of
-     * intents expected is six: three for VLAN1, three for VLAN2. three sp2mp
-     * intents, three mp2sp intents.
-     */
-    @Test
-    public void testActivateNoHosts() {
-        vpls.activate();
-
-        List<Intent> expectedIntents = new ArrayList<>();
-        expectedIntents.addAll(generateVlanOneBrc());
-        expectedIntents.addAll(generateVlanTwoBrc());
-
-        checkIntents(expectedIntents);
-    }
 
     /**
-     * Checks the case in which six ports are configured with VLANs and four
-     * hosts are registered by the HostService. The first three ports have an
-     * interface configured on VLAN1, the other three on VLAN2. The number of
-     * intents expected is twelve: six for VLAN1, six for VLAN2. six sp2mp
-     * intents, six mp2sp intents. For VLAN1 IPs are added to demonstrate it
-     * doesn't influence the number of intents created.
-     */
-    @Test
-    public void testFourInterfacesConfiguredHostsPresent() {
-        Host h1 = new DefaultHost(PID, HID1, MAC1, VLAN1, getLocation(1),
-                                  Collections.singleton(IP1));
-        Host h2 = new DefaultHost(PID, HID2, MAC2, VLAN1, getLocation(2),
-                                  Collections.singleton(IP2));
-        Host h3 = new DefaultHost(PID, HID3, MAC3, VLAN1, getLocation(3),
-                                  Collections.EMPTY_SET);
-        Host h4 = new DefaultHost(PID, HID4, MAC4, VLAN2, getLocation(4),
-                                  Collections.EMPTY_SET);
-        Host h5 = new DefaultHost(PID, HID5, MAC5, VLAN2, getLocation(5),
-                                  Collections.EMPTY_SET);
-        Host h6 = new DefaultHost(PID, HID6, MAC6, VLAN2, getLocation(6),
-                                  Collections.EMPTY_SET);
-        hostsAvailable.addAll(Sets.newHashSet(h1, h2, h3, h4, h5, h6));
-
-        vpls.activate();
-
-        List<Intent> expectedIntents = new ArrayList<>();
-        expectedIntents.addAll(generateVlanOneBrc());
-        expectedIntents.addAll(generateVlanOneUni());
-        expectedIntents.addAll(generateVlanTwoBrc());
-        expectedIntents.addAll(generateVlanTwoUni());
-
-        checkIntents(expectedIntents);
-    }
-
-    /**
-     * Checks the case in which six ports are configured with VLANs and
-     * initially no hosts are registered by the HostService. The first three
-     * ports have an interface configured on VLAN1, the other three have an
-     * interface configured on VLAN2. When the module starts up, three hosts -
-     * on device one, two and three - port 1 (both on VLAN1), are registered by
-     * the HostService and events are sent to the application. sp2mp intents
-     * are created for all interfaces configured and mp2sp intents are created
-     * only for the hosts attached.
-     * The number of intents expected is nine: six for VLAN1, three for VLAN2.
-     * Six sp2mp intents, three mp2sp intents. IPs are added on the first two
-     * hosts only to demonstrate it doesn't influence the number of intents
-     * created.
-     * An additional host is added on device seven, port one to demonstrate
-     * that, even if it's on the same VLAN of other interfaces configured in
-     * the system, it doesn't let the application generate intents, since it's
-     * not connected to the interface configured.
-     */
-    @Test
-    public void testFourInterfacesThreeHostEventsSameVlan() {
-        vpls.activate();
-
-        Host h1 = new DefaultHost(PID, HID1, MAC1, VLAN1, getLocation(1),
-                                  Collections.singleton(IP1));
-        Host h2 = new DefaultHost(PID, HID2, MAC2, VLAN1, getLocation(2),
-                                  Collections.singleton(IP2));
-        Host h3 = new DefaultHost(PID, HID3, MAC3, VLAN1, getLocation(3),
-                                  Collections.EMPTY_SET);
-        Host h7 = new DefaultHost(PID, HID7, MAC7, VLAN1, getLocation(7),
-                                  Collections.EMPTY_SET);
-        hostsAvailable.addAll(Sets.newHashSet(h1, h2, h3, h7));
-
-        hostsAvailable.forEach(host ->
-            hostListener.event(new HostEvent(HostEvent.Type.HOST_ADDED, host)));
-
-        List<Intent> expectedIntents = new ArrayList<>();
-        expectedIntents.addAll(generateVlanOneBrc());
-        expectedIntents.addAll(generateVlanOneUni());
-        expectedIntents.addAll(generateVlanTwoBrc());
-
-        checkIntents(expectedIntents);
-    }
-
-    /**
-     * Checks the case in which six ports are configured with VLANs and
-     * initially no hosts are registered by the HostService. The first three
-     * ports have an interface configured on VLAN1, the other three have an
-     * interface configured on VLAN2. When the module starts up, two hosts -
-     * on device one and four - port 1 (VLAN 1 and VLAN 2), are registered by
-     * the HostService and events are sent to the application. sp2mp intents
-     * are created for all interfaces configured and no mp2sp intents are created
-     * at all, since the minimum number of hosts needed on the same vlan to
-     * create mp2sp intents is 2.
-     * The number of intents expected is six: three for VLAN1, three for VLAN2.
-     * six sp2mp intents, zero mp2sp intents. IPs are added on the first host
-     * only to demonstrate it doesn't influence the number of intents created.
-     */
-    @Test
-    public void testFourInterfacesTwoHostEventsDifferentVlan() {
-        vpls.activate();
-
-        Host h1 = new DefaultHost(PID, HID1, MAC1, VLAN1, getLocation(1),
-                                  Collections.singleton(IP1));
-        Host h4 = new DefaultHost(PID, HID4, MAC4, VLAN2, getLocation(4),
-                                  Collections.EMPTY_SET);
-        hostsAvailable.addAll(Sets.newHashSet(h1, h4));
-
-        hostsAvailable.forEach(host -> {
-            hostListener.event(new HostEvent(HostEvent.Type.HOST_ADDED, host));
-        });
-
-        List<Intent> expectedIntents = new ArrayList<>();
-        expectedIntents.addAll(generateVlanOneBrc());
-        expectedIntents.addAll(generateVlanTwoBrc());
-
-        checkIntents(expectedIntents);
-    }
-
-    /**
-     * Checks both that the number of intents in submitted in the intent
-     * framework it's equal to the number of intents expected and that all
-     * intents are equivalent.
+     * Returns the device Id of the ith device.
      *
-     * @param intents the list of intents expected
+     * @param i the device to get the Id of
+     * @return the device Id
      */
-    private void checkIntents(List<Intent> intents) {
-        assertEquals(intents.size(), intentService.getIntentCount());
-
-        for (Intent intentOne : intents) {
-            boolean found = false;
-            for (Intent intentTwo : intentService.getIntents()) {
-                if (intentOne.key().equals(intentTwo.key())) {
-                    found = true;
-                    assertTrue(format("Comparing %s and %s", intentOne, intentTwo),
-                               IntentUtils.intentsAreEqual(intentOne, intentTwo));
-                    break;
-                }
-            }
-            assertTrue(found);
-        }
-    }
-
-    /**
-     * Generates the list of the expected sp2mp intents for VLAN 1.
-     *
-     * @return the list of expected sp2mp intents for VLAN 1
-     */
-    private List<SinglePointToMultiPointIntent> generateVlanOneBrc() {
-        Key key = null;
-
-        List<SinglePointToMultiPointIntent> intents = new ArrayList<>();
-
-        // Building sp2mp intent for H1 - VLAN1
-        key = Key.of((PREFIX_BROADCAST + "-" + DID1 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildBrcIntent(key, C1, Sets.newHashSet(C2, C3), VLAN1));
-
-        // Building sp2mp intent for H2 - VLAN1
-        key = Key.of((PREFIX_BROADCAST + "-" + DID2 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildBrcIntent(key, C2, Sets.newHashSet(C1, C3), VLAN1));
-
-        // Building sp2mp intent for H3 - VLAN1
-        key = Key.of((PREFIX_BROADCAST + "-" + DID3 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildBrcIntent(key, C3, Sets.newHashSet(C1, C2), VLAN1));
-
-        return intents;
-    }
-
-    /**
-     * Generates the list of the expected mp2sp intents for VLAN 1.
-     *
-     * @return the list of expected mp2sp intents for VLAN 1
-     */
-    private List<MultiPointToSinglePointIntent> generateVlanOneUni() {
-        Key key = null;
-
-        List<MultiPointToSinglePointIntent> intents = new ArrayList<>();
-
-        // Building mp2sp intent for H1 - VLAN1
-        key = Key.of((PREFIX_UNICAST + "-" + DID1 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C2, C3), C1, VLAN1, MAC1));
-
-        // Building mp2sp intent for H2 - VLAN1
-        key = Key.of((PREFIX_UNICAST + "-" + DID2 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C1, C3), C2, VLAN1, MAC2));
-
-        // Building mp2sp intent for H3 - VLAN1
-        key = Key.of((PREFIX_UNICAST + "-" + DID3 + "-" + P1 + "-" + VLAN1),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C1, C2), C3, VLAN1, MAC3));
-
-        return intents;
-    }
-
-    /**
-     * Generates the list of the expected sp2mp intents for VLAN 2.
-     *
-     * @return the list of expected sp2mp intents for VLAN 2
-     */
-    private List<SinglePointToMultiPointIntent> generateVlanTwoBrc() {
-        Key key = null;
-
-        List<SinglePointToMultiPointIntent> intents = new ArrayList<>();
-
-        // Building sp2mp intent for H4 - VLAN2
-        key = Key.of((PREFIX_BROADCAST + "-" + DID4 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildBrcIntent(key, C4, Sets.newHashSet(C5, C6), VLAN2));
-
-        // Building sp2mp intent for H5 - VLAN2
-        key = Key.of((PREFIX_BROADCAST + "-" + DID5 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildBrcIntent(key, C5, Sets.newHashSet(C4, C6), VLAN2));
-
-        // Building sp2mp intent for H6 - VLAN2
-        key = Key.of((PREFIX_BROADCAST + "-" + DID6 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildBrcIntent(key, C6, Sets.newHashSet(C4, C5), VLAN2));
-
-        return intents;
-    }
-
-    /**
-     * Generates the list of the expected mp2sp intents for VLAN 2.
-     *
-     * @return the list of expected mp2sp intents for VLAN 2
-     */
-    private List<MultiPointToSinglePointIntent> generateVlanTwoUni() {
-        Key key = null;
-
-        List<MultiPointToSinglePointIntent> intents = new ArrayList<>();
-
-        // Building mp2sp intent for H4 - VLAN2
-        key = Key.of((PREFIX_UNICAST + "-" + DID4 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C5, C6), C4, VLAN2, MAC4));
-
-        // Building mp2sp intent for H5 - VLAN2
-        key = Key.of((PREFIX_UNICAST + "-" + DID5 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C4, C6), C5, VLAN2, MAC5));
-
-        // Building mp2sp intent for H6 - VLAN2
-        key = Key.of((PREFIX_UNICAST + "-" + DID6 + "-" + P1 + "-" + VLAN2),
-                     APPID);
-        intents.add(buildUniIntent(key, Sets.newHashSet(C4, C5), C6, VLAN2, MAC6));
-
-        return intents;
-    }
-
-    /**
-     * Builds a Single Point to Multi Point intent.
-     *
-     * @param key  The intent key
-     * @param src  The source Connect Point
-     * @param dsts The destination Connect Points
-     * @return Single Point to Multi Point intent generated.
-     */
-    private SinglePointToMultiPointIntent buildBrcIntent(Key key,
-                                                         ConnectPoint src,
-                                                         Set<ConnectPoint> dsts,
-                                                         VlanId vlanId) {
-        SinglePointToMultiPointIntent intent;
-
-        TrafficTreatment treatment = DefaultTrafficTreatment.emptyTreatment();
-
-        TrafficSelector selector = DefaultTrafficSelector.builder()
-                .matchEthDst(MacAddress.BROADCAST)
-                .matchVlanId(vlanId)
-                .build();
-
-        intent = SinglePointToMultiPointIntent.builder()
-                .appId(APPID)
-                .key(key)
-                .selector(selector)
-                .treatment(treatment)
-                .ingressPoint(src)
-                .egressPoints(dsts)
-                .priority(PRIORITY_OFFSET)
-                .build();
-        return intent;
-    }
-
-    /**
-     * Builds a Multi Point to Single Point intent.
-     *
-     * @param key  The intent key
-     * @param srcs The source Connect Points
-     * @param dst  The destination Connect Point
-     * @return Multi Point to Single Point intent generated.
-     */
-    private MultiPointToSinglePointIntent buildUniIntent(Key key,
-                                                         Set<ConnectPoint> srcs,
-                                                         ConnectPoint dst,
-                                                         VlanId vlanId,
-                                                         MacAddress mac) {
-        MultiPointToSinglePointIntent intent;
-
-        TrafficTreatment treatment = DefaultTrafficTreatment.emptyTreatment();
-
-        TrafficSelector.Builder builder = DefaultTrafficSelector.builder()
-                .matchEthDst(mac)
-                .matchVlanId(vlanId);
-
-        TrafficSelector selector = builder.build();
-
-        intent = MultiPointToSinglePointIntent.builder()
-                .appId(APPID)
-                .key(key)
-                .selector(selector)
-                .treatment(treatment)
-                .ingressPoints(srcs)
-                .egressPoint(dst)
-                .priority(PRIORITY_OFFSET)
-                .build();
-        return intent;
-    }
-
-    /**
-     * Returns the device ID of the ith device.
-     *
-     * @param i device to get the ID of
-     * @return the device ID
-     */
-    private static DeviceId getDeviceId(int i) {
+    protected static DeviceId getDeviceId(int i) {
         return DeviceId.deviceId("" + i);
     }
 
-    private static HostLocation getLocation(int i) {
+    /**
+     * Generates a mac address by given number.
+     *
+     * @param n the number to generate mac address
+     * @return the mac address
+     */
+    protected static MacAddress getMac(int n) {
+        return MacAddress.valueOf(String.format("00:00:00:00:00:%02x", n));
+    }
+
+    /**
+     * Generates a host location by given device number.
+     *
+     * @param i the given number
+     * @return the host location
+     */
+    protected static HostLocation getLocation(int i) {
         return new HostLocation(new ConnectPoint(getDeviceId(i), P1), 123L);
     }
 
     /**
-     * Represents a fake IntentService class that easily allows to store and
-     * retrieve intents without implementing the IntentService logic.
+     * Generates host location by given device number and port number.
+     *
+     * @param d the device number
+     * @param p the port number
+     * @return the host location
      */
-    private class TestIntentService extends IntentServiceAdapter {
+    protected static HostLocation getLocation(int d, int p) {
+        return new HostLocation(new ConnectPoint(getDeviceId(d),
+                                                 PortNumber.portNumber(p)), 123L);
+    }
 
-        private Set<Intent> intents;
+    /**
+     * Test core service; For generate test application ID.
+     */
+    public class TestCoreService extends CoreServiceAdapter {
+        @Override
+        public ApplicationId registerApplication(String name) {
+            return TestApplicationId.create(name);
+        }
+    }
+
+    /**
+     * Test intent service.
+     * Always install or withdraw success for any Intents.
+     */
+    public class TestIntentService extends IntentServiceAdapter {
+        IntentListener listener;
+        List<IntentData> intents;
 
         public TestIntentService() {
-            intents = Sets.newHashSet();
+            intents = Lists.newArrayList();
         }
 
         @Override
         public void submit(Intent intent) {
-            intents.add(intent);
+            intents.add(new IntentData(intent, IntentState.INSTALLED, new WallClockTimestamp()));
+            if (listener != null) {
+                IntentEvent.getEvent(IntentState.INSTALLED, intent).ifPresent(listener::event);
+
+            }
+        }
+
+        @Override
+        public void withdraw(Intent intent) {
+            intents.forEach(intentData -> {
+                if (intentData.intent().key().equals(intent.key())) {
+                    intentData.setState(IntentState.WITHDRAWN);
+
+                    if (listener != null) {
+                        IntentEvent.getEvent(IntentState.WITHDRAWN, intent).ifPresent(listener::event);
+                    }
+                }
+            });
+        }
+
+        @Override
+        public Iterable<Intent> getIntents() {
+            return intents.stream()
+                    .map(IntentData::intent)
+                    .collect(Collectors.toList());
         }
 
         @Override
@@ -579,95 +316,353 @@ public class VplsTest {
         }
 
         @Override
-        public Iterable<Intent> getIntents() {
-            return intents;
+        public void addListener(IntentListener listener) {
+            this.listener = listener;
         }
 
         @Override
-        public Intent getIntent(Key intentKey) {
-            for (Intent intent : intents) {
-                if (intent.key().equals(intentKey)) {
-                    return intent;
-                }
-            }
-            return null;
+        public void removeListener(IntentListener listener) {
+            this.listener = null;
         }
     }
 
     /**
-     * Represents a fake HostService class which allows to add hosts manually
-     * in each test, when needed.
+     * Test leadership service.
      */
-    private class TestHostService extends HostServiceAdapter {
+    public class TestLeadershipService extends LeadershipServiceAdapter {
+        LeadershipEventListener listener;
 
-        private Set<Host> hosts;
+        @Override
+        public void addListener(LeadershipEventListener listener) {
+            this.listener = listener;
+        }
 
-        public TestHostService(Set<Host> hosts) {
-            this.hosts = hosts;
+        @Override
+        public void removeListener(LeadershipEventListener listener) {
+            this.listener = null;
+        }
+
+        /**
+         * Sends the leadership event to the listener.
+         *
+         * @param event the Intent event
+         */
+        public void sendEvent(LeadershipEvent event) {
+            if (listener != null && listener.isRelevant(event)) {
+                listener.event(event);
+            }
+        }
+
+        @Override
+        public NodeId getLeader(String path) {
+            return NODE_ID_1;
+        }
+    }
+
+    /**
+     * Test interface service; contains all interfaces which already generated.
+     */
+    public class TestInterfaceService implements InterfaceService {
+
+        @Override
+        public void addListener(InterfaceListener listener) {
+        }
+
+        @Override
+        public void removeListener(InterfaceListener listener) {
+        }
+
+        @Override
+        public Set<Interface> getInterfaces() {
+            return AVAILABLE_INTERFACES;
+        }
+
+        @Override
+        public Interface getInterfaceByName(ConnectPoint connectPoint,
+                                            String name) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.name().equals(name))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        @Override
+        public Set<Interface> getInterfacesByPort(ConnectPoint port) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.connectPoint().equals(port))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public Set<Interface> getInterfacesByIp(IpAddress ip) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.ipAddressesList().contains(ip))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public Set<Interface> getInterfacesByVlan(VlanId vlan) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.vlan().equals(vlan))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public Interface getMatchingInterface(IpAddress ip) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.ipAddressesList().contains(ip))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        @Override
+        public Set<Interface> getMatchingInterfaces(IpAddress ip) {
+            return AVAILABLE_INTERFACES.stream()
+                    .filter(intf -> intf.ipAddressesList().contains(ip))
+                    .collect(Collectors.toSet());
+        }
+    }
+
+    /**
+     * Test VPLS store.
+     */
+    public class TestVplsStore extends VplsStoreAdapter {
+        /**
+         * Clears the store.
+         */
+        public void clear() {
+            vplsDataMap.clear();
+        }
+
+        /**
+         * Gets the store delegate.
+         *
+         * @return the store delegate
+         */
+        public StoreDelegate<VplsStoreEvent> delegate() {
+            return this.delegate;
+        }
+    }
+
+    /**
+     * Test VPLS.
+     * Provides basic VPLS functionality and stores VPLS information.
+     */
+    public class TestVpls implements Vpls {
+        public Map<String, VplsData> testData;
+
+        public TestVpls() {
+            testData = Maps.newHashMap();
+        }
+
+        public void initSampleData() {
+            testData.clear();
+            VplsData vplsData = VplsData.of(VPLS1);
+            vplsData.addInterfaces(ImmutableSet.of(V100H1, V100H2));
+            vplsData.state(VplsData.VplsState.ADDED);
+            testData.put(VPLS1, vplsData);
+
+            vplsData = VplsData.of(VPLS2);
+            vplsData.addInterfaces(ImmutableSet.of(V200H1, V200H2));
+            vplsData.state(VplsData.VplsState.ADDED);
+            testData.put(VPLS2, vplsData);
+        }
+
+        @Override
+        public VplsData createVpls(String vplsName, EncapsulationType encapsulationType) {
+            VplsData vplsData = VplsData.of(vplsName, encapsulationType);
+            vplsData.state(VplsData.VplsState.ADDED);
+            testData.put(vplsName, vplsData);
+            return vplsData;
+        }
+
+        @Override
+        public VplsData removeVpls(VplsData vplsData) {
+            if (!testData.containsKey(vplsData.name())) {
+                return null;
+            }
+
+            testData.remove(vplsData.name());
+            return vplsData;
+        }
+
+        @Override
+        public void addInterfaces(VplsData vplsData, Collection<Interface> interfaces) {
+            vplsData.addInterfaces(interfaces);
+            testData.put(vplsData.name(), vplsData);
+        }
+
+        @Override
+        public void addInterface(VplsData vplsData, Interface iface) {
+            vplsData.addInterface(iface);
+            testData.put(vplsData.name(), vplsData);
+        }
+
+        @Override
+        public void setEncapsulationType(VplsData vplsData, EncapsulationType encapsulationType) {
+            vplsData.encapsulationType(encapsulationType);
+            testData.put(vplsData.name(), vplsData);
+        }
+
+        @Override
+        public VplsData getVpls(String vplsName) {
+            return testData.get(vplsName);
+        }
+
+        @Override
+        public Collection<VplsData> getAllVpls() {
+            return testData.values();
+        }
+
+        @Override
+        public Collection<Interface> removeInterfaces(VplsData vplsData, Collection<Interface> interfaces) {
+            vplsData.removeInterfaces(interfaces);
+            testData.put(vplsData.name(), vplsData);
+            return interfaces;
+        }
+
+        @Override
+        public Interface removeInterface(VplsData vplsData, Interface iface) {
+            vplsData.removeInterface(iface);
+            testData.put(vplsData.name(), vplsData);
+            return iface;
+        }
+
+        @Override
+        public void removeAllVpls() {
+            testData.clear();
+        }
+    }
+
+    /**
+     * Test host service; contains all hosts which already generated.
+     *
+     */
+    public class TestHostService extends HostServiceAdapter {
+
+        private HostListener listener;
+
+        @Override
+        public Set<Host> getConnectedHosts(ConnectPoint connectPoint) {
+            return AVAILABLE_HOSTS.stream()
+                    .filter(host -> host.location().equals(connectPoint))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public Set<Host> getHostsByMac(MacAddress mac) {
+            return AVAILABLE_HOSTS.stream()
+                    .filter(host -> host.mac().equals(mac))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public Iterable<Host> getHosts() {
+            return AVAILABLE_HOSTS;
+        }
+
+        @Override
+        public Set<Host> getHostsByVlan(VlanId vlanId) {
+            return AVAILABLE_HOSTS.stream()
+                    .filter(host -> host.vlan().equals(vlanId))
+                    .collect(Collectors.toSet());
+        }
+
+        @Override
+        public int getHostCount() {
+            return AVAILABLE_HOSTS.size();
+        }
+
+        @Override
+        public Host getHost(HostId hostId) {
+            return AVAILABLE_HOSTS.stream()
+                    .filter(host -> host.id().equals(hostId))
+                    .findFirst()
+                    .orElse(null);
         }
 
         @Override
         public void addListener(HostListener listener) {
-            VplsTest.this.hostListener = listener;
+            this.listener = listener;
         }
 
-        @Override
-        public Set<Host> getConnectedHosts(ConnectPoint connectPoint) {
-            return hosts.stream()
-                    .filter(h -> h.location().elementId().equals(connectPoint.elementId())
-                              && h.location().port().equals(connectPoint.port()))
-                    .collect(Collectors.toSet());
+        public void postHostEvent(HostEvent hostEvent) {
+            this.listener.event(hostEvent);
         }
-
-    }
-
-    private static class TestIdGenerator implements IdGenerator {
-
-        private final AtomicLong id = new AtomicLong(0);
-
-        @Override
-        public long getNewId() {
-            return id.getAndIncrement();
-        }
-
     }
 
     /**
-     * Test IntentSynchronizer that passes all intents straight through to the
-     * intent service.
+     * Test network configuration service.
      */
-    private class TestIntentSynchronizer implements IntentSynchronizationService,
-            IntentSynchronizationAdminService {
+    public class TestConfigService extends NetworkConfigServiceAdapter {
+        public static final String EMPTY_JSON_TREE = "{}";
+        NetworkConfigListener listener;
+        VplsAppConfig vplsAppConfig;
 
-        private final IntentService intentService;
+        @Override
+        public void addListener(NetworkConfigListener listener) {
+            this.listener = listener;
+        }
+
+        @Override
+        public void removeListener(NetworkConfigListener listener) {
+            this.listener = null;
+        }
 
         /**
-         * Creates a new test intent synchronizer.
+         * Sends network config event to listener.
          *
-         * @param intentService intent service
+         * @param event the network config event
          */
-        public TestIntentSynchronizer(IntentService intentService) {
-            this.intentService = intentService;
+        public void sendEvent(NetworkConfigEvent event) {
+            if (listener != null) {
+                listener.event(event);
+            }
+        }
+
+        /**
+         * Constructs test config service.
+         * Generates an VPLS configuration with sample VPLS configs.
+         */
+        public TestConfigService() {
+            vplsAppConfig = new VplsAppConfig();
+            final ObjectMapper mapper = new ObjectMapper();
+            final ConfigApplyDelegate delegate = new VplsAppConfigTest.MockCfgDelegate();
+            JsonNode tree = null;
+            try {
+                tree = new ObjectMapper().readTree(EMPTY_JSON_TREE);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            vplsAppConfig.init(APPID, APP_NAME, tree, mapper, delegate);
+            VplsConfig vplsConfig = new VplsConfig(VPLS1,
+                                                   ImmutableSet.of(V100H1.name(), V100H2.name()),
+                                                   EncapsulationType.NONE);
+            vplsAppConfig.addVpls(vplsConfig);
+            vplsConfig = new VplsConfig(VPLS2,
+                                        ImmutableSet.of(V200H1.name(), V200H2.name()),
+                                        EncapsulationType.VLAN);
+            vplsAppConfig.addVpls(vplsConfig);
+
+        }
+
+        /**
+         * Overrides VPLS config to the config service.
+         *
+         * @param vplsAppConfig the new VPLS config
+         */
+        public void setConfig(VplsAppConfig vplsAppConfig) {
+            this.vplsAppConfig = vplsAppConfig;
         }
 
         @Override
-        public void submit(Intent intent) {
-            intentService.submit(intent);
+        public <S, C extends Config<S>> C getConfig(S subject, Class<C> configClass) {
+            return (C) vplsAppConfig;
         }
 
         @Override
-        public void withdraw(Intent intent) {
-            intentService.withdraw(intent);
-        }
-
-        @Override
-        public void modifyPrimary(boolean isPrimary) {
-
-        }
-
-        @Override
-        public void removeIntents() {
-
+        public <S, C extends Config<S>> C addConfig(S subject, Class<C> configClass) {
+            return (C) vplsAppConfig;
         }
     }
 

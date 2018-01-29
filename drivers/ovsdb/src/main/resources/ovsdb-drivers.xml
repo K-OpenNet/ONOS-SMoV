@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2016-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -17,15 +17,23 @@
 <drivers>
     <driver name="default"
             manufacturer="ON.Lab" hwVersion="0.0.1" swVersion="0.0.1">
-        <behaviour api="org.onosproject.net.behaviour.TunnelConfig"
-                   impl="org.onosproject.drivers.ovsdb.OvsdbTunnelConfig"/>
         <behaviour api="org.onosproject.net.behaviour.BridgeConfig"
                    impl="org.onosproject.drivers.ovsdb.OvsdbBridgeConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.InterfaceConfig"
+                   impl="org.onosproject.drivers.ovsdb.OvsdbInterfaceConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.PortConfigBehaviour"
+                   impl="org.onosproject.drivers.ovsdb.OvsdbPortConfig"/>
     </driver>
     <driver name="ovs" extends="default"
             manufacturer="Nicira, Inc\." hwVersion="Open vSwitch" swVersion="2\..*">
         <behaviour api="org.onosproject.net.behaviour.ControllerConfig"
                    impl="org.onosproject.drivers.ovsdb.OvsdbControllerConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.MirroringConfig"
+                   impl="org.onosproject.drivers.ovsdb.OvsdbMirroringConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.QosConfigBehaviour"
+                   impl="org.onosproject.drivers.ovsdb.OvsdbQosConfig"/>
+        <behaviour api="org.onosproject.net.behaviour.QueueConfigBehaviour"
+                   impl="org.onosproject.drivers.ovsdb.OvsdbQueueConfig"/>
     </driver>
 </drivers>
 

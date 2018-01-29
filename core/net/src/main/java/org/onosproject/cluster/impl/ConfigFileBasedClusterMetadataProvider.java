@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,9 @@ import static org.slf4j.LoggerFactory.getLogger;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -64,6 +63,7 @@ import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 
 import static com.google.common.base.Preconditions.checkState;
+import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 
 /**
  * Provider of {@link ClusterMetadata cluster metadata} sourced from a local config file.
@@ -88,7 +88,7 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
     private static final ProviderId PROVIDER_ID = new ProviderId("file", "none");
     private final AtomicReference<Versioned<ClusterMetadata>> cachedMetadata = new AtomicReference<>();
     private final ScheduledExecutorService configFileChangeDetector =
-            Executors.newSingleThreadScheduledExecutor(groupedThreads("onos/cluster/metadata/config-watcher", ""));
+            newSingleThreadScheduledExecutor(groupedThreads("onos/cluster/metadata/config-watcher", "", log));
 
     private String metadataUrl;
     private ObjectMapper mapper;
@@ -102,6 +102,7 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
         module.addDeserializer(NodeId.class, new NodeIdDeserializer());
         module.addSerializer(ControllerNode.class, new ControllerNodeSerializer());
         module.addDeserializer(ControllerNode.class, new ControllerNodeDeserializer());
+        module.addSerializer(Partition.class, new PartitionSerializer());
         module.addDeserializer(Partition.class, new PartitionDeserializer());
         module.addSerializer(PartitionId.class, new PartitionIdSerializer());
         module.addDeserializer(PartitionId.class, new PartitionIdDeserializer());
@@ -129,7 +130,7 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
         checkState(isAvailable());
         synchronized (this) {
             if (cachedMetadata.get() == null) {
-                cachedMetadata.set(fetchMetadata(metadataUrl));
+                cachedMetadata.set(blockForMetadata(metadataUrl));
             }
             return cachedMetadata.get();
         }
@@ -138,9 +139,11 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
     @Override
     public void setClusterMetadata(ClusterMetadata metadata) {
         try {
-            Files.createParentDirs(CONFIG_FILE);
-            mapper.writeValue(CONFIG_FILE, metadata);
-            providerService.clusterMetadataChanged(new Versioned<>(metadata, CONFIG_FILE.lastModified()));
+            File configFile = new File(metadataUrl.replaceFirst("file://", ""));
+            Files.createParentDirs(configFile);
+            mapper.writeValue(configFile, metadata);
+            cachedMetadata.set(fetchMetadata(metadataUrl));
+            providerService.clusterMetadataChanged(new Versioned<>(metadata, configFile.lastModified()));
         } catch (IOException e) {
             Throwables.propagate(e);
         }
@@ -165,18 +168,36 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
     public boolean isAvailable() {
         try {
             URL url = new URL(metadataUrl);
-            if (url.getProtocol().equals("file")) {
+            if ("file".equals(url.getProtocol())) {
                 File file = new File(metadataUrl.replaceFirst("file://", ""));
                 return file.exists();
-            } else if (url.getProtocol().equals("http")) {
-                url.openStream();
-                return true;
             } else {
-                // Unsupported protocol
-                return false;
+                // Return true for HTTP URLs since we allow blocking until HTTP servers come up
+                return "http".equals(url.getProtocol());
             }
         } catch (Exception e) {
+            log.warn("Exception accessing metadata file at {}:", metadataUrl, e);
             return false;
+        }
+    }
+
+    private Versioned<ClusterMetadata> blockForMetadata(String metadataUrl) {
+        int iterations = 0;
+        for (;;) {
+            try {
+                Versioned<ClusterMetadata> metadata = fetchMetadata(metadataUrl);
+                if (metadata != null) {
+                    return metadata;
+                }
+            } catch (Exception e) {
+                log.warn("Exception attempting to access metadata file at {}: {}", metadataUrl, e);
+            }
+
+            try {
+                Thread.sleep((int) Math.pow(2, iterations < 7 ? ++iterations : iterations) * 10);
+            } catch (InterruptedException e) {
+                throw Throwables.propagate(e);
+            }
         }
     }
 
@@ -185,14 +206,40 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
             URL url = new URL(metadataUrl);
             ClusterMetadata metadata = null;
             long version = 0;
-            if (url.getProtocol().equals("file")) {
+            if ("file".equals(url.getProtocol())) {
                 File file = new File(metadataUrl.replaceFirst("file://", ""));
                 version = file.lastModified();
                 metadata = mapper.readValue(new FileInputStream(file), ClusterMetadata.class);
-            } else if (url.getProtocol().equals("http")) {
-                URLConnection conn = url.openConnection();
-                version = conn.getLastModified();
-                metadata = mapper.readValue(conn.getInputStream(), ClusterMetadata.class);
+            } else if ("http".equals(url.getProtocol())) {
+                try {
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+                        log.warn("Could not reach metadata URL {}. Retrying...", url);
+                        return null;
+                    }
+                    if (conn.getResponseCode() == HttpURLConnection.HTTP_NO_CONTENT) {
+                        return null;
+                    }
+                    version = conn.getLastModified();
+                    metadata = mapper.readValue(conn.getInputStream(), ClusterMetadata.class);
+                } catch (IOException e) {
+                    log.warn("Could not reach metadata URL {}. Retrying...", url);
+                    return null;
+                }
+            }
+
+            if (null == metadata) {
+                log.warn("Metadata is null in the function fetchMetadata");
+                throw new NullPointerException();
+            }
+
+            // If the configured partitions are empty then return a null metadata to indicate that the configuration
+            // needs to be polled until the partitions are populated.
+            if (metadata.getPartitions().isEmpty() || metadata.getPartitions().stream()
+                    .map(partition -> partition.getMembers().size())
+                    .reduce(Math::min)
+                    .orElse(0) == 0) {
+                return null;
             }
             return new Versioned<>(new ClusterMetadata(PROVIDER_ID,
                                                        metadata.getName(),
@@ -201,6 +248,21 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
                                    version);
         } catch (IOException e) {
             throw Throwables.propagate(e);
+        }
+    }
+
+    private static class PartitionSerializer extends JsonSerializer<Partition> {
+        @Override
+        public void serialize(Partition partition, JsonGenerator jgen, SerializerProvider serializerProvider)
+                throws IOException, JsonProcessingException {
+            jgen.writeStartObject();
+            jgen.writeNumberField("id", partition.getId().asInt());
+            jgen.writeArrayFieldStart("members");
+            for (NodeId nodeId : partition.getMembers()) {
+                jgen.writeString(nodeId.id());
+            }
+            jgen.writeEndArray();
+            jgen.writeEndObject();
         }
     }
 
@@ -272,15 +334,22 @@ public class ConfigFileBasedClusterMetadataProvider implements ClusterMetadataPr
 
     /**
      * Monitors the metadata url for any updates and notifies providerService accordingly.
-     * @throws IOException
      */
     private void watchUrl(String metadataUrl) {
+        if (!isAvailable()) {
+            return;
+        }
         // TODO: We are merely polling the url.
         // This can be easily addressed for files. For http urls we need to move to a push style protocol.
-        Versioned<ClusterMetadata> latestMetadata = fetchMetadata(metadataUrl);
-        if (cachedMetadata.get() != null && cachedMetadata.get().version() < latestMetadata.version()) {
-            cachedMetadata.set(latestMetadata);
-            providerService.clusterMetadataChanged(latestMetadata);
+        try {
+            Versioned<ClusterMetadata> latestMetadata = fetchMetadata(metadataUrl);
+            if (cachedMetadata.get() != null && latestMetadata != null
+                    && cachedMetadata.get().version() < latestMetadata.version()) {
+                cachedMetadata.set(latestMetadata);
+                providerService.clusterMetadataChanged(latestMetadata);
+            }
+        } catch (Exception e) {
+            log.error("Unable to parse metadata : ", e);
         }
     }
 }

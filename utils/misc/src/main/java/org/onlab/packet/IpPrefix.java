@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +48,14 @@ public class IpPrefix {
      * An IpPrefix that contains all IPv6 multicast addresses.
      */
     public static final IpPrefix IPV6_MULTICAST_PREFIX = IpPrefix.valueOf("ff00::/8");
+    /**
+     * An IpPrefix that contains all IPv4 link local addresses.
+     */
+    public static final IpPrefix IPV4_LINK_LOCAL_PREFIX = IpPrefix.valueOf("169.254.0.0/16");
+    /**
+     * An IpPrefix that contains all IPv6 link local addresses.
+     */
+    public static final IpPrefix IPV6_LINK_LOCAL_PREFIX = IpPrefix.valueOf("fe80::/64");
 
     private final IpAddress address;
     private final short prefixLength;
@@ -63,6 +71,14 @@ public class IpPrefix {
         checkPrefixLength(address.version(), prefixLength);
         this.address = IpAddress.makeMaskedAddress(address, prefixLength);
         this.prefixLength = (short) prefixLength;
+    }
+
+    /**
+     * Default constructor for Kryo serialization.
+     */
+    protected IpPrefix() {
+        this.address = null;
+        this.prefixLength = 0;
     }
 
     /**

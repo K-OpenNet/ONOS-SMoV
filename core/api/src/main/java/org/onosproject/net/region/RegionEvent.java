@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,12 +36,12 @@ public class RegionEvent extends AbstractEvent<RegionEvent.Type, Region> {
         REGION_ADDED,
 
         /**
-         * Signifies that a region was updated.
+         * Signifies that a region was removed.
          */
         REGION_REMOVED,
 
         /**
-         * Signifies that a region was removed.
+         * Signifies that a region was updated.
          */
         REGION_UPDATED,
 

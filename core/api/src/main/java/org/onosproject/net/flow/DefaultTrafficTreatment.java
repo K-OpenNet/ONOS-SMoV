@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,14 @@
  */
 package org.onosproject.net.flow;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
@@ -34,7 +39,7 @@ import org.onosproject.net.meter.MeterId;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.onosproject.net.pi.runtime.PiTableAction;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -48,12 +53,13 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
     private final List<Instruction> all;
     private final Instructions.TableTypeTransition table;
     private final Instructions.MetadataInstruction meta;
+    private final Instructions.StatTriggerInstruction statTrigger;
 
     private final boolean hasClear;
 
     private static final DefaultTrafficTreatment EMPTY
             = new DefaultTrafficTreatment(ImmutableList.of(Instructions.createNoAction()));
-    private final Instructions.MeterInstruction meter;
+    private final Set<Instructions.MeterInstruction> meter;
 
     /**
      * Creates a new traffic treatment from the specified list of instructions.
@@ -67,7 +73,8 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         this.hasClear = false;
         this.table = null;
         this.meta = null;
-        this.meter = null;
+        this.meter = ImmutableSet.of();
+        this.statTrigger = null;
     }
 
     /**
@@ -79,11 +86,13 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
      * @param clear instruction to clear the deferred actions list
      */
     private DefaultTrafficTreatment(List<Instruction> deferred,
-                                   List<Instruction> immediate,
-                                   Instructions.TableTypeTransition table,
-                                   boolean clear,
-                                   Instructions.MetadataInstruction meta,
-                                   Instructions.MeterInstruction meter) {
+                                    List<Instruction> immediate,
+                                    Instructions.TableTypeTransition table,
+                                    boolean clear,
+                                    Instructions.MetadataInstruction meta,
+                                    Set<Instructions.MeterInstruction> meters,
+                                    Instructions.StatTriggerInstruction statTrigger
+                                    ) {
         this.immediate = ImmutableList.copyOf(checkNotNull(immediate));
         this.deferred = ImmutableList.copyOf(checkNotNull(deferred));
         this.all = new ImmutableList.Builder<Instruction>()
@@ -93,7 +102,8 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         this.table = table;
         this.meta = meta;
         this.hasClear = clear;
-        this.meter = meter;
+        this.meter = ImmutableSet.copyOf(meters);
+        this.statTrigger = statTrigger;
     }
 
     @Override
@@ -127,7 +137,20 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
     }
 
     @Override
+    public Instructions.StatTriggerInstruction statTrigger() {
+        return statTrigger;
+    }
+
+    @Override
     public Instructions.MeterInstruction metered() {
+        if (meter.isEmpty()) {
+            return null;
+        }
+        return meter.iterator().next();
+    }
+
+    @Override
+    public Set<Instructions.MeterInstruction> meters() {
         return meter;
     }
 
@@ -188,7 +211,9 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
                 .add("immediate", immediate)
                 .add("deferred", deferred)
                 .add("transition", table == null ? "None" : table.toString())
+                .add("meter", meter == null ? "None" : meter)
                 .add("cleared", hasClear)
+                .add("StatTrigger", statTrigger)
                 .add("metadata", meta)
                 .toString();
     }
@@ -205,11 +230,13 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
 
         Instructions.MetadataInstruction meta;
 
-        Instructions.MeterInstruction meter;
+        Set<Instructions.MeterInstruction> meter = Sets.newHashSet();
 
-        List<Instruction> deferred = Lists.newLinkedList();
+        Instructions.StatTriggerInstruction statTrigger;
 
-        List<Instruction> immediate = Lists.newLinkedList();
+        List<Instruction> deferred = new ArrayList<>();
+
+        List<Instruction> immediate = new ArrayList<>();
 
         List<Instruction> current = immediate;
 
@@ -235,7 +262,6 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         public Builder add(Instruction instruction) {
 
             switch (instruction.type()) {
-                case DROP:
                 case NOACTION:
                 case OUTPUT:
                 case GROUP:
@@ -245,6 +271,7 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
                 case L2MODIFICATION:
                 case L3MODIFICATION:
                 case L4MODIFICATION:
+                case PROTOCOL_INDEPENDENT:
                 case EXTENSION:
                     current.add(instruction);
                     break;
@@ -255,7 +282,10 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
                     meta = (Instructions.MetadataInstruction) instruction;
                     break;
                 case METER:
-                    meter = (Instructions.MeterInstruction) instruction;
+                    meter.add((Instructions.MeterInstruction) instruction);
+                    break;
+                case STAT_TRIGGER:
+                    statTrigger = (Instructions.StatTriggerInstruction) instruction;
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown instruction type: " +
@@ -401,6 +431,11 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         }
 
         @Override
+        public Builder pushVlan(EthType ethType) {
+            return add(Instructions.pushVlan(ethType));
+        }
+
+        @Override
         public Builder transition(Integer tableId) {
             return add(Instructions.transition(tableId));
         }
@@ -420,6 +455,12 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         @Override
         public Builder wipeDeferred() {
             clear = true;
+            return this;
+        }
+
+        @Override
+        public Builder notWipeDeferred() {
+            clear = false;
             return this;
         }
 
@@ -469,19 +510,47 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         }
 
         @Override
+        public Builder piTableAction(PiTableAction piTableAction) {
+            return add(Instructions.piTableAction(piTableAction));
+        }
+
+        @Override
         public TrafficTreatment.Builder extension(ExtensionTreatment extension,
                                                   DeviceId deviceId) {
             return add(Instructions.extension(extension, deviceId));
         }
 
         @Override
+        public TrafficTreatment.Builder statTrigger(Map<StatTriggerField, Long> statTriggerFieldMap,
+                                                    StatTriggerFlag statTriggerFlag) {
+            return add(Instructions.statTrigger(statTriggerFieldMap, statTriggerFlag));
+        }
+
+        @Override
+        public TrafficTreatment.Builder addTreatment(TrafficTreatment treatment) {
+            List<Instruction> previous = current;
+            deferred();
+            treatment.deferred().forEach(i -> add(i));
+
+            immediate();
+            treatment.immediate().stream()
+                    // NOACTION will get re-added if there are no other actions
+                    .filter(i -> i.type() != Instruction.Type.NOACTION)
+                    .forEach(i -> add(i));
+
+            clear = treatment.clearedDeferred();
+            current = previous;
+            return this;
+        }
+
+        @Override
         public TrafficTreatment build() {
-            if (deferred.size() == 0 && immediate.size() == 0
+            if (deferred.isEmpty() && immediate.isEmpty()
                     && table == null && !clear) {
                 immediate();
                 noAction();
             }
-            return new DefaultTrafficTreatment(deferred, immediate, table, clear, meta, meter);
+            return new DefaultTrafficTreatment(deferred, immediate, table, clear, meta, meter, statTrigger);
         }
 
     }

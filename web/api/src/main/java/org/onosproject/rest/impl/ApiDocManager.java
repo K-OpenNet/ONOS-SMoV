@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,11 +54,13 @@ public class ApiDocManager implements ApiDocService {
     @Override
     public void register(ApiDocProvider provider) {
         providers.put(provider.key(), provider);
+        log.info("{} registered at {}", provider.name(), provider.key());
     }
 
     @Override
     public void unregister(ApiDocProvider provider) {
         providers.remove(provider.name());
+        log.info("{} unregistered", provider.name());
     }
 
     @Override

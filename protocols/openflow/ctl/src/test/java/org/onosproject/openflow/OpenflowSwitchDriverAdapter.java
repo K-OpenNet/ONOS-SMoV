@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,11 @@
  */
 package org.onosproject.openflow;
 
-import java.util.List;
-
-import org.jboss.netty.channel.Channel;
 import org.onosproject.net.Device;
 import org.onosproject.net.driver.DriverData;
 import org.onosproject.net.driver.DriverHandler;
 import org.onosproject.openflow.controller.Dpid;
-import org.onosproject.openflow.controller.OpenFlowEventListener;
+import org.onosproject.openflow.controller.OpenFlowSession;
 import org.onosproject.openflow.controller.RoleState;
 import org.onosproject.openflow.controller.driver.OpenFlowAgent;
 import org.onosproject.openflow.controller.driver.OpenFlowSwitchDriver;
@@ -34,9 +31,13 @@ import org.projectfloodlight.openflow.protocol.OFFactories;
 import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFFeaturesReply;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMeterFeatures;
+import org.projectfloodlight.openflow.protocol.OFMeterFeaturesStatsReply;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortDescStatsReply;
 import org.projectfloodlight.openflow.protocol.OFVersion;
+
+import java.util.List;
 
 /**
  * Testing adapter for the OpenFlow switch driver class.
@@ -121,6 +122,11 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
     }
 
     @Override
+    public void setMeterFeaturesReply(OFMeterFeaturesStatsReply meterFeaturesReply) {
+
+    }
+
+    @Override
     public void setSwitchDescription(OFDescStatsReply desc) {
 
     }
@@ -141,7 +147,7 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
     }
 
     @Override
-    public void setChannel(Channel channel) {
+    public void setChannel(OpenFlowSession channel) {
 
     }
 
@@ -236,6 +242,11 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
     }
 
     @Override
+    public OFMeterFeatures getMeterFeatures() {
+        return null;
+    }
+
+    @Override
     public OFFactory factory() {
         // return what-ever triggers requestPending = true
         return OFFactories.getFactory(OFVersion.OF_10);
@@ -299,13 +310,5 @@ public class OpenflowSwitchDriverAdapter implements OpenFlowSwitchDriver {
     @Override
     public String channelId() {
         return null;
-    }
-
-    @Override
-    public void addEventListener(OpenFlowEventListener listener) {
-    }
-
-    @Override
-    public void removeEventListener(OpenFlowEventListener listener) {
     }
 }

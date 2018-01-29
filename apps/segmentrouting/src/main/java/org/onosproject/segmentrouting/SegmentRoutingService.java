@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,24 @@
  */
 package org.onosproject.segmentrouting;
 
+import org.onlab.packet.IpPrefix;
+import org.onosproject.net.DeviceId;
+import org.onosproject.segmentrouting.grouphandler.NextNeighbors;
+import org.onosproject.segmentrouting.pwaas.DefaultL2Tunnel;
+import org.onosproject.segmentrouting.pwaas.DefaultL2TunnelPolicy;
+import org.onosproject.segmentrouting.pwaas.L2TunnelHandler;
+import org.onosproject.segmentrouting.storekey.DestinationSetNextObjectiveStoreKey;
+
+import com.google.common.collect.ImmutableMap;
+
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Segment Routing Service for REST API.
  */
 public interface SegmentRoutingService {
-    /**
-     * Highest flow priority.
-     */
-    int HIGHEST_PRIORITY = 0xffff;
-
     /**
      * VLAN cross-connect priority.
      */
@@ -75,6 +82,49 @@ public interface SegmentRoutingService {
     List<Policy> getPolicies();
 
     /**
+     * Returns all l2 tunnels of pseudowires.
+     *
+     * @return list of l2 tunnels
+     */
+    List<DefaultL2Tunnel> getL2Tunnels();
+
+    /**
+     * Returns all l2 policie of pseudowires.
+     *
+     * @return list of l2 policies.
+     */
+    List<DefaultL2TunnelPolicy> getL2Policies();
+
+    /**
+     * Removes pw. Essentially updates configuration for PwaasConfig
+     * and sends event for removal. The rest are handled by L2TunnelHandler
+     *
+     * @param pwId The pseudowire id
+     * @return SUCCESS if operation successful or a descriptive error otherwise.
+     */
+    L2TunnelHandler.Result removePseudowire(String pwId);
+
+    /**
+     * Adds a Pseudowire to the configuration.
+     *
+     * @param tunnelId The pseudowire id
+     * @param pwLabel Pw label
+     * @param cP1 Connection Point 1 of pw
+     * @param cP1InnerVlan Outer vlan of cp2
+     * @param cP1OuterVlan Outer vlan of cp1
+     * @param cP2 Connection Point 2 of pw
+     * @param cP2InnerVlan Inner vlan of cp2
+     * @param cP2OuterVlan Outer vlan of cp1
+     * @param mode Mode of pw
+     * @param sdTag Service Delimiting tag of pw
+     * @return SUCCESS if operation is successful or a descriptive error otherwise.
+     */
+    L2TunnelHandler.Result addPseudowire(String tunnelId, String pwLabel, String cP1,
+                                         String cP1InnerVlan, String cP1OuterVlan, String cP2,
+                                         String cP2InnerVlan, String cP2OuterVlan,
+                                         String mode, String sdTag);
+
+    /**
      * Creates a policy.
      *
      * @param policy policy reference to create
@@ -103,4 +153,40 @@ public interface SegmentRoutingService {
      * SUCCESS if it is removed successfully
      */
     PolicyHandler.Result removePolicy(Policy policy);
+
+    /**
+     * Use current state of the network to repopulate forwarding rules.
+     *
+     */
+    void rerouteNetwork();
+
+    /**
+     * Returns device-subnet mapping.
+     *
+     * @return device-subnet mapping
+     */
+    Map<DeviceId, Set<IpPrefix>> getDeviceSubnetMap();
+
+    /**
+     * Returns the current ECMP shortest path graph in this controller instance.
+     *
+     * @return ECMP shortest path graph
+     */
+    ImmutableMap<DeviceId, EcmpShortestPathGraph> getCurrentEcmpSpg();
+
+    /**
+     * Returns the destinatiomSet-NextObjective store contents.
+     *
+     * @return current contents of the destinationSetNextObjectiveStore
+     */
+    ImmutableMap<DestinationSetNextObjectiveStoreKey, NextNeighbors> getDestinationSet();
+
+    /**
+     * Triggers the verification of all ECMP groups in the specified device.
+     * Adjusts the group buckets if verification finds that there are more or less
+     * buckets than what should be there.
+     *
+     * @param id the device identifier
+     */
+    void verifyGroups(DeviceId id);
 }

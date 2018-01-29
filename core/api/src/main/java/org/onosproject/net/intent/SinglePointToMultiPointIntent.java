@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,28 +17,33 @@ package org.onosproject.net.intent;
 
 import com.google.common.annotations.Beta;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
+import com.google.common.collect.Sets;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.FilteredConnectPoint;
+import org.onosproject.net.ResourceGroup;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
+import org.slf4j.Logger;
 
-import java.util.Collections;
 import java.util.Set;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Abstraction of single source, multiple destination connectivity intent.
  */
 @Beta
 public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
-
-    private final ConnectPoint ingressPoint;
-    private final Set<ConnectPoint> egressPoints;
+    private final FilteredConnectPoint ingressPoint;
+    private final Set<FilteredConnectPoint> egressPoints;
 
     /**
      * Creates a new single-to-multi point connectivity intent.
@@ -57,21 +62,24 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
      *             not more than 1
      */
     private SinglePointToMultiPointIntent(ApplicationId appId,
-            Key key,
-            TrafficSelector selector, TrafficTreatment treatment,
-            ConnectPoint ingressPoint, Set<ConnectPoint> egressPoints,
-            List<Constraint> constraints,
-            int priority) {
-        super(appId, key, Collections.emptyList(), selector, treatment, constraints,
-                priority);
+                                          Key key,
+                                          TrafficSelector selector,
+                                          TrafficTreatment treatment,
+                                          FilteredConnectPoint ingressPoint,
+                                          Set<FilteredConnectPoint> egressPoints,
+                                          List<Constraint> constraints,
+                                          int priority,
+                                          ResourceGroup resourceGroup) {
+        super(appId, key, ImmutableList.of(), selector, treatment, constraints,
+              priority, resourceGroup);
         checkNotNull(egressPoints);
         checkNotNull(ingressPoint);
         checkArgument(!egressPoints.isEmpty(), "Egress point set cannot be empty");
         checkArgument(!egressPoints.contains(ingressPoint),
-                "Set of egresses should not contain ingress (ingress: %s)", ingressPoint);
+                      "Set of egresses should not contain ingress (ingress: %s)", ingressPoint);
 
-        this.ingressPoint = checkNotNull(ingressPoint);
-        this.egressPoints = egressPoints;
+        this.ingressPoint = ingressPoint;
+        this.egressPoints = Sets.newHashSet(egressPoints);
     }
 
     /**
@@ -87,14 +95,40 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
     }
 
     /**
+     * Creates a new builder pre-populated with the information in the given
+     * intent.
+     *
+     * @param intent initial intent
+     * @return intent builder
+     */
+    public static Builder builder(SinglePointToMultiPointIntent intent) {
+        return new Builder(intent);
+    }
+
+    /**
      * Builder of a single point to multi point intent.
      */
     public static final class Builder extends ConnectivityIntent.Builder {
-        ConnectPoint ingressPoint;
-        Set<ConnectPoint> egressPoints;
+        private final Logger log = getLogger(getClass());
+        private FilteredConnectPoint ingressPoint;
+        private Set<FilteredConnectPoint> egressPoints;
 
         private Builder() {
             // Hide constructor
+        }
+
+        /**
+         * Creates a new builder pre-populated with information from the given
+         * intent.
+         *
+         * @param intent initial intent
+         */
+        protected Builder(SinglePointToMultiPointIntent intent) {
+            super(intent);
+
+            this.filteredEgressPoints(intent.filteredEgressPoints())
+                    .filteredIngressPoint(intent.filteredIngressPoint());
+
         }
 
         @Override
@@ -127,6 +161,11 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
             return (Builder) super.priority(priority);
         }
 
+        @Override
+        public Builder resourceGroup(ResourceGroup resourceGroup) {
+            return (Builder) super.resourceGroup(resourceGroup);
+        }
+
         /**
          * Sets the ingress point of the single point to multi point intent
          * that will be built.
@@ -134,8 +173,13 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
          * @param ingressPoint ingress connect point
          * @return this builder
          */
+        @Deprecated
         public Builder ingressPoint(ConnectPoint ingressPoint) {
-            this.ingressPoint = ingressPoint;
+            if (this.ingressPoint != null) {
+                log.warn("Ingress point is already set, " +
+                "this will override original ingress point.");
+            }
+            this.ingressPoint = new FilteredConnectPoint(ingressPoint);
             return this;
         }
 
@@ -146,7 +190,40 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
          * @param egressPoints egress connect points
          * @return this builder
          */
+        @Deprecated
         public Builder egressPoints(Set<ConnectPoint> egressPoints) {
+            if (this.egressPoints != null) {
+                log.warn("Egress points are already set, " +
+                                 "this will override original egress points.");
+            }
+            Set<FilteredConnectPoint> filteredConnectPoints =
+                    egressPoints.stream()
+                            .map(FilteredConnectPoint::new)
+                            .collect(Collectors.toSet());
+            this.egressPoints = ImmutableSet.copyOf(filteredConnectPoints);
+            return this;
+        }
+
+        /**
+         * Sets the filtered ingress point of the single point to
+         * multi point intent that will be built.
+         *
+         * @param ingressPoint ingress connect point
+         * @return this builder
+         */
+        public Builder filteredIngressPoint(FilteredConnectPoint ingressPoint) {
+            this.ingressPoint = ingressPoint;
+            return this;
+        }
+
+        /**
+         * Sets the filtered egress points of the single point to
+         * multi point intent that will be built.
+         *
+         * @param egressPoints egress connect points
+         * @return this builder
+         */
+        public Builder filteredEgressPoints(Set<FilteredConnectPoint> egressPoints) {
             this.egressPoints = ImmutableSet.copyOf(egressPoints);
             return this;
         }
@@ -167,7 +244,8 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
                     ingressPoint,
                     egressPoints,
                     constraints,
-                    priority
+                    priority,
+                    resourceGroup
             );
         }
     }
@@ -188,7 +266,7 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
      * @return ingress port
      */
     public ConnectPoint ingressPoint() {
-        return ingressPoint;
+        return ingressPoint.connectPoint();
     }
 
     /**
@@ -197,8 +275,30 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
      * @return set of egress ports
      */
     public Set<ConnectPoint> egressPoints() {
+        return egressPoints.stream()
+                .map(FilteredConnectPoint::connectPoint)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Returns the filtered port on which the ingress traffic should be connected to the
+     * egress.
+     *
+     * @return ingress port
+     */
+    public FilteredConnectPoint filteredIngressPoint() {
+        return ingressPoint;
+    }
+
+    /**
+     * Returns the set of filtered ports on which the traffic should egress.
+     *
+     * @return set of egress ports
+     */
+    public Set<FilteredConnectPoint> filteredEgressPoints() {
         return egressPoints;
     }
+
 
     @Override
     public String toString() {
@@ -212,7 +312,10 @@ public final class SinglePointToMultiPointIntent extends ConnectivityIntent {
                 .add("treatment", treatment())
                 .add("ingress", ingressPoint)
                 .add("egress", egressPoints)
+                .add("filteredIngressCPs", filteredIngressPoint())
+                .add("filteredEgressCP", filteredEgressPoints())
                 .add("constraints", constraints())
+                .add("resourceGroup", resourceGroup())
                 .toString();
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -95,6 +95,7 @@ public class FlowModBuilderVer10 extends FlowModBuilder {
                 .setMatch(match)
                 .setFlags(Collections.singleton(OFFlowModFlags.SEND_FLOW_REM))
                 .setPriority(flowRule().priority())
+                .setHardTimeout(flowRule().hardTimeout())
                 .build();
 
         return fm;
@@ -115,6 +116,7 @@ public class FlowModBuilderVer10 extends FlowModBuilder {
                 .setMatch(match)
                 .setFlags(Collections.singleton(OFFlowModFlags.SEND_FLOW_REM))
                 .setPriority(flowRule().priority())
+                .setHardTimeout(flowRule().hardTimeout())
                 .build();
 
         return fm;
@@ -133,6 +135,7 @@ public class FlowModBuilderVer10 extends FlowModBuilder {
                 .setMatch(match)
                 .setFlags(Collections.singleton(OFFlowModFlags.SEND_FLOW_REM))
                 .setPriority(flowRule().priority())
+                .setHardTimeout(flowRule().hardTimeout())
                 .build();
 
         return fm;
@@ -146,7 +149,6 @@ public class FlowModBuilderVer10 extends FlowModBuilder {
         }
         for (Instruction i : treatment.immediate()) {
             switch (i.type()) {
-            case DROP:
             case NOACTION:
                 return Collections.emptyList();
             case L2MODIFICATION:

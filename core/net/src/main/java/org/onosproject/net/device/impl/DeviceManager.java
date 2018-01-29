@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,36 +15,21 @@
  */
 package org.onosproject.net.device.impl;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
-import static org.onlab.util.Tools.groupedThreads;
-import static org.onlab.util.Tools.nullIsNotFound;
-import static org.onosproject.net.MastershipRole.MASTER;
-import static org.onosproject.net.MastershipRole.NONE;
-import static org.onosproject.net.MastershipRole.STANDBY;
-import static org.onosproject.security.AppGuard.checkPermission;
-import static org.onosproject.security.AppPermission.Type.DEVICE_READ;
-import static org.slf4j.LoggerFactory.getLogger;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.util.concurrent.Futures;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
+import org.onlab.util.KryoNamespace;
+import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
+import org.onosproject.incubator.net.config.basics.PortDescriptionsConfig;
 import org.onosproject.mastership.MastershipEvent;
 import org.onosproject.mastership.MastershipListener;
 import org.onosproject.mastership.MastershipService;
@@ -57,12 +42,15 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.config.Config;
 import org.onosproject.net.config.NetworkConfigEvent;
 import org.onosproject.net.config.NetworkConfigListener;
 import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.PortConfigOperator;
+import org.onosproject.net.config.PortConfigOperatorRegistry;
 import org.onosproject.net.config.basics.BasicDeviceConfig;
-import org.onosproject.net.config.basics.OpticalPortConfig;
-import org.onosproject.net.device.DefaultDeviceDescription;
+import org.onosproject.net.config.basics.DeviceAnnotationConfig;
+import org.onosproject.net.config.basics.PortAnnotationConfig;
 import org.onosproject.net.device.DefaultPortDescription;
 import org.onosproject.net.device.DeviceAdminService;
 import org.onosproject.net.device.DeviceDescription;
@@ -78,9 +66,45 @@ import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.device.PortStatistics;
 import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.net.provider.AbstractProviderService;
+import org.onosproject.net.provider.Provider;
+import org.onosproject.net.provider.ProviderId;
+import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
+import org.onosproject.store.cluster.messaging.MessageSubject;
+import org.onosproject.store.serializers.KryoNamespaces;
+import org.onosproject.store.service.Serializer;
+import org.onosproject.upgrade.UpgradeService;
 import org.slf4j.Logger;
 
-import com.google.common.util.concurrent.Futures;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.collect.Multimaps.newListMultimap;
+import static com.google.common.collect.Multimaps.synchronizedListMultimap;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
+import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.net.MastershipRole.MASTER;
+import static org.onosproject.net.MastershipRole.NONE;
+import static org.onosproject.net.MastershipRole.STANDBY;
+import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.DEVICE_READ;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Provides implementation of the device SB &amp; NB APIs.
@@ -89,13 +113,14 @@ import com.google.common.util.concurrent.Futures;
 @Service
 public class DeviceManager
         extends AbstractListenerProviderRegistry<DeviceEvent, DeviceListener, DeviceProvider, DeviceProviderService>
-        implements DeviceService, DeviceAdminService, DeviceProviderRegistry {
+        implements DeviceService, DeviceAdminService, DeviceProviderRegistry, PortConfigOperatorRegistry {
 
     private static final String DEVICE_ID_NULL = "Device ID cannot be null";
     private static final String PORT_NUMBER_NULL = "Port number cannot be null";
     private static final String DEVICE_DESCRIPTION_NULL = "Device description cannot be null";
     private static final String PORT_DESCRIPTION_NULL = "Port description cannot be null";
     private static final String PORT_DESC_LIST_NULL = "Port description list cannot be null";
+    private static final String EVENT_NON_MASTER = "Non-master node cannot handle this event";
 
     private final Logger log = getLogger(getClass());
 
@@ -121,11 +146,65 @@ public class DeviceManager
     protected MastershipTermService termService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected UpgradeService upgradeService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected NetworkConfigService networkConfigService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected ClusterCommunicationService communicationService;
+
+    private ExecutorService portReqeustExecutor;
+    /**
+     * List of all registered PortConfigOperator.
+     */
+    private final List<PortConfigOperator> portOps = new CopyOnWriteArrayList<>();
+
+    /**
+     * Index to look up PortConfigOperator from Config each PortConfigOperator uses.
+     */
+    private final Multimap<Class<? extends Config<ConnectPoint>>, PortConfigOperator> portOpsIndex
+            = synchronizedListMultimap(
+            newListMultimap(new ConcurrentHashMap<>(), CopyOnWriteArrayList::new));
+
+    // not part of portOps. must be executed at the end
+    private PortAnnotationOperator portAnnotationOp;
+    private DeviceAnnotationOperator deviceAnnotationOp;
+
+    private static final MessageSubject PORT_UPDOWN_SUBJECT =
+            new MessageSubject("port-updown-req");
+
+    private static final Serializer SERIALIZER = Serializer.using(
+            KryoNamespace.newBuilder()
+                    .register(KryoNamespaces.API)
+                    .register(InternalPortUpDownEvent.class)
+                    .nextId(KryoNamespaces.BEGIN_USER_CUSTOM_ID)
+                    .build("DeviceManager"));
+
+    /**
+     * Local storage for connectivity status of devices.
+     */
+    private class LocalStatus {
+        boolean connected;
+        Instant dateTime;
+
+        public LocalStatus(boolean b, Instant now) {
+            connected = b;
+            dateTime = now;
+        }
+    }
+
+    private final Map<DeviceId, LocalStatus> deviceLocalStatus =
+            Maps.newConcurrentMap();
 
     @Activate
     public void activate() {
-        backgroundService = newSingleThreadScheduledExecutor(groupedThreads("onos/device", "manager-background"));
+        portAnnotationOp = new PortAnnotationOperator(networkConfigService);
+        deviceAnnotationOp = new DeviceAnnotationOperator(networkConfigService);
+        portOpsIndex.put(PortAnnotationConfig.class, portAnnotationOp);
+
+        backgroundService = newSingleThreadScheduledExecutor(
+                groupedThreads("onos/device", "manager-background", log));
         localNodeId = clusterService.getLocalNode().id();
 
         store.setDelegate(delegate);
@@ -140,6 +219,15 @@ public class DeviceManager
                 log.error("Exception thrown during integrity check", e);
             }
         }, 1, 1, TimeUnit.MINUTES);
+
+        portReqeustExecutor = newSingleThreadExecutor();
+
+        communicationService.<InternalPortUpDownEvent>addSubscriber(
+                PORT_UPDOWN_SUBJECT,
+                SERIALIZER::decode,
+                this::handlePortRequest,
+                portReqeustExecutor);
+
         log.info("Started");
     }
 
@@ -150,6 +238,8 @@ public class DeviceManager
         store.unsetDelegate(delegate);
         mastershipService.removeListener(mastershipListener);
         eventDispatcher.removeSink(DeviceEvent.class);
+        communicationService.removeSubscriber(PORT_UPDOWN_SUBJECT);
+        portReqeustExecutor.shutdown();
         log.info("Stopped");
     }
 
@@ -157,6 +247,12 @@ public class DeviceManager
     public int getDeviceCount() {
         checkPermission(DEVICE_READ);
         return store.getDeviceCount();
+    }
+
+    @Override
+    public int getAvailableDeviceCount() {
+        checkPermission(DEVICE_READ);
+        return store.getAvailableDeviceCount();
     }
 
     @Override
@@ -207,6 +303,22 @@ public class DeviceManager
     }
 
     @Override
+    public PortStatistics getStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        checkPermission(DEVICE_READ);
+        checkNotNull(deviceId, DEVICE_ID_NULL);
+        checkNotNull(portNumber, PORT_NUMBER_NULL);
+        return store.getStatisticsForPort(deviceId, portNumber);
+    }
+
+    @Override
+    public PortStatistics getDeltaStatisticsForPort(DeviceId deviceId, PortNumber portNumber) {
+        checkPermission(DEVICE_READ);
+        checkNotNull(deviceId, DEVICE_ID_NULL);
+        checkNotNull(portNumber, PORT_NUMBER_NULL);
+        return store.getDeltaStatisticsForPort(deviceId, portNumber);
+    }
+
+    @Override
     public Port getPort(DeviceId deviceId, PortNumber portNumber) {
         checkPermission(DEVICE_READ);
         checkNotNull(deviceId, DEVICE_ID_NULL);
@@ -220,6 +332,16 @@ public class DeviceManager
 
         checkNotNull(deviceId, DEVICE_ID_NULL);
         return store.isAvailable(deviceId);
+    }
+
+    @Override
+    public String localStatus(DeviceId deviceId) {
+        LocalStatus ls = deviceLocalStatus.get(deviceId);
+        if (ls == null) {
+            return "No Record";
+        }
+        String timeAgo = Tools.timeAgo(ls.dateTime.toEpochMilli());
+        return (ls.connected) ? "connected " + timeAgo : "disconnected " + timeAgo;
     }
 
     // Check a device for control channel connectivity.
@@ -246,6 +368,52 @@ public class DeviceManager
         }
     }
 
+    private void handlePortRequest(InternalPortUpDownEvent event) {
+        DeviceId deviceId = event.deviceId();
+        checkNotNull(deviceId, DEVICE_ID_NULL);
+        checkNotNull(deviceId, PORT_NUMBER_NULL);
+        checkState(mastershipService.isLocalMaster(deviceId), EVENT_NON_MASTER);
+        changePortStateAtMaster(event.deviceId(), event.portNumber(), event.isEnable());
+    }
+
+    private void changePortStateAtMaster(DeviceId deviceId, PortNumber portNumber,
+                                       boolean enable) {
+        DeviceProvider provider = getProvider(deviceId);
+        if (provider != null) {
+            log.info("Port {} on device {} being administratively brought {}",
+                     portNumber, deviceId,
+                     (enable) ? "UP" : "DOWN");
+            provider.changePortState(deviceId, portNumber, enable);
+        } else {
+            log.warn("Provider not found for {}", deviceId);
+        }
+    }
+
+    @Override
+    public void changePortState(DeviceId deviceId, PortNumber portNumber,
+                                boolean enable) {
+        checkNotNull(deviceId, DEVICE_ID_NULL);
+        checkNotNull(deviceId, PORT_NUMBER_NULL);
+        NodeId masterId = mastershipService.getMasterFor(deviceId);
+
+        if (!masterId.equals(localNodeId)) {
+            //Send the request to the master node for the device
+            log.info("Device {} is managed by {}, forwarding the request to the MASTER",
+                     deviceId, masterId);
+            communicationService.unicast(
+                    new InternalPortUpDownEvent(deviceId, portNumber, enable),
+                    PORT_UPDOWN_SUBJECT,
+                    SERIALIZER::encode,
+                    masterId).whenComplete((r, error) -> {
+                if (error != null) {
+                    log.warn("Failed to send packet-updown-req to {}", masterId, error);
+                }
+            });
+        } else {
+            changePortStateAtMaster(deviceId, portNumber, enable);
+        }
+    }
+
     @Override
     protected DeviceProviderService createProviderService(
             DeviceProvider provider) {
@@ -259,13 +427,45 @@ public class DeviceManager
         log.debug("Checking mastership");
         for (Device device : getDevices()) {
             final DeviceId deviceId = device.id();
-            log.trace("Checking device {}", deviceId);
-
+            MastershipRole myRole = mastershipService.getLocalRole(deviceId);
+            log.trace("Checking device {}. Current role is {}", deviceId, myRole);
             if (!isReachable(deviceId)) {
+                if (myRole != NONE) {
+                    // can't be master if device is not reachable
+                    try {
+                        if (myRole == MASTER) {
+                            post(store.markOffline(deviceId));
+                        }
+                        //relinquish master role and ability to be backup.
+                        mastershipService.relinquishMastership(deviceId).get();
+                    } catch (InterruptedException e) {
+                        log.warn("Interrupted while reliquishing role for {}", deviceId);
+                        Thread.currentThread().interrupt();
+                    } catch (ExecutionException e) {
+                        log.error("Exception thrown while relinquishing role for {}", deviceId, e);
+                    }
+                } else {
+                    // check if the device has master, if not, mark it offline
+                    // only the nodes which has mastership role can mark any device offline.
+                    NodeId master = mastershipService.getMasterFor(deviceId);
+                    if (master == null) {
+                        CompletableFuture<MastershipRole> roleFuture = mastershipService.requestRoleFor(deviceId);
+                        roleFuture.thenAccept(role -> {
+                            MastershipTerm term = termService.getMastershipTerm(deviceId);
+                            if (term != null && localNodeId.equals(term.master())) {
+                                log.info("Marking unreachable device {} offline", deviceId);
+                                post(store.markOffline(deviceId));
+                            } else {
+                                log.info("Failed marking {} offline. {}", deviceId, role);
+                            }
+                            mastershipService.relinquishMastership(deviceId);
+                        });
+                    }
+                }
                 continue;
             }
 
-            if (mastershipService.getLocalRole(deviceId) != NONE) {
+            if (myRole != NONE) {
                 continue;
             }
 
@@ -308,7 +508,6 @@ public class DeviceManager
             }
             provider.roleChanged(deviceId, newRole);
             // not triggering probe when triggered by provider service event
-
             return true;
         }
 
@@ -319,45 +518,68 @@ public class DeviceManager
             checkNotNull(deviceDescription, DEVICE_DESCRIPTION_NULL);
             checkValidity();
 
+            deviceLocalStatus.put(deviceId, new LocalStatus(true, Instant.now()));
+
             BasicDeviceConfig cfg = networkConfigService.getConfig(deviceId, BasicDeviceConfig.class);
             if (!isAllowed(cfg)) {
                 log.warn("Device {} is not allowed", deviceId);
                 return;
             }
+            PortDescriptionsConfig portConfig = networkConfigService.getConfig(deviceId, PortDescriptionsConfig.class);
             // Generate updated description and establish my Role
             deviceDescription = BasicDeviceOperator.combine(cfg, deviceDescription);
             Futures.getUnchecked(mastershipService.requestRoleFor(deviceId)
-                    .thenAccept(role -> {
-                        log.info("Local role is {} for {}", role, deviceId);
-                        applyRole(deviceId, role);
-                    }));
+                                         .thenAccept(role -> {
+                                             log.info("Local role is {} for {}", role, deviceId);
+                                             applyRole(deviceId, role);
+                                         }));
 
             DeviceEvent event = store.createOrUpdateDevice(provider().id(), deviceId,
                                                            deviceDescription);
-            log.info("Device {} connected", deviceId);
+            if (portConfig != null) {
+                //updating the ports if configration exists
+                List<PortDescription> complete = store.getPortDescriptions(provider().id(), deviceId)
+                        .collect(Collectors.toList());
+                complete.addAll(portConfig.portDescriptions());
+                List<PortDescription> portDescriptions = complete.stream()
+                        .map(e -> applyAllPortOps(deviceId, e))
+                        .collect(Collectors.toList());
+                store.updatePorts(provider().id(), deviceId, portDescriptions);
+            }
+
+            if (deviceDescription.isDefaultAvailable()) {
+                log.info("Device {} connected", deviceId);
+            } else {
+                log.info("Device {} registered", deviceId);
+            }
+
             if (event != null) {
                 log.trace("event: {} {}", event.type(), event);
                 post(event);
             }
         }
 
+        private PortDescription ensurePortEnabledState(PortDescription desc, boolean enabled) {
+            if (desc.isEnabled() != enabled) {
+                return new DefaultPortDescription(desc.portNumber(),
+                                                  enabled,
+                                                  desc.type(),
+                                                  desc.portSpeed(),
+                                                  desc.annotations());
+            }
+            return desc;
+        }
+
         @Override
         public void deviceDisconnected(DeviceId deviceId) {
             checkNotNull(deviceId, DEVICE_ID_NULL);
             checkValidity();
-
+            deviceLocalStatus.put(deviceId, new LocalStatus(false, Instant.now()));
             log.info("Device {} disconnected from this node", deviceId);
 
-            List<Port> ports = store.getPorts(deviceId);
-            final Device device = getDevice(deviceId);
-
-            List<PortDescription> descs = ports.stream().map(
-              port -> (!(Device.Type.ROADM.equals(device.type()) ||
-                        (Device.Type.OTN.equals(device.type())))) ?
-                  new DefaultPortDescription(port.number(), false,
-                          port.type(), port.portSpeed()) :
-                      OpticalPortOperator.descriptionOf(port, false)
-                 ).collect(Collectors.toList());
+            List<PortDescription> descs = store.getPortDescriptions(provider().id(), deviceId)
+                    .map(desc -> ensurePortEnabledState(desc, false))
+                    .collect(Collectors.toList());
 
             store.updatePorts(this.provider().id(), deviceId, descs);
             try {
@@ -413,8 +635,13 @@ public class DeviceManager
                 log.trace("Ignoring {} port updates on standby node. {}", deviceId, portDescriptions);
                 return;
             }
+            PortDescriptionsConfig portConfig = networkConfigService.getConfig(deviceId, PortDescriptionsConfig.class);
+            if (portConfig != null) {
+                //updating the ports if configration exists
+                portDescriptions.addAll(portConfig.portDescriptions());
+            }
             portDescriptions = portDescriptions.stream()
-                    .map(e -> consolidate(deviceId, e))
+                    .map(e -> applyAllPortOps(deviceId, e))
                     .collect(Collectors.toList());
             List<DeviceEvent> events = store.updatePorts(this.provider().id(),
                                                          deviceId, portDescriptions);
@@ -439,32 +666,63 @@ public class DeviceManager
                           portDescription);
                 return;
             }
-            Device device = nullIsNotFound(getDevice(deviceId), "Device not found");
+            Device device = getDevice(deviceId);
+            if (device == null) {
+                log.trace("Device not found: {}", deviceId);
+                return;
+            }
             if ((Device.Type.ROADM.equals(device.type())) ||
-                (Device.Type.OTN.equals(device.type()))) {
-                Port port = getPort(deviceId, portDescription.portNumber());
-                portDescription = OpticalPortOperator.descriptionOf(port, portDescription.isEnabled());
+                    (Device.Type.OTN.equals(device.type()))) {
+                // FIXME This is ignoring all other info in portDescription given as input??
+                PortDescription storedPortDesc = store.getPortDescription(provider().id(),
+                                                                          deviceId,
+                                                                          portDescription.portNumber());
+                portDescription = ensurePortEnabledState(storedPortDesc,
+                                                         portDescription.isEnabled());
             }
 
-            portDescription = consolidate(deviceId, portDescription);
+            portDescription = applyAllPortOps(deviceId, portDescription);
             final DeviceEvent event = store.updatePortStatus(this.provider().id(),
-                                                             deviceId, portDescription);
+                                                             deviceId,
+                                                             portDescription);
             if (event != null) {
                 log.info("Device {} port {} status changed", deviceId, event.port().number());
                 post(event);
             }
         }
 
-        // merges the appropriate PortConfig with the description.
-        private PortDescription consolidate(DeviceId did, PortDescription desc) {
-            switch (desc.type()) {
-                case COPPER:
-                case VIRTUAL:
-                    return desc;
-                default:
-                    OpticalPortConfig opc = networkConfigService.getConfig(
-                            new ConnectPoint(did, desc.portNumber()), OpticalPortConfig.class);
-                    return OpticalPortOperator.combine(opc, desc);
+        @Override
+        public void deletePort(DeviceId deviceId, PortDescription basePortDescription) {
+
+            checkNotNull(deviceId, DEVICE_ID_NULL);
+            checkNotNull(basePortDescription, PORT_DESCRIPTION_NULL);
+            checkValidity();
+
+            if (!mastershipService.isLocalMaster(deviceId)) {
+                // Never been a master for this device
+                // any update will be ignored.
+                log.trace("Ignoring {} port update on standby node. {}", deviceId,
+                          basePortDescription);
+                return;
+            }
+
+            Device device = getDevice(deviceId);
+            if (device == null) {
+                log.trace("Device not found: {}", deviceId);
+            }
+
+            PortDescription newPortDescription = new DefaultPortDescription(basePortDescription.portNumber(),
+                                                                            basePortDescription.isEnabled(),
+                                                                            true,
+                                                                            basePortDescription.type(),
+                                                                            basePortDescription.portSpeed(),
+                                                                            basePortDescription.annotations());
+            final DeviceEvent event = store.updatePortStatus(this.provider().id(),
+                                                             deviceId,
+                                                             newPortDescription);
+            if (event != null) {
+                log.info("Device {} port {} status changed", deviceId, event.port().number());
+                post(event);
             }
         }
 
@@ -499,7 +757,7 @@ public class DeviceManager
                              deviceId, response, mastershipService.getLocalRole(deviceId));
                     // roleManager got the device to comply, but doesn't agree with
                     // the store; use the store's view, then try to reassert.
-                    backgroundService.submit(() -> reassertRole(deviceId, mastershipService.getLocalRole(deviceId)));
+                    backgroundService.execute(() -> reassertRole(deviceId, mastershipService.getLocalRole(deviceId)));
                     return;
                 }
             } else {
@@ -562,7 +820,7 @@ public class DeviceManager
     }
 
     /**
-     * Reaasert role for specified device connected to this node.
+     * Reassert role for specified device connected to this node.
      *
      * @param did      device identifier
      * @param nextRole role to apply. If NONE is specified,
@@ -572,7 +830,7 @@ public class DeviceManager
                               final MastershipRole nextRole) {
 
         MastershipRole myNextRole = nextRole;
-        if (myNextRole == NONE) {
+        if (myNextRole == NONE && upgradeService.isLocalActive()) {
             try {
                 mastershipService.requestRoleFor(did).get();
                 MastershipTerm term = termService.getMastershipTerm(did);
@@ -593,19 +851,7 @@ public class DeviceManager
             case MASTER:
                 final Device device = getDevice(did);
                 if ((device != null) && !isAvailable(did)) {
-                    //flag the device as online. Is there a better way to do this?
-                    DefaultDeviceDescription deviceDescription
-                            = new DefaultDeviceDescription(did.uri(),
-                                                           device.type(),
-                                                           device.manufacturer(),
-                                                           device.hwVersion(),
-                                                           device.swVersion(),
-                                                           device.serialNumber(),
-                                                           device.chassisId());
-                    DeviceEvent devEvent =
-                            store.createOrUpdateDevice(device.providerId(), did,
-                                                       deviceDescription);
-                    post(devEvent);
+                    store.markOnline(did);
                 }
                 // TODO: should apply role only if there is mismatch
                 log.debug("Applying role {} to {}", myNextRole, did);
@@ -626,6 +872,7 @@ public class DeviceManager
                 }
                 break;
             case NONE:
+                break;
             default:
                 // should never reach here
                 log.error("You didn't see anything. I did not exist.");
@@ -634,16 +881,17 @@ public class DeviceManager
     }
 
     private void handleMastershipEvent(MastershipEvent event) {
-        if (event.type() != MastershipEvent.Type.MASTER_CHANGED) {
+        if (event.type() == MastershipEvent.Type.BACKUPS_CHANGED) {
             // Don't care if backup list changed.
             return;
         }
-
         final DeviceId did = event.subject();
 
         // myRole suggested by MastershipService
         MastershipRole myNextRole;
-        if (localNodeId.equals(event.roleInfo().master())) {
+        if (event.type() == MastershipEvent.Type.SUSPENDED) {
+            myNextRole = NONE; // FIXME STANDBY OR NONE?
+        } else if (localNodeId.equals(event.roleInfo().master())) {
             // confirm latest info
             MastershipTerm term = termService.getMastershipTerm(did);
             final boolean iHaveControl = term != null && localNodeId.equals(term.master());
@@ -661,7 +909,12 @@ public class DeviceManager
         final boolean isReachable = isReachable(did);
         if (!isReachable) {
             // device is not connected to this node
-            if (myNextRole != NONE) {
+            if (mastershipService.getLocalRole(did) == NONE) {
+                log.debug("Node was instructed to be {} role for {}, "
+                                  + "but this node cannot reach the device "
+                                  + "and role is already None. Ignoring request.",
+                          myNextRole, did);
+            } else if (myNextRole != NONE) {
                 log.warn("Node was instructed to be {} role for {}, "
                                  + "but this node cannot reach the device.  "
                                  + "Relinquishing role.  ",
@@ -684,7 +937,7 @@ public class DeviceManager
 
         @Override
         public void event(MastershipEvent event) {
-            backgroundService.submit(() -> {
+            backgroundService.execute(() -> {
                 try {
                     handleMastershipEvent(event);
                 } catch (Exception e) {
@@ -738,7 +991,9 @@ public class DeviceManager
             return (event.type() == NetworkConfigEvent.Type.CONFIG_ADDED
                     || event.type() == NetworkConfigEvent.Type.CONFIG_UPDATED)
                     && (event.configClass().equals(BasicDeviceConfig.class)
-                        || event.configClass().equals(OpticalPortConfig.class));
+                    || portOpsIndex.containsKey(event.configClass())
+                    || event.configClass().equals(PortDescriptionsConfig.class)
+                    || event.configClass().equals(DeviceAnnotationConfig.class));
         }
 
         @Override
@@ -747,32 +1002,58 @@ public class DeviceManager
             if (event.configClass().equals(BasicDeviceConfig.class)) {
                 log.debug("Detected device network config event {}", event.type());
                 DeviceId did = (DeviceId) event.subject();
-                BasicDeviceConfig cfg = networkConfigService.getConfig(did, BasicDeviceConfig.class);
+                DeviceProvider dp = getProvider(did);
+                BasicDeviceConfig cfg =
+                        networkConfigService.getConfig(did, BasicDeviceConfig.class);
 
                 if (!isAllowed(cfg)) {
                     kickOutBadDevice(did);
                 } else {
                     Device dev = getDevice(did);
-                    DeviceDescription desc = (dev == null) ? null : BasicDeviceOperator.descriptionOf(dev);
+                    DeviceDescription desc =
+                            (dev == null) ? null : BasicDeviceOperator.descriptionOf(dev);
                     desc = BasicDeviceOperator.combine(cfg, desc);
-                    if (desc != null && getProvider(did) != null) {
-                        de = store.createOrUpdateDevice(getProvider(did).id(), did, desc);
+                    if (desc != null && dp != null) {
+                        de = store.createOrUpdateDevice(dp.id(), did, desc);
                     }
                 }
-            }
-            if (event.configClass().equals(OpticalPortConfig.class)) {
+            } else if (event.configClass().equals(PortDescriptionsConfig.class)) {
+                DeviceId did = (DeviceId) event.subject();
+                DeviceProvider dp = getProvider(did);
+                if (!event.config().isPresent() ||
+                    getDevice(did) == null || dp == null) {
+                    // sanity check failed, ignore
+                    return;
+                }
+                PortDescriptionsConfig portConfig = (PortDescriptionsConfig) event.config().get();
+                    //updating the ports if configuration exists
+                    List<PortDescription> complete = store.getPortDescriptions(dp.id(), did)
+                            .collect(Collectors.toList());
+                    complete.addAll(portConfig.portDescriptions());
+                    store.updatePorts(dp.id(), did, complete);
+            } else if (event.configClass().equals(DeviceAnnotationConfig.class)) {
+                DeviceId did = (DeviceId) event.subject();
+                DeviceProvider dp = getProvider(did);
+                Device dev = getDevice(did);
+                DeviceDescription desc =
+                        (dev == null) ? null : BasicDeviceOperator.descriptionOf(dev);
+                Optional<Config> prevConfig = event.prevConfig();
+                desc = deviceAnnotationOp.combine(did, desc, prevConfig);
+                if (desc != null && dp != null) {
+                    de = store.createOrUpdateDevice(dp.id(), did, desc);
+                }
+            } else if (portOpsIndex.containsKey(event.configClass())) {
                 ConnectPoint cpt = (ConnectPoint) event.subject();
                 DeviceId did = cpt.deviceId();
-                Port dpt = getPort(did, cpt.port());
+                DeviceProvider dp = getProvider(did);
 
-                if (dpt != null) {
-                    OpticalPortConfig opc = networkConfigService.getConfig(cpt, OpticalPortConfig.class);
-                    PortDescription desc = OpticalPortOperator.descriptionOf(dpt);
-                    desc = OpticalPortOperator.combine(opc, desc);
-                    if (desc != null && getProvider(did) != null) {
-                        de = store.updatePortStatus(getProvider(did).id(), did, desc);
-                    }
-                }
+                // Note: assuming PortOperator can modify existing port,
+                //       but cannot add new port purely from Config.
+                de = Optional.ofNullable(dp)
+                        .map(provider -> store.getPortDescription(provider.id(), did, cpt.port()))
+                        .map(desc -> applyAllPortOps(cpt, desc))
+                        .map(desc -> store.updatePortStatus(dp.id(), did, desc))
+                        .orElse(null);
             }
 
             if (de != null) {
@@ -780,13 +1061,125 @@ public class DeviceManager
             }
         }
 
-        // checks if the specified device is allowed by the BasicDeviceConfig
-        // and if not, removes it
+        // removes the specified device if it exists
         private void kickOutBadDevice(DeviceId deviceId) {
             Device badDevice = getDevice(deviceId);
             if (badDevice != null) {
                 removeDevice(deviceId);
             }
+        }
+    }
+
+    @Override
+    @SafeVarargs
+    public final void registerPortConfigOperator(PortConfigOperator portOp,
+                                                 Class<? extends Config<ConnectPoint>>... configs) {
+        checkNotNull(portOp);
+
+        portOp.bindService(networkConfigService);
+
+        // update both portOpsIndex and portOps
+        synchronized (portOpsIndex) {
+            for (Class<? extends Config<ConnectPoint>> config : configs) {
+                portOpsIndex.put(config, portOp);
+            }
+
+            portOps.add(portOp);
+        }
+
+        // TODO: Should we be applying to all existing Ports?
+        Tools.stream(store.getAvailableDevices())
+                .map(Device::id)
+                .filter(mastershipService::isLocalMaster)
+                // for each locally managed Device, update all port descriptions
+                .map(did -> {
+                    ProviderId pid = Optional.ofNullable(getProvider(did))
+                            .map(Provider::id)
+                            .orElse(null);
+                    if (pid == null) {
+                        log.warn("Provider not found for {}", did);
+                        return ImmutableList.<DeviceEvent>of();
+                    }
+                    List<PortDescription> pds
+                            = store.getPortDescriptions(pid, did)
+                            .map(pdesc -> applyAllPortOps(did, pdesc))
+                            .collect(Collectors.toList());
+                    return store.updatePorts(pid, did, pds);
+                })
+                // ..and port port update event if necessary
+                .forEach(evts -> evts.forEach(this::post));
+    }
+
+    @Override
+    public void unregisterPortConfigOperator(PortConfigOperator portOp) {
+        checkNotNull(portOp);
+
+
+        // remove all portOp
+        synchronized (portOpsIndex) {
+            portOps.remove(portOp);
+
+            // had to do this since COWArrayList iterator doesn't support remove
+            portOpsIndex.keySet().forEach(key -> portOpsIndex.remove(key, portOp));
+        }
+
+    }
+
+    /**
+     * Merges the appropriate PortConfig with the description.
+     *
+     * @param did  ID of the Device where the port is attached
+     * @param desc {@link PortDescription}
+     * @return merged {@link PortDescription}
+     */
+    private PortDescription applyAllPortOps(DeviceId did, PortDescription desc) {
+        return applyAllPortOps(new ConnectPoint(did, desc.portNumber()), desc);
+    }
+
+    /**
+     * Merges the appropriate PortConfig with the description.
+     *
+     * @param cpt  ConnectPoint where the port is attached
+     * @param desc {@link PortDescription}
+     * @return merged {@link PortDescription}
+     */
+    private PortDescription applyAllPortOps(ConnectPoint cpt, PortDescription desc) {
+        PortDescription work = desc;
+        for (PortConfigOperator portOp : portOps) {
+            work = portOp.combine(cpt, work);
+        }
+        return portAnnotationOp.combine(cpt, work);
+    }
+
+    /**
+     * Port Enable/Disable message sent to the device's MASTER node.
+     */
+    private class InternalPortUpDownEvent {
+        private final DeviceId deviceId;
+        private final PortNumber portNumber;
+        private final boolean enable;
+
+        protected InternalPortUpDownEvent(
+                DeviceId deviceId, PortNumber portNumber, boolean enable) {
+            this.deviceId = deviceId;
+            this.portNumber = portNumber;
+            this.enable = enable;
+        }
+
+        public DeviceId deviceId() {
+            return deviceId;
+        }
+        public PortNumber portNumber() {
+            return portNumber;
+        }
+        public boolean isEnable() {
+            return enable;
+        }
+
+        protected InternalPortUpDownEvent() {
+            this.deviceId = null;
+            this.portNumber = null;
+            this.enable = false;
         }
     }
 }

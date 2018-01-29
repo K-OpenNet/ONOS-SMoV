@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.onlab.packet.ndp;
 
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.Deserializer;
-import org.onlab.packet.IPacket;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -210,24 +209,7 @@ public class RouterAdvertisement extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(byte[] data, int offset, int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        int bscratch;
 
-        this.currentHopLimit = bb.get();
-        bscratch = bb.get();
-        this.mFlag = (byte) ((bscratch >> 7) & 0x1);
-        this.oFlag = (byte) ((bscratch >> 6) & 0x1);
-        this.routerLifetime = bb.getShort();
-        this.reachableTime = bb.getInt();
-        this.retransmitTimer = bb.getInt();
-
-        this.options.deserialize(data, bb.position(),
-                                 bb.limit() - bb.position());
-
-        return this;
-    }
 
     /*
      * (non-Javadoc)

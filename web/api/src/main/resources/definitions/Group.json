@@ -62,12 +62,12 @@
     "appId": {
       "type": "string",
       "description": "application identifier",
-      "example": "1"
+      "example": "org.onosproject.rest"
     },
     "appCookie": {
       "type": "string",
       "description": "application cookie",
-      "example": "1"
+      "example": "0x1234abcd"
     },
     "buckets": {
       "type": "array",

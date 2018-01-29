@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import java.util.Optional;
 /**
  * Service for obtaining statistic information about link in the system.
  * Statistics are obtained from the FlowRuleService in order to minimize the
- * amount of hammering occuring at the dataplane.
+ * amount of hammering occurring at the dataplane.
  */
 public interface StatisticService {
 

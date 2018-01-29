@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@
     // configuration
     var defaultSettings = {
         zoomMin: 0.05,
-        zoomMax: 10,
+        zoomMax: 50,
         zoomEnabled: function (ev) { return true; },
-        zoomCallback: function () {}
+        zoomCallback: function () {},
     };
 
     // injected references to services
@@ -69,6 +69,7 @@
                     fail = false,
                     zoomer;
 
+
                 if (!settings.svg) {
                     $log.error(cz + 'No "svg" (svg tag)' + d3s);
                     fail = true;
@@ -90,20 +91,25 @@
                     }
                 }
 
-                function adjustZoomLayer(translate, scale) {
-                    settings.zoomLayer.attr('transform',
-                        'translate(' + translate + ')scale(' + scale + ')');
-                    settings.zoomCallback();
+                function adjustZoomLayer(translate, scale, transition) {
+
+                    settings.zoomLayer.transition()
+                        .duration(transition || 0)
+                        .attr('transform',
+                            'translate(' + translate + ')scale(' + scale + ')');
+
+                    settings.zoomCallback(translate, scale);
                 }
 
                 zoomer = {
-                    panZoom: function (translate, scale) {
+                    panZoom: function (translate, scale, transition) {
+
                         zoom.translate(translate).scale(scale);
-                        adjustZoomLayer(translate, scale);
+                        adjustZoomLayer(translate, scale, transition);
                     },
 
                     reset: function () {
-                        zoomer.panZoom([0,0], 1);
+                        zoomer.panZoom([0, 0], 1);
                     },
 
                     translate: function () {
@@ -116,16 +122,20 @@
 
                     scaleExtent: function () {
                         return zoom.scaleExtent();
-                    }
+                    },
                 };
 
                 // apply the zoom behavior to the SVG element
                 settings.svg && settings.svg.call(zoom);
+
+                // Remove zoom on double click (prevents a
+                // false zoom navigating regions)
+                settings.svg.on('dblclick.zoom', null);
                 return zoomer;
             }
 
             return {
-                createZoomer: createZoomer
+                createZoomer: createZoomer,
             };
         }]);
 

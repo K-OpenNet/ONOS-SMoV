@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
  */
 package org.onosproject.faultmanagement.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.hamcrest.Description;
 import org.hamcrest.TypeSafeDiagnosingMatcher;
 import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-
-import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * Hamcrest matcher for alarms.
@@ -35,7 +34,7 @@ public final class AlarmJsonMatcher extends TypeSafeDiagnosingMatcher<JsonNode> 
     @Override
     public boolean matchesSafely(JsonNode jsonAlarm, Description description) {
         String jsonAlarmId = jsonAlarm.get("id").asText();
-        String alarmId = Long.toString(alarm.id().fingerprint());
+        String alarmId = alarm.id().toString();
         if (!jsonAlarmId.equals(alarmId)) {
             description.appendText("alarm id was " + jsonAlarmId);
             return false;

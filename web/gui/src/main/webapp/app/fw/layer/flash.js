@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,12 @@
     'use strict';
 
     // injected references
-    var $log, $timeout;
+    var $timeout;
 
     // configuration
     var defaultSettings = {
             fade: 200,
-            showFor: 1200
+            showFor: 1200,
         },
         w = '100%',
         h = 200,
@@ -70,7 +70,7 @@
             svg = flashDiv.append('svg').attr({
                 width: w,
                 height: h,
-                viewBox: vbox
+                viewBox: vbox,
             });
         }
 
@@ -93,7 +93,7 @@
             .append('g')
             .attr({
                 class: 'flashItem',
-                opacity: 0
+                opacity: 0,
             })
             .transition()
             .duration(settings.fade)
@@ -151,9 +151,8 @@
     }
 
     angular.module('onosLayer')
-        .factory('FlashService', ['$log', '$timeout',
-        function (_$log_, _$timeout_) {
-            $log = _$log_;
+        .factory('FlashService', ['$timeout',
+        function (_$timeout_) {
             $timeout = _$timeout_;
 
             function initFlash(opts) {
@@ -166,7 +165,7 @@
                 initFlash: initFlash,
                 flash: flash,
                 enable: enable,
-                tempDiv: tempDiv
+                tempDiv: tempDiv,
             };
         }]);
 

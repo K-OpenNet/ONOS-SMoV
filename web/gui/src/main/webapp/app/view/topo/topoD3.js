@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,15 @@
     'use strict';
 
     // injected refs
-    var $log, fs, sus, is, ts;
+    var sus, is, ts, ps, ttbs;
+
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#tfs#' + x + '#';
+    };
 
     // api to topoForce
-    var api;
+    var zoomer, api;
     /*
      node()                 // get ref to D3 selection of nodes
      link()                 // get ref to D3 selection of links
@@ -39,44 +44,53 @@
      */
 
     // configuration
-    var devCfg = {
-            xoff: -20,
-            yoff: -18
-        },
-        labelConfig = {
-            imgPad: 16,
-            padLR: 4,
-            padTB: 3,
-            marginLR: 3,
-            marginTB: 2,
-            port: {
-                gap: 3,
-                width: 18,
-                height: 14
-            }
-        },
+    var devIconDim = 36,
+        devColorDim = 32,
+        labelPad = 4,
+        hostRadius = 14,
         badgeConfig = {
             radius: 12,
             yoff: 5,
-            gdelta: 10
+            gdelta: 10,
         },
-        icfg;
-
-    var status = {
-        i: 'badgeInfo',
-        w: 'badgeWarn',
-        e: 'badgeError'
-    };
+        halfDevIcon = devIconDim / 2,
+        devBadgeOff = { dx: -halfDevIcon, dy: -halfDevIcon },
+        hostBadgeOff = { dx: -hostRadius, dy: -hostRadius },
+        portLabelDim = 30,
+        status = {
+            i: 'badgeInfo',
+            w: 'badgeWarn',
+            e: 'badgeError',
+        };
 
     // NOTE: this type of hack should go away once we have implemented
     //       the server-side UiModel code.
     // {virtual -> cord} is for the E-CORD demo at ONS 2016
     var remappedDeviceTypes = {
-        virtual: 'cord'
+        virtual: 'cord',
+
+        // for now, map to the new glyphs via this lookup.
+        // may have to find a better way to do this...
+        'switch': 'm_switch',
+        roadm: 'm_roadm',
+        otn: 'm_otn',
+        roadm_otn: 'm_roadm_otn',
+        fiber_switch: 'm_fiberSwitch',
+        microwave: 'm_microwave',
+    };
+
+    var remappedHostTypes = {
+        router: 'm_router',
+        endstation: 'm_endstation',
+        bgpSpeaker: 'm_bgpSpeaker',
     };
 
     function mapDeviceTypeToGlyph(type) {
         return remappedDeviceTypes[type] || type || 'unknown';
+    }
+
+    function mapHostTypeToGlyph(type) {
+        return remappedHostTypes[type] || type || 'unknown';
     }
 
     function badgeStatus(badge) {
@@ -87,162 +101,110 @@
     var deviceLabelIndex = 0,
         hostLabelIndex = 0;
 
-
-    var dCol = {
-        black: '#000',
-        paleblue: '#acf',
-        offwhite: '#ddd',
-        darkgrey: '#444',
-        midgrey: '#888',
-        lightgrey: '#bbb',
-        orange: '#f90'
-    };
-
-    // note: these are the device icon colors without affinity
+    // note: these are the device icon colors without affinity (no master)
     var dColTheme = {
         light: {
-            rfill: dCol.offwhite,
-            online: {
-                glyph: dCol.darkgrey,
-                rect: dCol.paleblue
-            },
-            offline: {
-                glyph: dCol.midgrey,
-                rect: dCol.lightgrey
-            }
+            online: '#444444',
+            offline: '#cccccc',
         },
         dark: {
-            rfill: dCol.midgrey,
-            online: {
-                glyph: dCol.darkgrey,
-                rect: dCol.paleblue
-            },
-            offline: {
-                glyph: dCol.midgrey,
-                rect: dCol.darkgrey
-            }
-        }
+            // TODO: theme
+            online: '#444444',
+            offline: '#cccccc',
+        },
     };
 
-    function devBaseColor(d) {
-        var o = d.online ? 'online' : 'offline';
-        return dColTheme[ts.theme()][o];
+    function devGlyphColor(d) {
+        var o = d.online,
+            id = d.master,
+            otag = o ? 'online' : 'offline';
+        return o ? sus.cat7().getColor(id, 0, ts.theme())
+                 : dColTheme[ts.theme()][otag];
     }
 
     function setDeviceColor(d) {
-        var o = d.online,
-            s = d.el.classed('selected'),
-            c = devBaseColor(d),
-            a = instColor(d.master, o),
-            icon = d.el.select('g.deviceIcon'),
-            g, r;
-
-        if (s) {
-            g = c.glyph;
-            r = dCol.orange;
-        } else if (api.instVisible()) {
-            g = o ? a : c.glyph;
-            r = o ? c.rfill : a;
-        } else {
-            g = c.glyph;
-            r = c.rect;
-        }
-
-        icon.select('use').style('fill', g);
-        icon.select('rect').style('fill', r);
+        // want to color the square rectangle (no longer the 'use' glyph)
+        d.el.selectAll('rect').filter(function (d, i) { return i === 1; })
+            .style('fill', devGlyphColor(d));
     }
-
-    function instColor(id, online) {
-        return sus.cat7().getColor(id, !online, ts.theme());
-    }
-
-    // ====
 
     function incDevLabIndex() {
-        deviceLabelIndex = (deviceLabelIndex+1) % 3;
-        switch(deviceLabelIndex) {
-            case 0: return 'Hide device labels';
-            case 1: return 'Show friendly device labels';
-            case 2: return 'Show device ID labels';
+        setDevLabIndex(deviceLabelIndex+1);
+        switch (deviceLabelIndex) {
+            case 0: return topoLion('fl_device_labels_hide');
+            case 1: return topoLion('fl_device_labels_show_friendly');
+            case 2: return topoLion('fl_device_labels_show_id');
         }
     }
 
-    // Returns the newly computed bounding box of the rectangle
-    function adjustRectToFitText(n) {
-        var text = n.select('text'),
-            box = text.node().getBBox(),
-            lab = labelConfig;
+    function setDevLabIndex(mode) {
+        deviceLabelIndex = mode % 3;
+        var p = ps.getPrefs('topo_prefs', ttbs.defaultPrefs);
+        p.dlbls = deviceLabelIndex;
+        ps.setPrefs('topo_prefs', p);
+    }
 
-        text.attr('text-anchor', 'middle')
-            .attr('y', '-0.8em')
-            .attr('x', lab.imgPad/2);
+    function incHostLabIndex() {
+        setHostLabIndex(hostLabelIndex+1);
+        switch (hostLabelIndex) {
+            case 0: return topoLion('fl_host_labels_show_friendly');
+            case 1: return topoLion('fl_host_labels_show_ip');
+            case 2: return topoLion('fl_host_labels_show_mac');
+            case 3: return topoLion('fl_host_labels_hide');
+        }
+    }
 
-        // translate the bbox so that it is centered on [x,y]
-        box.x = -box.width / 2;
-        box.y = -box.height / 2;
-
-        // add padding
-        box.x -= (lab.padLR + lab.imgPad/2);
-        box.width += lab.padLR * 2 + lab.imgPad;
-        box.y -= lab.padTB;
-        box.height += lab.padTB * 2;
-
-        return box;
+    function setHostLabIndex(mode) {
+        hostLabelIndex = mode % 4;
+        var p = ps.getPrefs('topo_prefs', ttbs.defaultPrefs);
+        p.hlbls = hostLabelIndex;
+        ps.setPrefs('topo_prefs', p);
     }
 
     function hostLabel(d) {
         var idx = (hostLabelIndex < d.labels.length) ? hostLabelIndex : 0;
         return d.labels[idx];
     }
+
     function deviceLabel(d) {
         var idx = (deviceLabelIndex < d.labels.length) ? deviceLabelIndex : 0;
         return d.labels[idx];
     }
+
     function trimLabel(label) {
         return (label && label.trim()) || '';
     }
 
-    function emptyBox() {
+    function computeLabelWidth(n) {
+        var text = n.select('text'),
+            box = text.node().getBBox();
+        return box.width + labelPad * 2;
+    }
+
+    function iconBox(dim, labelWidth) {
         return {
-            x: -2,
-            y: -2,
-            width: 4,
-            height: 4
+            x: -dim/2,
+            y: -dim/2,
+            width: dim + labelWidth,
+            height: dim,
         };
     }
 
     function updateDeviceRendering(d) {
-        var label = trimLabel(deviceLabel(d)),
-            noLabel = !label,
-            node = d.el,
-            dim = icfg.device.dim,
-            box, dx, dy,
-            bdg = d.badge;
+        var node = d.el,
+            bdg = d.badge,
+            label = trimLabel(deviceLabel(d)),
+            labelWidth;
 
-        node.select('text')
-            .text(label);
-
-        if (noLabel) {
-            box = emptyBox();
-            dx = -dim/2;
-            dy = -dim/2;
-        } else {
-            box = adjustRectToFitText(node);
-            dx = box.x + devCfg.xoff;
-            dy = box.y + devCfg.yoff;
-        }
+        node.select('text').text(label);
+        labelWidth = label ? computeLabelWidth(node) : 0;
 
         node.select('rect')
             .transition()
-            .attr(box);
+            .attr(iconBox(devIconDim, labelWidth));
 
-        node.select('g.deviceIcon')
-            .transition()
-            .attr('transform', sus.translate(dx, dy));
-
-        // handle badge, if defined
         if (bdg) {
-            renderBadge(node, bdg, { dx: dx + dim, dy: dy });
+            renderBadge(node, bdg, devBadgeOff);
         }
     }
 
@@ -252,9 +214,8 @@
 
         updateHostLabel(d);
 
-        // handle badge, if defined
         if (bdg) {
-            renderBadge(node, bdg, icfg.host.badge);
+            renderBadge(node, bdg, hostBadgeOff);
         }
     }
 
@@ -284,7 +245,7 @@
                     width: bcgd * 2,
                     height: bcgd * 2,
                     transform: sus.translate(-bcgd, -bcgd),
-                    'xlink:href': '#' + bdg.gid
+                    'xlink:href': '#' + bdg.gid,
                 });
         }
     }
@@ -324,46 +285,49 @@
         var node = d3.select(this),
             glyphId = mapDeviceTypeToGlyph(d.type),
             label = trimLabel(deviceLabel(d)),
-            noLabel = !label,
-            box, dx, dy, icon;
+            rect, crect, glyph, labelWidth;
 
         d.el = node;
 
-        node.append('rect').attr({ rx: 5, ry: 5 });
-        node.append('text').text(label).attr('dy', '1.1em');
-        box = adjustRectToFitText(node);
-        node.select('rect').attr(box);
+        rect = node.append('rect');
+        crect = node.append('rect');
 
-        icon = is.addDeviceIcon(node, glyphId);
+        node.append('text').text(label)
+            .attr('text-anchor', 'left')
+            .attr('y', '0.3em')
+            .attr('x', halfDevIcon + labelPad);
 
-        if (noLabel) {
-            dx = -icon.dim/2;
-            dy = -icon.dim/2;
-        } else {
-            box = adjustRectToFitText(node);
-            dx = box.x + devCfg.xoff;
-            dy = box.y + devCfg.yoff;
-        }
+        glyph = is.addDeviceIcon(node, glyphId, devIconDim);
 
-        icon.attr('transform', sus.translate(dx, dy));
+        labelWidth = label ? computeLabelWidth(node) : 0;
+
+        rect.attr(iconBox(devIconDim, labelWidth));
+        crect.attr(iconBox(devColorDim, 0));
+        glyph.attr(iconBox(devIconDim, 0));
+
+        node.attr('transform', sus.translate(-halfDevIcon, -halfDevIcon));
+
+        d.el.selectAll('*')
+            .style('transform', 'scale(' + api.deviceScale() + ')');
     }
 
     function hostEnter(d) {
         var node = d3.select(this),
-            gid = d.type || 'unknown',
-            rad = icfg.host.radius,
-            r = d.type ? rad.withGlyph : rad.noGlyph,
-            textDy = r + 10;
+            glyphId = mapHostTypeToGlyph(d.type),
+            textDy = hostRadius + 10;
 
         d.el = node;
         sus.visible(node, api.showHosts());
 
-        is.addHostIcon(node, r, gid);
+        is.addHostIcon(node, hostRadius, glyphId);
 
         node.append('text')
             .text(hostLabel)
             .attr('dy', textDy)
             .attr('text-anchor', 'middle');
+
+        d.el.selectAll('g').style('transform', 'scale(' + api.deviceScale() + ')');
+        d.el.selectAll('text').style('transform', 'scale(' + api.deviceScale() + ')');
     }
 
     function hostExit(d) {
@@ -408,8 +372,10 @@
     // updateLinks - subfunctions
 
     function linkEntering(d) {
+
         var link = d3.select(this);
         d.el = link;
+        d.el.style('stroke-width', api.linkWidthScale() + 'px');
         api.restyleLinkElement(d);
         if (d.type() === 'hostLink') {
             sus.visible(link, api.showHosts());
@@ -453,7 +419,7 @@
             rect.attr(rectAroundText(el));
             text.attr('dy', linkLabelOffset);
 
-            el.attr('transform', transformLabel(d.ldata.position));
+            el.attr('transform', transformLabel(d.ldata.position, d.key));
         });
 
         // Remove any labels that are no longer required.
@@ -474,11 +440,56 @@
         return box;
     }
 
-    function transformLabel(p) {
+    function generateLabelFunction() {
+        var labels = [],
+            xGap = 15,
+            yGap = 17;
+
+        return function (newId, newX, newY) {
+            var idx = -1;
+
+            labels.forEach(function (lab, i) {
+                var minX, maxX, minY, maxY;
+
+                if (lab.id === newId) {
+                    idx = i;
+                    return;
+                }
+                minX = lab.x - xGap;
+                maxX = lab.x + xGap;
+                minY = lab.y - yGap;
+                maxY = lab.y + yGap;
+
+                if (newX > minX && newX < maxX && newY > minY && newY < maxY) {
+                    // labels are overlapped
+                    newX = newX - xGap;
+                    newY = newY - yGap;
+                }
+            });
+
+            if (idx === -1) {
+                labels.push({ id: newId, x: newX, y: newY });
+            } else {
+                labels[idx] = { id: newId, x: newX, y: newY };
+            }
+
+            return { x: newX, y: newY };
+        };
+    }
+
+    var getLabelPos = generateLabelFunction();
+
+    function transformLabel(p, id) {
         var dx = p.x2 - p.x1,
             dy = p.y2 - p.y1,
             xMid = dx/2 + p.x1,
             yMid = dy/2 + p.y1;
+
+        if (id) {
+            var pos = getLabelPos(id, xMid, yMid);
+            return sus.translate(pos.x, pos.y);
+        }
+
         return sus.translate(xMid, yMid);
     }
 
@@ -488,13 +499,18 @@
             .classed('portLabel', true)
             .attr('id', function (d) { return d.id; });
 
+        var labelScale = portLabelDim / (portLabelDim * zoomer.scale());
+
         entering.each(function (d) {
             var el = d3.select(this),
                 rect = el.append('rect'),
                 text = el.append('text').text(d.num);
 
-            rect.attr(rectAroundText(el));
-            text.attr('dy', linkLabelOffset);
+            rect.attr(rectAroundText(el))
+                .style('transform', 'scale(' + labelScale + ')');
+            text.attr('dy', linkLabelOffset)
+                .style('transform', 'scale(' + labelScale + ')');
+
             el.attr('transform', sus.translate(d.x, d.y));
         });
     }
@@ -508,7 +524,7 @@
 
         return {
             x: movedX,
-            y: movedY
+            y: movedY,
         };
     }
 
@@ -535,7 +551,7 @@
             x2: mid.x + moveAmtX,
             y2: mid.y + moveAmtY,
             stroke: api.linkConfig()[ts.theme()].baseColor,
-            transform: 'rotate(' + angle + ',' + mid.x + ',' + mid.y + ')'
+            transform: 'rotate(' + angle + ',' + mid.x + ',' + mid.y + ')',
         };
     }
 
@@ -544,7 +560,7 @@
             dist = 20;
         return {
             x: point.x + dist,
-            y: point.y + dist
+            y: point.y + dist,
         };
     }
 
@@ -558,7 +574,7 @@
             var el = d3.select(this);
 
             el.attr({
-                transform: function (d) { return calcGroupPos(d.linkCoords); }
+                transform: function (d) { return calcGroupPos(d.linkCoords); },
             });
             el.select('line')
                 .attr(hashAttrs(d.linkCoords));
@@ -573,7 +589,7 @@
             .append('g')
             .attr({
                 transform: function (d) { return calcGroupPos(d.linkCoords); },
-                id: function (d) { return 'pair-' + d.id; }
+                id: function (d) { return 'pair-' + d.id; },
             })
             .classed('numLinkLabel', true);
 
@@ -593,24 +609,29 @@
         labels.exit().remove();
     }
 
+    // invoked after the localization bundle has been received from the server
+    function setLionBundle(bundle) {
+        topoLion = bundle;
+    }
+
     // ==========================
     // Module definition
 
     angular.module('ovTopo')
     .factory('TopoD3Service',
-        ['$log', 'FnService', 'SvgUtilService', 'IconService', 'ThemeService',
+        ['SvgUtilService', 'IconService', 'ThemeService',
+            'PrefsService', 'TopoToolbarService',
 
-        function (_$log_, _fs_, _sus_, _is_, _ts_) {
-            $log = _$log_;
-            fs = _fs_;
+        function (_sus_, _is_, _ts_, _ps_, _ttbs_) {
             sus = _sus_;
             is = _is_;
             ts = _ts_;
+            ps = _ps_;
+            ttbs = _ttbs_;
 
-            icfg = is.iconConfig();
-
-            function initD3(_api_) {
+            function initD3(_api_, _zoomer_) {
                 api = _api_;
+                zoomer = _zoomer_;
             }
 
             function destroyD3() { }
@@ -620,7 +641,9 @@
                 destroyD3: destroyD3,
 
                 incDevLabIndex: incDevLabIndex,
-                adjustRectToFitText: adjustRectToFitText,
+                setDevLabIndex: setDevLabIndex,
+                incHostLabIndex: incHostLabIndex,
+                setHostLabIndex: setHostLabIndex,
                 hostLabel: hostLabel,
                 deviceLabel: deviceLabel,
                 trimLabel: trimLabel,
@@ -640,7 +663,9 @@
                 applyLinkLabels: applyLinkLabels,
                 transformLabel: transformLabel,
                 applyPortLabels: applyPortLabels,
-                applyNumLinkLabels: applyNumLinkLabels
+                applyNumLinkLabels: applyNumLinkLabels,
+
+                setLionBundle: setLionBundle,
             };
         }]);
 }());

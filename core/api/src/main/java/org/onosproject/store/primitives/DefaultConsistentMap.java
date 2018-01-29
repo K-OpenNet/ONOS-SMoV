@@ -1,7 +1,5 @@
-package org.onosproject.store.primitives;
-
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +13,8 @@ package org.onosproject.store.primitives;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.onosproject.store.primitives;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -22,9 +22,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -47,7 +49,7 @@ import com.google.common.base.Throwables;
  */
 public class DefaultConsistentMap<K, V> extends Synchronous<AsyncConsistentMap<K, V>> implements ConsistentMap<K, V> {
 
-    private static final int MAX_DELAY_BETWEEN_RETY_MILLS = 50;
+    private static final int MAX_DELAY_BETWEEN_RETRY_MILLS = 50;
     private final AsyncConsistentMap<K, V> asyncMap;
     private final long operationTimeoutMillis;
     private Map<K, V> javaMap;
@@ -84,6 +86,11 @@ public class DefaultConsistentMap<K, V> extends Synchronous<AsyncConsistentMap<K
     }
 
     @Override
+    public Versioned<V> getOrDefault(K key, V defaultValue) {
+        return complete(asyncMap.getOrDefault(key, defaultValue));
+    }
+
+    @Override
     public Versioned<V> computeIfAbsent(K key,
             Function<? super K, ? extends V> mappingFunction) {
         return computeIf(key, Objects::isNull, (k, v) -> mappingFunction.apply(k));
@@ -108,7 +115,7 @@ public class DefaultConsistentMap<K, V> extends Synchronous<AsyncConsistentMap<K
         return Tools.retryable(() -> complete(asyncMap.computeIf(key, condition, remappingFunction)),
                                ConcurrentModification.class,
                                Integer.MAX_VALUE,
-                               MAX_DELAY_BETWEEN_RETY_MILLS).get();
+                               MAX_DELAY_BETWEEN_RETRY_MILLS).get();
     }
 
     @Override
@@ -177,13 +184,28 @@ public class DefaultConsistentMap<K, V> extends Synchronous<AsyncConsistentMap<K
     }
 
     @Override
-    public void addListener(MapEventListener<K, V> listener) {
-        complete(asyncMap.addListener(listener));
+    public void addListener(MapEventListener<K, V> listener, Executor executor) {
+        complete(asyncMap.addListener(listener, executor));
     }
 
     @Override
     public void removeListener(MapEventListener<K, V> listener) {
-        complete(asyncMap.addListener(listener));
+        complete(asyncMap.removeListener(listener));
+    }
+
+    @Override
+    public void addStatusChangeListener(Consumer<Status> listener) {
+        asyncMap.addStatusChangeListener(listener);
+    }
+
+    @Override
+    public void removeStatusChangeListener(Consumer<Status> listener) {
+        asyncMap.removeStatusChangeListener(listener);
+    }
+
+    @Override
+    public Collection<Consumer<Status>> statusChangeListeners() {
+        return asyncMap.statusChangeListeners();
     }
 
     @Override
@@ -208,7 +230,7 @@ public class DefaultConsistentMap<K, V> extends Synchronous<AsyncConsistentMap<K
             Thread.currentThread().interrupt();
             throw new ConsistentMapException.Interrupted();
         } catch (TimeoutException e) {
-            throw new ConsistentMapException.Timeout();
+            throw new ConsistentMapException.Timeout(name());
         } catch (ExecutionException e) {
             Throwables.propagateIfPossible(e.getCause());
             throw new ConsistentMapException(e.getCause());

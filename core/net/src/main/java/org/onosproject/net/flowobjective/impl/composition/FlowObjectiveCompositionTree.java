@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,10 +30,10 @@ import java.util.List;
  */
 public class FlowObjectiveCompositionTree {
 
-    public FlowObjectiveCompositionManager.PolicyOperator operator;
-    public FlowObjectiveCompositionTree leftChild;
-    public FlowObjectiveCompositionTree rightChild;
-    public short applicationId;
+    FlowObjectiveCompositionManager.PolicyOperator operator;
+    FlowObjectiveCompositionTree leftChild;
+    FlowObjectiveCompositionTree rightChild;
+    protected short applicationId;
     protected FilterTable filterTable;
     protected ForwardTable forwardTable;
     protected NextTable nextTable;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,10 +36,10 @@ public interface Path<V extends Vertex, E extends Edge<V>> extends Edge<V> {
     List<E> edges();
 
     /**
-     * Returns the total cost of the path as a unit-less number.
+     * Returns the total cost of the path as a weight object.
      *
-     * @return path cost as a unit-less number
+     * @return path cost as a weight object
      */
-    double cost();
+    Weight cost();
 
 }

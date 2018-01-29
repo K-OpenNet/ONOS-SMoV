@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,14 @@ package org.onosproject.cluster;
 
 import org.onlab.util.Identifier;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 /**
  * Controller cluster identity.
  */
 public final class NodeId extends Identifier<String> implements Comparable<NodeId> {
+
+    private static final int ID_MAX_LENGTH = 1024;
 
     /**
      * Constructor for serialization.
@@ -36,6 +40,7 @@ public final class NodeId extends Identifier<String> implements Comparable<NodeI
      */
     public NodeId(String id) {
         super(id);
+        checkArgument(id.length() <= ID_MAX_LENGTH, "id exceeds maximum length " + ID_MAX_LENGTH);
     }
 
     /**

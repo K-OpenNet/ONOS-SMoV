@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  */
 package org.onosproject.codec;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Context for codecs to use while encoding/decoding.
@@ -43,8 +46,35 @@ public interface CodecContext {
      *
      * @param serviceClass service class
      * @param <T>          service type
-     * @return JSON codec; null if no codec available for the class
+     * @return service implementation; null if no implementation available for the class
      */
     <T> T getService(Class<T> serviceClass);
+
+    /**
+     * Decodes the specified entity from JSON using codec
+     * registered to this context.
+     *
+     * @param json    JSON to decode
+     * @param entityClass entity class
+     * @param <T> entity type
+     * @return decoded entity
+     */
+    default <T> T decode(JsonNode json, Class<T> entityClass) {
+        checkArgument(json.isObject());
+        return codec(entityClass).decode((ObjectNode) json, this);
+    }
+
+    /**
+     * Encodes the specified entity into JSON using codec
+     * registered to this context.
+     *
+     * @param entity  entity to encode
+     * @param entityClass entity class
+     * @param <T> entity type
+     * @return JSON node
+     */
+    default <T> ObjectNode encode(T entity, Class<T> entityClass) {
+        return codec(entityClass).encode(entity, this);
+    }
 
 }

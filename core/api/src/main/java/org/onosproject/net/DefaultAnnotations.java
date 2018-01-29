@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.util.Set;
 import com.google.common.collect.Maps;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.collect.Maps.transformValues;
 
 /**
  * Represents a set of simple annotations that can be used to add arbitrary
@@ -140,6 +141,10 @@ public final class DefaultAnnotations implements SparseAnnotations {
             return annotations;
         }
 
+        if (annotations.keys().isEmpty()) {
+            return sparseAnnotations;
+        }
+
         final HashMap<String, String> newMap;
         if (annotations instanceof DefaultAnnotations) {
             newMap = copy(((DefaultAnnotations) annotations).map);
@@ -242,6 +247,18 @@ public final class DefaultAnnotations implements SparseAnnotations {
                 base.keys().forEach(key -> set(key, base.value(key)));
 
             }
+            return this;
+        }
+
+        /**
+         * Adds all entries in specified map.
+         * Any previous entries with same key will be overwritten.
+         *
+         * @param entries annotation key and value entries
+         * @return self
+         */
+        public Builder putAll(Map<String, String> entries) {
+            builder.putAll(transformValues(entries, v -> (v == null) ? REMOVED : v));
             return this;
         }
 

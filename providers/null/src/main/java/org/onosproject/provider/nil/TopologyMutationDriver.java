@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -167,7 +167,8 @@ class TopologyMutationDriver implements Runnable {
      * @param deviceId device identifier
      */
     void repairDevice(DeviceId deviceId) {
-        int chassisId = Integer.parseInt(deviceId.uri().getSchemeSpecificPart());
+        // device IDs are expressed in hexadecimal... (use radix 16)
+        int chassisId = Integer.parseInt(deviceId.uri().getSchemeSpecificPart(), 16);
         simulator.createDevice(deviceId, chassisId);
         Set<Link> links = savedLinks.remove(deviceId);
         if (links != null) {

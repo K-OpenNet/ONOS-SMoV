@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package org.onosproject.store.trivial;
 
-import static org.apache.commons.lang3.concurrent.ConcurrentUtils.createIfAbsentUnchecked;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.util.ArrayList;
@@ -24,7 +23,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,8 +33,6 @@ import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Service;
-import org.onlab.util.NewConcurrentHashMap;
-import org.onosproject.core.DefaultGroupId;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.group.DefaultGroup;
@@ -72,7 +68,7 @@ public class SimpleGroupStore
     private final Logger log = getLogger(getClass());
 
     private final int dummyId = 0xffffffff;
-    private final GroupId dummyGroupId = new DefaultGroupId(dummyId);
+    private final GroupId dummyGroupId = new GroupId(dummyId);
 
     // inner Map is per device group table
     private final ConcurrentMap<DeviceId, ConcurrentMap<GroupKey, StoredGroupEntry>>
@@ -100,26 +96,6 @@ public class SimpleGroupStore
         log.info("Stopped");
     }
 
-    private static NewConcurrentHashMap<GroupKey, StoredGroupEntry>
-                        lazyEmptyGroupKeyTable() {
-        return NewConcurrentHashMap.<GroupKey, StoredGroupEntry>ifNeeded();
-    }
-
-    private static NewConcurrentHashMap<GroupId, StoredGroupEntry>
-                        lazyEmptyGroupIdTable() {
-        return NewConcurrentHashMap.<GroupId, StoredGroupEntry>ifNeeded();
-    }
-
-    private static NewConcurrentHashMap<GroupKey, StoredGroupEntry>
-                        lazyEmptyPendingGroupKeyTable() {
-        return NewConcurrentHashMap.<GroupKey, StoredGroupEntry>ifNeeded();
-    }
-
-    private static NewConcurrentHashMap<GroupId, Group>
-                        lazyEmptyExtraneousGroupIdTable() {
-        return NewConcurrentHashMap.<GroupId, Group>ifNeeded();
-    }
-
     /**
      * Returns the group key table for specified device.
      *
@@ -127,8 +103,7 @@ public class SimpleGroupStore
      * @return Map representing group key table of given device.
      */
     private ConcurrentMap<GroupKey, StoredGroupEntry> getGroupKeyTable(DeviceId deviceId) {
-        return createIfAbsentUnchecked(groupEntriesByKey,
-                                       deviceId, lazyEmptyGroupKeyTable());
+        return groupEntriesByKey.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
     }
 
     /**
@@ -138,8 +113,7 @@ public class SimpleGroupStore
      * @return Map representing group key table of given device.
      */
     private ConcurrentMap<GroupId, StoredGroupEntry> getGroupIdTable(DeviceId deviceId) {
-        return createIfAbsentUnchecked(groupEntriesById,
-                                       deviceId, lazyEmptyGroupIdTable());
+        return groupEntriesById.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
     }
 
     /**
@@ -150,8 +124,7 @@ public class SimpleGroupStore
      */
     private ConcurrentMap<GroupKey, StoredGroupEntry>
                     getPendingGroupKeyTable(DeviceId deviceId) {
-        return createIfAbsentUnchecked(pendingGroupEntriesByKey,
-                                       deviceId, lazyEmptyPendingGroupKeyTable());
+        return pendingGroupEntriesByKey.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
     }
 
     /**
@@ -162,9 +135,7 @@ public class SimpleGroupStore
      */
     private ConcurrentMap<GroupId, Group>
                 getExtraneousGroupIdTable(DeviceId deviceId) {
-        return createIfAbsentUnchecked(extraneousGroupEntriesById,
-                                       deviceId,
-                                       lazyEmptyExtraneousGroupIdTable());
+        return extraneousGroupEntriesById.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
     }
 
     /**
@@ -220,13 +191,13 @@ public class SimpleGroupStore
         while (true) {
             Group existing = (
                     groupEntriesById.get(deviceId) != null) ?
-                    groupEntriesById.get(deviceId).get(new DefaultGroupId(freeId)) :
+                    groupEntriesById.get(deviceId).get(new GroupId(freeId)) :
                     null;
             if (existing == null) {
                 existing = (
                         extraneousGroupEntriesById.get(deviceId) != null) ?
                         extraneousGroupEntriesById.get(deviceId).
-                        get(new DefaultGroupId(freeId)) :
+                        get(new GroupId(freeId)) :
                         null;
             }
             if (existing != null) {
@@ -274,9 +245,9 @@ public class SimpleGroupStore
         GroupId id = null;
         if (groupDesc.givenGroupId() == null) {
             // Get a new group identifier
-            id = new DefaultGroupId(getFreeGroupIdValue(groupDesc.deviceId()));
+            id = new GroupId(getFreeGroupIdValue(groupDesc.deviceId()));
         } else {
-            id = new DefaultGroupId(groupDesc.givenGroupId());
+            id = new GroupId(groupDesc.givenGroupId());
         }
         // Create a group entry object
         StoredGroupEntry group = new DefaultGroup(id, groupDesc);
@@ -347,34 +318,56 @@ public class SimpleGroupStore
     }
 
     private List<GroupBucket> getUpdatedBucketList(Group oldGroup,
-                                   UpdateType type,
-                                   GroupBuckets buckets) {
-        GroupBuckets oldBuckets = oldGroup.buckets();
-        List<GroupBucket> newBucketList = new ArrayList<>(oldBuckets.buckets());
+                                                   UpdateType type,
+                                                   GroupBuckets buckets) {
+        if (type == UpdateType.SET) {
+            return buckets.buckets();
+        }
+
+        List<GroupBucket> oldBuckets = oldGroup.buckets().buckets();
+        List<GroupBucket> updatedBucketList = new ArrayList<>();
         boolean groupDescUpdated = false;
 
         if (type == UpdateType.ADD) {
-            // Check if the any of the new buckets are part of
-            // the old bucket list
-            for (GroupBucket addBucket:buckets.buckets()) {
-                if (!newBucketList.contains(addBucket)) {
-                    newBucketList.add(addBucket);
-                    groupDescUpdated = true;
+            List<GroupBucket> newBuckets = buckets.buckets();
+
+            // Add old buckets that will not be updated and check if any will be updated.
+            for (GroupBucket oldBucket : oldBuckets) {
+                int newBucketIndex = newBuckets.indexOf(oldBucket);
+
+                if (newBucketIndex != -1) {
+                    GroupBucket newBucket = newBuckets.get(newBucketIndex);
+                    if (!newBucket.hasSameParameters(oldBucket)) {
+                        // Bucket will be updated
+                        groupDescUpdated = true;
+                    }
+                } else {
+                    // Old bucket will remain the same - add it.
+                    updatedBucketList.add(oldBucket);
                 }
             }
+
+            // Add all new buckets
+            updatedBucketList.addAll(newBuckets);
+            if (!oldBuckets.containsAll(newBuckets)) {
+                groupDescUpdated = true;
+            }
+
         } else if (type == UpdateType.REMOVE) {
-            // Check if the to be removed buckets are part of the
-            // old bucket list
-            for (GroupBucket removeBucket:buckets.buckets()) {
-                if (newBucketList.contains(removeBucket)) {
-                    newBucketList.remove(removeBucket);
+            List<GroupBucket> bucketsToRemove = buckets.buckets();
+
+            // Check which old buckets should remain
+            for (GroupBucket oldBucket : oldBuckets) {
+                if (!bucketsToRemove.contains(oldBucket)) {
+                    updatedBucketList.add(oldBucket);
+                } else {
                     groupDescUpdated = true;
                 }
             }
         }
 
         if (groupDescUpdated) {
-            return newBucketList;
+            return updatedBucketList;
         } else {
             return null;
         }
@@ -423,7 +416,7 @@ public class SimpleGroupStore
                     Optional<GroupBucket> matchingBucket =
                             existing.buckets().buckets()
                             .stream()
-                            .filter((existingBucket)->(existingBucket.equals(bucket)))
+                            .filter((existingBucket) -> (existingBucket.equals(bucket)))
                             .findFirst();
                     if (matchingBucket.isPresent()) {
                         ((StoredGroupBucketEntry) matchingBucket.
@@ -489,6 +482,18 @@ public class SimpleGroupStore
         entryPendingRemove.forEach(entry -> {
             notifyDelegate(new GroupEvent(Type.GROUP_REMOVED, entry.getValue()));
         });
+    }
+
+    @Override
+    public void purgeGroupEntries() {
+        groupEntriesById.values().forEach(groupEntries -> {
+            groupEntries.entrySet().forEach(entry -> {
+                notifyDelegate(new GroupEvent(Type.GROUP_REMOVED, entry.getValue()));
+            });
+        });
+
+        groupEntriesById.clear();
+        groupEntriesByKey.clear();
     }
 
     @Override
@@ -603,22 +608,21 @@ public class SimpleGroupStore
         Set<Group> extraneousStoredEntries =
                 Sets.newHashSet(getExtraneousGroups(deviceId));
 
-        log.trace("pushGroupMetrics: Displaying all ({}) "
-                + "southboundGroupEntries for device {}",
-                  southboundGroupEntries.size(),
-                  deviceId);
-        for (Iterator<Group> it = southboundGroupEntries.iterator(); it.hasNext();) {
-            Group group = it.next();
-            log.trace("Group {} in device {}", group, deviceId);
-        }
+        if (log.isTraceEnabled()) {
+            log.trace("pushGroupMetrics: Displaying all ({}) "
+                            + "southboundGroupEntries for device {}",
+                    southboundGroupEntries.size(),
+                    deviceId);
+            for (Group group : southboundGroupEntries) {
+                log.trace("Group {} in device {}", group, deviceId);
+            }
 
-        log.trace("Displaying all ({}) stored group entries for device {}",
-                  storedGroupEntries.size(),
-                  deviceId);
-        for (Iterator<Group> it1 = storedGroupEntries.iterator();
-                it1.hasNext();) {
-            Group group = it1.next();
-            log.trace("Stored Group {} for device {}", group, deviceId);
+            log.trace("Displaying all ({}) stored group entries for device {}",
+                    storedGroupEntries.size(),
+                    deviceId);
+            for (Group group : storedGroupEntries) {
+                log.trace("Stored Group {} for device {}", group, deviceId);
+            }
         }
 
         for (Iterator<Group> it2 = southboundGroupEntries.iterator(); it2.hasNext();) {
@@ -673,6 +677,17 @@ public class SimpleGroupStore
                     + "AUDIT completed", deviceId);
             deviceInitialAuditCompleted(deviceId, true);
         }
+    }
+
+    @Override
+    public void notifyOfFailovers(Collection<Group> failoverGroups) {
+        List<GroupEvent> failoverEvents = new ArrayList<>();
+        failoverGroups.forEach(group -> {
+            if (group.type() == Group.Type.FAILOVER) {
+                failoverEvents.add(new GroupEvent(GroupEvent.Type.GROUP_BUCKET_FAILOVER, group));
+            }
+        });
+        notifyDelegate(failoverEvents);
     }
 
     private void groupMissing(Group group) {

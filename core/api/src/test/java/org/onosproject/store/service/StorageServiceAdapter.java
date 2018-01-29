@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,17 +30,22 @@ public class StorageServiceAdapter implements StorageService {
     }
 
     @Override
+    public <V> DocumentTreeBuilder<V> documentTreeBuilder() {
+        return null;
+    }
+
+    @Override
     public <E> DistributedSetBuilder<E> setBuilder() {
         return null;
     }
 
     @Override
-    public <E> DistributedQueueBuilder<E> queueBuilder() {
+    public AtomicCounterBuilder atomicCounterBuilder() {
         return null;
     }
 
     @Override
-    public AtomicCounterBuilder atomicCounterBuilder() {
+    public AtomicIdGeneratorBuilder atomicIdGeneratorBuilder() {
         return null;
     }
 
@@ -56,6 +61,48 @@ public class StorageServiceAdapter implements StorageService {
 
     @Override
     public LeaderElectorBuilder leaderElectorBuilder() {
+        return null;
+    }
+
+    @Override
+    public <E> WorkQueue<E> getWorkQueue(String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <K, V> AsyncConsistentMultimap<K, V> getAsyncSetMultimap(
+            String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <T> Topic<T> getTopic(String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <V> AsyncConsistentTreeMap<V> getAsyncTreeMap(
+            String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <V> ConsistentTreeMapBuilder<V> consistentTreeMapBuilder() {
+        return null;
+    }
+
+    @Override
+    public <V> AsyncDocumentTree<V> getDocumentTree(String name, Serializer serializer) {
+        return null;
+    }
+
+    @Override
+    public <K, V> ConsistentMultimapBuilder<K, V> consistentMultimapBuilder() {
+        return null;
+    }
+
+    @Override
+    public <K> AtomicCounterMapBuilder<K> atomicCounterMapBuilder() {
         return null;
     }
 }

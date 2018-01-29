@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,19 @@ public final class Constants {
     public static final byte SAFI_FLOWSPEC_VALUE = (byte) 133;
     public static final byte VPN_SAFI_FLOWSPEC_VALUE = (byte) 134;
 
+    /* TODO: The Capability Code
+   for this capability is to be specified by the IANA.*/
+    public static final short AFI_FLOWSPEC_RPD_VALUE = 1;
+    public static final byte SAFI_FLOWSPEC_RPD_VALUE = (byte) 133;
+    public static final byte VPN_SAFI_FLOWSPEC_RDP_VALUE = (byte) 134;
+
+    public static final short AFI_EVPN_VALUE = 25;
+    public static final byte SAFI_EVPN_VALUE = (byte) 70;
+
+    public static final byte RPD_CAPABILITY_RECEIVE_VALUE = 0;
+    public static final byte RPD_CAPABILITY_SEND_VALUE = 1;
+    public static final byte RPD_CAPABILITY_SEND_RECEIVE_VALUE = 2;
+
     public static final int EXTRA_TRAFFIC = 0x01;
     public static final int UNPROTECTED = 0x02;
     public static final int SHARED = 0x04;
@@ -62,6 +75,15 @@ public final class Constants {
     public static final byte BGP_FLOWSPEC_PCK_LEN = 0x0a;
     public static final byte BGP_FLOWSPEC_DSCP = 0x0b;
     public static final byte BGP_FLOWSPEC_FRAGMENT = 0x0c;
+
+    // for EVPN
+    public static final short BGP_ROUTE_TARGET_AS = (short) 0x0002;
+    public static final short BGP_ROUTE_TARGET_IP = (short) 0x0102;
+    public static final short BGP_ROUTE_TARGET_LARGEAS = (short) 0x0202;
+    public static final short BGP_EVPN_ETHERNET_AUTO_DISCOVERY = (short) 0x01;
+    public static final short BGP_EVPN_MAC_IP_ADVERTISEMENT = (short) 0x02;
+    public static final short BGP_EVPN_INCLUSIVE_MULTICASE_ETHERNET = (short) 0x03;
+    public static final short BGP_EVPN_ETHERNET_SEGMENT = (short) 0x04;
 
     public static final short BGP_FLOWSPEC_ACTION_TRAFFIC_RATE = (short) 0x8006;
     public static final short BGP_FLOWSPEC_ACTION_TRAFFIC_ACTION = (short) 0x8007;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,7 +123,7 @@ public final class Dpid {
      */
     public static URI uri(long value) {
         try {
-            return new URI(SCHEME, toHex(value), null);
+            return new URI(SCHEME + ":" + toHex(value));
         } catch (URISyntaxException e) {
             return null;
         }

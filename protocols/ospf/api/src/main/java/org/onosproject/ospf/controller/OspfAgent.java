@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,17 +38,18 @@ public interface OspfAgent {
     void removeConnectedRouter(OspfRouter ospfRouter);
 
     /**
-     * Notifies that got a packet of link from network and need do processing.
+     * Notifies that got a packet of link from network and need to add the link.
      *
-     * @param ospfRouter  router instance
-     * @param ospfLinkTed link ted instance
+     * @param ospfRouter router instance
+     * @param ospfLinkTed link TED instance
      */
     void addLink(OspfRouter ospfRouter, OspfLinkTed ospfLinkTed);
 
     /**
-     * Notifies that got a packet of link from network and need do processing.
+     * Notifies that got a packet of link from network and need do delete the link.
      *
      * @param ospfRouter router instance
+     * @param ospfLinkTed link TED instance
      */
-    void deleteLink(OspfRouter ospfRouter);
+    void deleteLink(OspfRouter ospfRouter, OspfLinkTed ospfLinkTed);
 }

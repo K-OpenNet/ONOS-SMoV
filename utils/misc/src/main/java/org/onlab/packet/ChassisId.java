@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ public final class ChassisId extends Identifier<Long> {
      * @param value the value to use.
      */
     public ChassisId(String value) {
-        super(Long.parseLong(value, 16));
+        super(Long.parseUnsignedLong(value, 16));
     }
 
     /**
@@ -72,5 +72,10 @@ public final class ChassisId extends Identifier<Long> {
     @Override
     public int hashCode() {
         return Long.hashCode(identifier);
+    }
+
+    @Override
+    public boolean equals(Object that) {
+        return super.equals(that);
     }
 }

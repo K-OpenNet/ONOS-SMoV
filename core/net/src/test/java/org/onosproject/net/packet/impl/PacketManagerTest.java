@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,9 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.driver.DefaultDriver;
+import org.onosproject.net.driver.DriverRegistry;
 import org.onosproject.net.driver.impl.DriverManager;
+import org.onosproject.net.driver.impl.DriverRegistryManager;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.net.packet.OutboundPacket;
@@ -84,11 +86,13 @@ public class PacketManagerTest {
         mgr.coreService = new TestCoreService();
         providerRegistry = mgr;
         mgr.activate();
-        driverService = new TestDriverManager();
-        driverService.addDriver(new DefaultDriver("foo", ImmutableList.of(), "", "", "",
-                                                  ImmutableMap.of(PacketProgrammable.class,
-                                                                  TestPacketProgrammable.class),
-                                                  ImmutableMap.of()));
+
+        DriverRegistryManager driverRegistry = new DriverRegistryManager();
+        driverService = new TestDriverManager(driverRegistry);
+        driverRegistry.addDriver(new DefaultDriver("foo", ImmutableList.of(), "", "", "",
+                                                   ImmutableMap.of(PacketProgrammable.class,
+                                                                   TestPacketProgrammable.class),
+                                                   ImmutableMap.of()));
     }
 
     /**
@@ -140,7 +144,8 @@ public class PacketManagerTest {
     }
 
     private class TestDriverManager extends DriverManager {
-        TestDriverManager() {
+        TestDriverManager(DriverRegistry registry) {
+            this.registry = registry;
             this.deviceService = mgr.deviceService;
             activate();
         }

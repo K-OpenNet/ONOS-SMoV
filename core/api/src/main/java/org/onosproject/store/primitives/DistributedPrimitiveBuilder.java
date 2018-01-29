@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.onosproject.store.service.Serializer;
 public abstract class DistributedPrimitiveBuilder<B extends DistributedPrimitiveBuilder<B, T>,
                                                   T extends DistributedPrimitive> {
 
-    private DistributedPrimitive.Type type;
+    private final DistributedPrimitive.Type type;
     private String name;
     private ApplicationId applicationId;
     private Serializer serializer;
@@ -70,18 +70,6 @@ public abstract class DistributedPrimitiveBuilder<B extends DistributedPrimitive
      */
     public B withApplicationId(ApplicationId applicationId) {
         this.applicationId = applicationId;
-        return (B) this;
-    }
-
-    /**
-     * Creates this primitive on a special partition that comprises of all members in the cluster.
-     * @deprecated usage of this method is discouraged for most common scenarios. Eventually it will be replaced
-     * with a better alternative that does not exposes low level details. Until then avoid using this method.
-     * @return this builder
-     */
-    @Deprecated
-    public B withPartitionsDisabled() {
-        this.partitionsDisabled = true;
         return (B) this;
     }
 

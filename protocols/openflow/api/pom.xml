@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2014 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -21,12 +21,11 @@
 
     <parent>
         <groupId>org.onosproject</groupId>
-        <artifactId>onos-of</artifactId>
-        <version>1.5.1</version>
-        <relativePath>../pom.xml</relativePath>
+        <artifactId>onos-protocols-openflow</artifactId>
+        <version>1.13.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>onos-of-api</artifactId>
+    <artifactId>onos-protocols-openflow-api</artifactId>
     <packaging>bundle</packaging>
 
     <description>ONOS OpenFlow controller subsystem API</description>
@@ -36,12 +35,8 @@
             <!-- FIXME once experimenter gets merged to upstream -->
             <groupId>org.onosproject</groupId>
             <artifactId>openflowj</artifactId>
-            <version>${openflowj.version}</version>
         </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-        </dependency>
+
         <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>onos-api</artifactId>
@@ -51,48 +46,14 @@
             <artifactId>onos-api</artifactId>
             <scope>test</scope>
             <classifier>tests</classifier>
-            <version>${project.version}</version>
         </dependency>
-
     </dependencies>
 
     <build>
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>2.4.2</version>
-                <configuration>
-                    <artifactSet>
-                        <excludes>
-                            <exclude>io.netty:netty</exclude>
-                            <exclude>com.google.guava:guava</exclude>
-                            <exclude>org.slf4j:slfj-api</exclude>
-                            <exclude>ch.qos.logback:logback-core</exclude>
-                            <exclude>ch.qos.logback:logback-classic</exclude>
-                            <exclude>com.google.code.findbugs:annotations</exclude>
-                        </excludes>
-                    </artifactSet>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.felix</groupId>
                 <artifactId>maven-bundle-plugin</artifactId>
-                <configuration>
-                    <instructions>
-                        <Export-Package>
-                            org.onosproject.openflow.*,org.projectfloodlight.openflow.*
-                        </Export-Package>
-                    </instructions>
-                </configuration>
             </plugin>
         </plugins>
     </build>

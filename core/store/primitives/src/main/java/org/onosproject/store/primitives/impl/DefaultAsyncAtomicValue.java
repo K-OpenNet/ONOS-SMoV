@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,12 +29,16 @@ import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.Versioned;
+import org.onosproject.utils.MeteringAgent;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
-import org.onosproject.utils.MeteringAgent;
 
-
+/**
+ * Default implementation of a {@code AsyncAtomicValue}.
+ *
+ * @param <V> value type
+ */
 public class DefaultAsyncAtomicValue<V> implements AsyncAtomicValue<V> {
 
     private final String name;
@@ -52,6 +56,7 @@ public class DefaultAsyncAtomicValue<V> implements AsyncAtomicValue<V> {
     private static final String ADD_LISTENER = "addListener";
     private static final String REMOVE_LISTENER = "removeListener";
     private static final String NOTIFY_LISTENER = "notifyListener";
+    private static final String DESTROY = "destroy";
 
     public DefaultAsyncAtomicValue(String name, Serializer serializer, AsyncConsistentMap<String, byte[]> backingMap) {
         this.name = checkNotNull(name, "name must not be null");
@@ -60,9 +65,27 @@ public class DefaultAsyncAtomicValue<V> implements AsyncAtomicValue<V> {
         this.monitor = new MeteringAgent(COMPONENT_NAME, name, true);
     }
 
+    //Bypass osgi error with 'activated' MeteringAgent parameter set to false
+    DefaultAsyncAtomicValue(String name, Serializer serializer, AsyncConsistentMap<String, byte[]> backingMap,
+                             MeteringAgent meteringAgent) {
+        this.name = checkNotNull(name, "name must not be null");
+        this.serializer = checkNotNull(serializer, "serializer must not be null");
+        this.backingMap = checkNotNull(backingMap, "backingMap must not be null");
+        this.monitor = meteringAgent;
+
+    }
+
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public CompletableFuture<Void> destroy() {
+        final MeteringAgent.Context newTimer = monitor.startTimer(DESTROY);
+        return backingMap.remove(name)
+                         .whenComplete((r, e) -> newTimer.stop(e))
+                         .thenApply(v -> null);
     }
 
     @Override

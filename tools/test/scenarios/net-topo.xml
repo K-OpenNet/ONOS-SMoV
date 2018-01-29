@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@
         <step name="Net-Topo.Verify-Cluster0-LinkCount" requires="Net-Topo.Query-Cluster0"
               exec="test ${clusterTopo0LinkCount} == 140"/>
         <step name="Net-Topo.Verify-Cluster0-Root" requires="Net-Topo.Query-Cluster0"
-              exec="test '${clusterTopo0Root}' == 'of:000000000000000a' -o '${clusterTopo0Root}' == 'of:000000000000000c'"/>
+              exec="echo '${clusterTopo0Root}' | egrep -e 'of:000000000000000[0-9a-f]'"/>
 
         <!-- Verify the list of devices for the cluster -->
         <step name="Net-Topo.Verify-Cluster0-Devices"
@@ -68,7 +68,7 @@
               exec="test '${infra2Infrastructure}' == 'True'"/>
 
         <step name="Net-Topo.Query-Cluster0-Infra3"
-              exec="find-topo-infrastructure.py ${OC1} infra3 of:0000000000000012:8"/>
+              exec="find-topo-infrastructure.py ${OC1} infra3 of:0000000000000012:1"/>
         <step name="Net-Topo.Verify-Cluster0-Infra3" requires="Net-Topo.Query-Cluster0-Infra3"
               exec="test '${infra3Infrastructure}' == 'False'"/>
 

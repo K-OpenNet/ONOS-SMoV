@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 describe('factory: view/topo/topoInst.js', function() {
     var $log, fs, tis;
 
-    beforeEach(module('ovTopo', 'onosUtil', 'onosLayer'));
+    beforeEach(module('ovTopo', 'onosUtil', 'onosLayer', 'onosNav', 'onosWidget', 'onosMast'));
 
     beforeEach(inject(function (_$log_, FnService, TopoInstService) {
         $log = _$log_;
@@ -37,7 +37,8 @@ describe('factory: view/topo/topoInst.js', function() {
             'initInst', 'destroyInst',
             'addInstance', 'updateInstance', 'removeInstance',
             'cancelAffinity',
-            'isVisible', 'show', 'hide', 'toggle', 'showMaster'
+            'isVisible', 'show', 'hide', 'toggle', 'showMaster',
+            'setLionBundle',
         ])).toBeTruthy();
     });
 

@@ -1,5 +1,5 @@
 /*
- *  Copyright 2015,2016 Open Networking Laboratory
+ *  Copyright 2015-present Open Networking Foundation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
     'use strict';
 
     // injected references
-    var $log, $timeout, ts, fs;
+    var $timeout, ts, fs;
 
     // constants
     var id = 'loading-anim',
@@ -122,21 +122,22 @@
 
     angular.module('onosLayer')
         .factory('LoadingService',
-        ['$log', '$timeout', 'ThemeService', 'FnService',
+        ['$timeout', 'ThemeService', 'FnService', 'WebSocketService',
 
-            function (_$log_, _$timeout_, _ts_, _fs_) {
-            $log = _$log_;
+            function (_$timeout_, _ts_, _fs_, wss) {
             $timeout = _$timeout_;
             ts = _ts_;
             fs = _fs_;
 
             preloadImages();
 
-            return {
+            var self = {
                 start: start,
                 stop: stop,
-                waiting: waiting
+                waiting: waiting,
             };
+            wss._setLoadingDelegate(self);
+            return self;
         }]);
 
 }());

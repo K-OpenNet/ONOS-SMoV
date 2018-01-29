@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,66 +21,50 @@
     'use strict';
 
     // injected refs
-    var $log, $cookies, fs;
+    var fs, wss;
 
     // internal state
-    var cache = {};
+    var cache = {},
+        listeners = [];
 
-    // NOTE: in Angular 1.3.5, $cookies is just a simple object, and
-    //       cookie values are just strings. From the 1.3.5 docs:
-    //
-    //       "Only a simple Object is exposed and by adding or removing
-    //        properties to/from this object, new cookies are created/deleted
-    //        at the end of current $eval. The object's properties can only
-    //        be strings."
-    //
-    //       We may want to upgrade the version of Angular sometime soon
-    //        since later version support objects as cookie values.
+    // returns the preference settings for the specified key
+    function getPrefs(name, defaults, qparams) {
+        var obj = angular.extend({}, defaults || {}, cache[name] || {});
 
-    // NOTE: prefs represented as simple name/value pairs
-    //       => a temporary restriction while we are encoding into cookies
-    /*
-        {
-          foo: 1,
-          bar: 0,
-          goo: 2
-        }
-
-        stored as "foo:1,bar:0,goo:2"
-     */
-
-    // reads cookie with given name and returns an object rep of its value
-    // or null if no such cookie is set
-    function getPrefs(name) {
-        var cook = $cookies[name],
-            bits,
-            obj = {};
-
-        if (cook) {
-            bits = cook.split(',');
-            bits.forEach(function (value) {
-                var x = value.split(':');
-                obj[x[0]] = x[1];
+        // if query params are specified, they override...
+        if (fs.isO(qparams)) {
+            angular.forEach(obj, function (v, k) {
+                if (qparams.hasOwnProperty(k)) {
+                    obj[k] = qparams[k];
+                }
             });
-
-            // update the cache
-            cache[name] = obj;
-            return obj;
         }
-        // perhaps we have a cached copy..
-        return cache[name];
+        return obj;
     }
 
     // converts string values to numbers for selected (or all) keys
-    function asNumbers(obj, keys) {
+    // asNumbers(obj, ['a', 'b'])        <-- convert keys .a, .b to numbers
+    // asNumbers(obj, ['a', 'b'], true)  <-- convert ALL BUT keys .a, .b to numbers
+
+    function asNumbers(obj, keys, not) {
         if (!obj) return null;
 
-        if (!keys) {
+        var skip = {};
+        if (not) {
+            keys.forEach(function (k) {
+                skip[k] = 1;
+            });
+        }
+
+        if (!keys || not) {
             // do them all
             angular.forEach(obj, function (v, k) {
-                obj[k] = Number(obj[k]);
+                if (!not || !skip[k]) {
+                    obj[k] = Number(obj[k]);
+                }
             });
         } else {
+            // do the explicitly named keys
             keys.forEach(function (k) {
                 obj[k] = Number(obj[k]);
             });
@@ -89,39 +73,59 @@
     }
 
     function setPrefs(name, obj) {
-        var bits = [],
-            str;
-
-        angular.forEach(obj, function (value, key) {
-            bits.push(key + ':' + value);
-        });
-        str = bits.join(',');
-
-        // keep a cached copy of the object
+        // keep a cached copy of the object and send an update to server
         cache[name] = obj;
+        wss.sendEvent('updatePrefReq', { key: name, value: obj });
+    }
 
-        // The angular way of doing this...
-        // $cookies[name] = str;
-        //  ...but it appears that this gets delayed, and doesn't 'stick' ??
+    // merge preferences:
+    // The assumption here is that obj is a sparse object, and that the
+    //  defined keys should overwrite the corresponding values, but any
+    //  existing keys that are NOT explicitly defined here should be left
+    //  alone (not deleted).
+    function mergePrefs(name, obj) {
+        var merged = cache[name] || {};
+        setPrefs(name, angular.extend(merged, obj));
+    }
 
-        // FORCE cookie to be set by writing directly to document.cookie...
-        document.cookie = name + '=' + encodeURIComponent(str);
-        if (fs.debugOn('prefs')) {
-            $log.debug('<<>> Wrote cookie <'+name+'>:', str);
-        }
+    function updatePrefs(data) {
+        cache = data;
+        listeners.forEach(function (lsnr) { lsnr(); });
+    }
+
+    function addListener(listener) {
+        listeners.push(listener);
+    }
+
+    function removeListener(listener) {
+        listeners = listeners.filter(function (obj) { return obj === listener; });
     }
 
     angular.module('onosUtil')
-    .factory('PrefsService', ['$log', '$cookies', 'FnService',
-        function (_$log_, _$cookies_, _fs_) {
-            $log = _$log_;
-            $cookies = _$cookies_;
+    .factory('PrefsService', ['FnService', 'WebSocketService',
+        function (_fs_, _wss_) {
             fs = _fs_;
+            wss = _wss_;
+
+            try {
+                cache = angular.isDefined(userPrefs) ? userPrefs : {};
+            }
+            catch (e) {
+                // browser throws error for non-existing globals
+                cache = {};
+            }
+
+            wss.bindHandlers({
+                updatePrefs: updatePrefs,
+            });
 
             return {
                 getPrefs: getPrefs,
                 asNumbers: asNumbers,
-                setPrefs: setPrefs
+                setPrefs: setPrefs,
+                mergePrefs: mergePrefs,
+                addListener: addListener,
+                removeListener: removeListener,
             };
         }]);
 

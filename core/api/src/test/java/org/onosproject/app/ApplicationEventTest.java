@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,22 @@ import static org.onosproject.core.DefaultApplicationTest.APP_ID;
 public class ApplicationEventTest extends AbstractEventTest {
 
     private Application createApp() {
-        return new DefaultApplication(APP_ID, VER, TITLE, DESC, ORIGIN, CATEGORY,
-                                      URL, README, ICON, ROLE, PERMS,
-                                      Optional.of(FURL), FEATURES, APPS);
+        return DefaultApplication.builder()
+                .withAppId(APP_ID)
+                .withVersion(VER)
+                .withTitle(TITLE)
+                .withDescription(DESC)
+                .withOrigin(ORIGIN)
+                .withCategory(CATEGORY)
+                .withUrl(URL)
+                .withReadme(README)
+                .withIcon(ICON)
+                .withRole(ROLE)
+                .withPermissions(PERMS)
+                .withFeaturesRepo(Optional.of(FURL))
+                .withFeatures(FEATURES)
+                .withRequiredApps(APPS)
+                .build();
     }
 
     @Test

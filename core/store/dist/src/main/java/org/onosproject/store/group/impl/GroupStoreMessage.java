@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,8 @@ public final class GroupStoreMessage {
     public enum Type {
         ADD,
         UPDATE,
-        DELETE
+        DELETE,
+        FAILOVER
     }
 
     private GroupStoreMessage(Type type,
@@ -118,6 +119,18 @@ public final class GroupStoreMessage {
                                      null,
                                      null);
     }
+
+    public static GroupStoreMessage createGroupFailoverMsg(DeviceId deviceId,
+                                                           GroupDescription desc) {
+        return new GroupStoreMessage(Type.FAILOVER,
+                                     deviceId,
+                                     desc.appCookie(),
+                                     desc,
+                                     null,
+                                     null,
+                                     desc.appCookie());
+    }
+
 
     /**
      * Returns the device identifier of this group request.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,28 @@
 
 package org.onosproject.store.primitives.impl;
 
+import com.google.common.collect.Maps;
+import org.onlab.util.Tools;
+import org.onosproject.store.primitives.MapUpdate;
+import org.onosproject.store.primitives.TransactionId;
+import org.onosproject.store.service.AsyncConsistentMap;
+import org.onosproject.store.service.MapEvent;
+import org.onosproject.store.service.MapEventListener;
+import org.onosproject.store.service.TransactionLog;
+import org.onosproject.store.service.Version;
+import org.onosproject.store.service.Versioned;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import org.onosproject.store.primitives.TransactionId;
-import org.onosproject.store.service.AsyncConsistentMap;
-import org.onosproject.store.service.MapEvent;
-import org.onosproject.store.service.MapEventListener;
-import org.onosproject.store.service.MapTransaction;
-import org.onosproject.store.service.Versioned;
-
-import com.google.common.collect.Maps;
 
 /**
  * An {@code AsyncConsistentMap} that maps its operations to operations on a
@@ -80,45 +84,83 @@ public class TranscodingAsyncConsistentMap<K1, V1, K2, V2> implements AsyncConsi
 
     @Override
     public CompletableFuture<Boolean> containsKey(K1 key) {
-        return backingMap.containsKey(keyEncoder.apply(key));
+        try {
+            return backingMap.containsKey(keyEncoder.apply(key));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> containsValue(V1 value) {
-        return backingMap.containsValue(valueEncoder.apply(value));
+        try {
+            return backingMap.containsValue(valueEncoder.apply(value));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> get(K1 key) {
-        return backingMap.get(keyEncoder.apply(key)).thenApply(versionedValueTransform);
+        try {
+            return backingMap.get(keyEncoder.apply(key)).thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Versioned<V1>> getOrDefault(K1 key, V1 defaultValue) {
+        try {
+            return backingMap.getOrDefault(keyEncoder.apply(key), valueEncoder.apply(defaultValue))
+                    .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> computeIf(K1 key,
             Predicate<? super V1> condition,
             BiFunction<? super K1, ? super V1, ? extends V1> remappingFunction) {
-        return backingMap.computeIf(keyEncoder.apply(key),
-                                    v -> condition.test(valueDecoder.apply(v)),
-                                    (k, v) -> valueEncoder.apply(remappingFunction.apply(keyDecoder.apply(k),
-                                                                                         valueDecoder.apply(v))))
-                         .thenApply(versionedValueTransform);
+        try {
+            return backingMap.computeIf(keyEncoder.apply(key),
+                    v -> condition.test(valueDecoder.apply(v)),
+                    (k, v) -> valueEncoder.apply(remappingFunction.apply(keyDecoder.apply(k),
+                            valueDecoder.apply(v))))
+                            .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> put(K1 key, V1 value) {
-        return backingMap.put(keyEncoder.apply(key), valueEncoder.apply(value))
-                         .thenApply(versionedValueTransform);
+        try {
+            return backingMap.put(keyEncoder.apply(key), valueEncoder.apply(value))
+                             .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> putAndGet(K1 key, V1 value) {
-        return backingMap.putAndGet(keyEncoder.apply(key), valueEncoder.apply(value))
-                         .thenApply(versionedValueTransform);
+        try {
+            return backingMap.putAndGet(keyEncoder.apply(key), valueEncoder.apply(value))
+                             .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> remove(K1 key) {
-        return backingMap.remove(keyEncoder.apply(key)).thenApply(versionedValueTransform);
+        try {
+            return backingMap.remove(keyEncoder.apply(key)).thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
@@ -149,68 +191,141 @@ public class TranscodingAsyncConsistentMap<K1, V1, K2, V2> implements AsyncConsi
 
     @Override
     public CompletableFuture<Versioned<V1>> putIfAbsent(K1 key, V1 value) {
-        return backingMap.putIfAbsent(keyEncoder.apply(key), valueEncoder.apply(value))
-                         .thenApply(versionedValueTransform);
+        try {
+            return backingMap.putIfAbsent(keyEncoder.apply(key), valueEncoder.apply(value))
+                             .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> remove(K1 key, V1 value) {
-        return backingMap.remove(keyEncoder.apply(key), valueEncoder.apply(value));
+        try {
+            return backingMap.remove(keyEncoder.apply(key), valueEncoder.apply(value));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> remove(K1 key, long version) {
-        return backingMap.remove(keyEncoder.apply(key), version);
+        try {
+            return backingMap.remove(keyEncoder.apply(key), version);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Versioned<V1>> replace(K1 key, V1 value) {
-        return backingMap.replace(keyEncoder.apply(key), valueEncoder.apply(value))
-                .thenApply(versionedValueTransform);
+        try {
+            return backingMap.replace(keyEncoder.apply(key), valueEncoder.apply(value))
+                             .thenApply(versionedValueTransform);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> replace(K1 key, V1 oldValue, V1 newValue) {
-        return backingMap.replace(keyEncoder.apply(key), valueEncoder.apply(oldValue), valueEncoder.apply(newValue));
+        try {
+            return backingMap.replace(keyEncoder.apply(key),
+                                      valueEncoder.apply(oldValue),
+                                      valueEncoder.apply(newValue));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Boolean> replace(K1 key, long oldVersion, V1 newValue) {
-        return backingMap.replace(keyEncoder.apply(key), oldVersion, valueEncoder.apply(newValue));
+        try {
+            return backingMap.replace(keyEncoder.apply(key), oldVersion, valueEncoder.apply(newValue));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
-    public CompletableFuture<Void> addListener(MapEventListener<K1, V1> listener) {
+    public CompletableFuture<Void> addListener(MapEventListener<K1, V1> listener, Executor executor) {
         synchronized (listeners) {
             InternalBackingMapEventListener backingMapListener =
                     listeners.computeIfAbsent(listener, k -> new InternalBackingMapEventListener(listener));
-            return backingMap.addListener(backingMapListener);
+            return backingMap.addListener(backingMapListener, executor);
         }
     }
 
     @Override
     public CompletableFuture<Void> removeListener(MapEventListener<K1, V1> listener) {
-        InternalBackingMapEventListener backingMapListener = listeners.remove(listener);
-        if (backingMapListener != null) {
-            return backingMap.removeListener(backingMapListener);
-        } else {
-            return CompletableFuture.completedFuture(null);
+        synchronized (listeners) {
+            InternalBackingMapEventListener backingMapListener = listeners.remove(listener);
+            if (backingMapListener != null) {
+                return backingMap.removeListener(backingMapListener);
+            } else {
+                return CompletableFuture.completedFuture(null);
+            }
         }
     }
 
     @Override
-    public CompletableFuture<Boolean> prepare(MapTransaction<K1, V1> transaction) {
-        return backingMap.prepare(transaction.map(keyEncoder, valueEncoder));
+    public CompletableFuture<Version> begin(TransactionId transactionId) {
+        try {
+            return backingMap.begin(transactionId);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Boolean> prepare(TransactionLog<MapUpdate<K1, V1>> transactionLog) {
+        try {
+            return backingMap.prepare(transactionLog.map(record -> record.map(keyEncoder, valueEncoder)));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Boolean> prepareAndCommit(TransactionLog<MapUpdate<K1, V1>> transactionLog) {
+        try {
+            return backingMap.prepareAndCommit(transactionLog.map(record -> record.map(keyEncoder, valueEncoder)));
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Void> commit(TransactionId transactionId) {
-        return backingMap.commit(transactionId);
+        try {
+            return backingMap.commit(transactionId);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
     }
 
     @Override
     public CompletableFuture<Void> rollback(TransactionId transactionId) {
-        return backingMap.rollback(transactionId);
+        try {
+            return backingMap.rollback(transactionId);
+        } catch (Exception e) {
+            return Tools.exceptionalFuture(e);
+        }
+    }
+
+    @Override
+    public void addStatusChangeListener(Consumer<Status> listener) {
+        backingMap.addStatusChangeListener(listener);
+    }
+
+    @Override
+    public void removeStatusChangeListener(Consumer<Status> listener) {
+        backingMap.removeStatusChangeListener(listener);
+    }
+
+    @Override
+    public Collection<Consumer<Status>> statusChangeListeners() {
+        return backingMap.statusChangeListeners();
     }
 
     private class InternalBackingMapEventListener implements MapEventListener<K2, V2> {
@@ -223,7 +338,9 @@ public class TranscodingAsyncConsistentMap<K1, V1, K2, V2> implements AsyncConsi
 
         @Override
         public void event(MapEvent<K2, V2> event) {
-            listener.event(new MapEvent<K1, V1>(event.name(),
+            listener.event(new MapEvent<K1, V1>(
+                    event.type(),
+                    event.name(),
                     keyDecoder.apply(event.key()),
                     event.newValue() != null ? event.newValue().map(valueDecoder) : null,
                     event.oldValue() != null ? event.oldValue().map(valueDecoder) : null));

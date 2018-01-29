@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,28 +28,28 @@ import java.util.Optional;
 public interface PacketRequest {
 
     /**
-     * Obtain the traffic selector.
+     * Obtains the traffic selector.
      *
      * @return a traffic selector
      */
     TrafficSelector selector();
 
     /**
-     * Obtain the priority.
+     * Obtains the priority.
      *
      * @return a PacketPriority
      */
     PacketPriority priority();
 
     /**
-     * Obtain the application id.
+     * Obtains the application id.
      *
      * @return an application id
      */
     ApplicationId appId();
 
     /**
-     * Obtain the node id.
+     * Obtains the node id.
      *
      * @return an node id
      */

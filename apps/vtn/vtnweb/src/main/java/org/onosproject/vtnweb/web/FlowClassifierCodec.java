@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ public final class FlowClassifierCodec extends JsonCodec<FlowClassifier> {
     private static final String DESCRIPTION = "description";
     private static final String ETHER_TYPE = "ethertype";
     private static final String PROTOCOL = "protocol";
+    private static final String PRIORITY = "priority";
     private static final String MIN_SRC_PORT_RANGE = "source_port_range_min";
     private static final String MAX_SRC_PORT_RANGE = "source_port_range_max";
     private static final String MIN_DST_PORT_RANGE = "destination_port_range_min";
@@ -74,9 +75,14 @@ public final class FlowClassifierCodec extends JsonCodec<FlowClassifier> {
         String etherType = nullIsIllegal(json.get(ETHER_TYPE), ETHER_TYPE + MISSING_MEMBER_MESSAGE).asText();
         resultBuilder.setEtherType(etherType);
 
-        if (json.get(PROTOCOL) != null && !(json.get(PROTOCOL)).asText().equals("null")) {
+        if (json.get(PROTOCOL) != null && !"null".equals((json.get(PROTOCOL)).asText())) {
             String protocol = (json.get(PROTOCOL)).asText();
             resultBuilder.setProtocol(protocol);
+        }
+
+        if (json.get(PRIORITY) != null && !"null".equals((json.get(PRIORITY)).asText())) {
+            int priority = (json.get(PRIORITY)).asInt();
+            resultBuilder.setPriority(priority);
         }
 
         int minSrcPortRange = (json.get(MIN_SRC_PORT_RANGE)).asInt();
@@ -91,22 +97,22 @@ public final class FlowClassifierCodec extends JsonCodec<FlowClassifier> {
         int maxDstPortRange = (json.get(MAX_DST_PORT_RANGE)).asInt();
         resultBuilder.setMaxDstPortRange(maxDstPortRange);
 
-        if (json.get(SRC_IP_PREFIX) != null && !(json.get(SRC_IP_PREFIX)).asText().equals("null")) {
+        if (json.get(SRC_IP_PREFIX) != null && !"null".equals((json.get(SRC_IP_PREFIX)).asText())) {
             String srcIpPrefix = (json.get(SRC_IP_PREFIX)).asText();
             resultBuilder.setSrcIpPrefix(IpPrefix.valueOf(srcIpPrefix));
         }
 
-        if (json.get(DST_IP_PREFIX) != null && !(json.get(DST_IP_PREFIX)).asText().equals("null")) {
+        if (json.get(DST_IP_PREFIX) != null && !"null".equals((json.get(DST_IP_PREFIX)).asText())) {
             String dstIpPrefix = (json.get(DST_IP_PREFIX)).asText();
             resultBuilder.setDstIpPrefix(IpPrefix.valueOf(dstIpPrefix));
         }
 
-        if (json.get(SRC_PORT) != null && !(json.get(SRC_PORT)).asText().equals("null")) {
+        if (json.get(SRC_PORT) != null && !"null".equals((json.get(SRC_PORT)).asText())) {
             String srcPort = (json.get(SRC_PORT)).asText();
             resultBuilder.setSrcPort(VirtualPortId.portId(srcPort));
         }
 
-        if (json.get(DST_PORT) != null && !(json.get(DST_PORT)).asText().equals("null")) {
+        if (json.get(DST_PORT) != null && !"null".equals((json.get(DST_PORT)).asText())) {
             String dstPort = (json.get(DST_PORT)).asText();
             resultBuilder.setDstPort(VirtualPortId.portId(dstPort));
         }
@@ -123,6 +129,7 @@ public final class FlowClassifierCodec extends JsonCodec<FlowClassifier> {
                 .put(DESCRIPTION, flowClassifier.description())
                 .put(ETHER_TYPE, flowClassifier.etherType())
                 .put(PROTOCOL, flowClassifier.protocol())
+                .put(PRIORITY, flowClassifier.priority())
                 .put(MIN_SRC_PORT_RANGE, flowClassifier.minSrcPortRange())
                 .put(MAX_SRC_PORT_RANGE, flowClassifier.maxSrcPortRange())
                 .put(MIN_DST_PORT_RANGE, flowClassifier.minDstPortRange())

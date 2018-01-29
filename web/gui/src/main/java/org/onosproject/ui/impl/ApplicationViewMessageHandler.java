@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import org.onosproject.ui.table.TableRequestHandler;
 
 import java.util.Collection;
 
+import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.onosproject.app.ApplicationState.ACTIVE;
 
 /**
@@ -113,15 +114,15 @@ public class ApplicationViewMessageHandler extends UiMessageHandler {
             String iconId = state == ACTIVE ? ICON_ID_ACTIVE : ICON_ID_INACTIVE;
 
             row.cell(STATE, state)
-                .cell(STATE_IID, iconId)
-                .cell(ID, id.name())
-                .cell(ICON, id.name())
-                .cell(VERSION, app.version())
-                .cell(CATEGORY, app.category())
-                .cell(ORIGIN, app.origin())
-                .cell(TITLE, app.title())
-                .cell(DESC, app.description())
-                .cell(URL, app.url());
+                    .cell(STATE_IID, iconId)
+                    .cell(ID, id.name())
+                    .cell(ICON, id.name())
+                    .cell(VERSION, app.version())
+                    .cell(CATEGORY, app.category())
+                    .cell(ORIGIN, app.origin())
+                    .cell(TITLE, app.title())
+                    .cell(DESC, app.description())
+                    .cell(URL, app.url());
         }
     }
 
@@ -132,20 +133,27 @@ public class ApplicationViewMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String action = string(payload, "action");
             String name = string(payload, "name");
+
             if (action != null && name != null) {
                 ApplicationAdminService service = get(ApplicationAdminService.class);
                 ApplicationId appId = service.getId(name);
-                if (action.equals("activate")) {
-                    service.activate(appId);
-                } else if (action.equals("deactivate")) {
-                    service.deactivate(appId);
-                } else if (action.equals("uninstall")) {
-                    service.uninstall(appId);
+                switch (action) {
+                    case "activate":
+                        service.activate(appId);
+                        break;
+                    case "deactivate":
+                        service.deactivate(appId);
+                        break;
+                    case "uninstall":
+                        service.uninstall(appId);
+                        break;
+                    default:
+                        break;
                 }
-                chain(APP_DATA_REQ, sid, payload);
+                chain(APP_DATA_REQ, payload);
             }
         }
     }
@@ -157,9 +165,16 @@ public class ApplicationViewMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String id = string(payload, ID);
             ApplicationService as = get(ApplicationService.class);
+
+            // If the ID was not specified in the payload, use the name of the
+            // most recently uploaded app.
+            if (isNullOrEmpty(id)) {
+                id = ApplicationResource.lastInstalledAppName;
+            }
+
             ApplicationId appId = as.getId(id);
             ApplicationState state = as.getState(appId);
             Application app = as.getApplication(appId);
@@ -196,7 +211,8 @@ public class ApplicationViewMessageHandler extends UiMessageHandler {
 
             ObjectNode rootNode = objectNode();
             rootNode.set(DETAILS, data);
-            sendMessage(APP_DETAILS_RESP, 0, rootNode);
+            sendMessage(APP_DETAILS_RESP, rootNode);
         }
+
     }
 }

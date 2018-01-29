@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
  */
 package org.onosproject.net.behaviour;
 
+import java.util.List;
+
 import org.onlab.packet.VlanId;
-import org.onosproject.net.DeviceId;
+import org.onosproject.net.device.DeviceInterfaceDescription;
 import org.onosproject.net.driver.HandlerBehaviour;
 
 /**
@@ -25,45 +27,101 @@ import org.onosproject.net.driver.HandlerBehaviour;
 public interface InterfaceConfig extends HandlerBehaviour {
 
     /**
-     * Adds an interface to a VLAN.
-     * @param deviceId the device ID
+     * Adds an access interface to a VLAN.
+     *
      * @param intf the name of the interface
      * @param vlanId the VLAN ID
      * @return the result of operation
      */
-    boolean addInterfaceToVlan(DeviceId deviceId, String intf, VlanId vlanId);
+    boolean addAccessMode(String intf, VlanId vlanId);
 
     /**
-     * Removes an interface from a VLAN.
-     * @param deviceId the device ID
+     * Removes an access interface to a VLAN.
+     *
      * @param intf the name of the interface
-     * @param vlanId the VLAN ID
      * @return the result of operation
      */
-    boolean removeInterfaceFromVlan(DeviceId deviceId, String intf, VlanId vlanId);
+    boolean removeAccessMode(String intf);
 
     /**
-     *  Configures an interface as trunk for VLAN.
-     * @param deviceId the device ID
+     *  Adds a trunk interface for VLANs.
+     *
      * @param intf the name of the interface
-     * @param vlanId the VLAN ID
+     * @param vlanIds the VLAN IDs
      * @return the result of operation
      */
-    boolean addTrunkInterface(DeviceId deviceId, String intf, VlanId vlanId);
+    boolean addTrunkMode(String intf, List<VlanId> vlanIds);
 
     /**
-     *  Removes trunk mode configuration for VLAN from an interface.
-     * @param deviceId the device ID
+     *  Removes trunk mode configuration from an interface.
+     *
      * @param intf the name of the interface
-     * @param vlanId the VLAN ID
      * @return the result of operation
      */
-    boolean removeTrunkInterface(DeviceId deviceId, String intf, VlanId vlanId);
+    boolean removeTrunkMode(String intf);
+
+    /**
+     * Adds a rate limit on an interface.
+     *
+     * @param intf the name of the interface
+     * @param limit the limit as a percentage
+     * @return the result of operation
+     */
+    boolean addRateLimit(String intf, short limit);
+
+    /**
+     * Removes rate limit from an interface.
+     *
+     * @param intf the name of the interface
+     * @return the result of operation
+     */
+    boolean removeRateLimit(String intf);
+
+    /**
+     * Adds a tunnel mode to supplied interface.
+     *
+     * @param intf the name of the interface
+     * @param tunnelDesc tunnel interface description
+     * @return true if the operation succeeds
+     */
+    boolean addTunnelMode(String intf, TunnelDescription tunnelDesc);
+
+    /**
+     * Removes a tunnel interface.
+     *
+     * @param intf tunnel interface name
+     * @return true if the operation succeeds
+     */
+    boolean removeTunnelMode(String intf);
+
+    /**
+     * Adds a patch mode to the supplied interface.
+     *
+     * @param ifaceName interface name to set patch mode
+     * @param patchInterface interface description
+     * @return true if the operation succeeds
+     */
+    boolean addPatchMode(String ifaceName, PatchDescription patchInterface);
+
+    /**
+     * Removes a patch mode from the supplied interface.
+     *
+     * @param ifaceName interface name
+     * @return true if the operation succeeds
+     */
+    boolean removePatchMode(String ifaceName);
+
+    /**
+     * Provides the interfaces configured on a device.
+     *
+     * @return the list of the configured interfaces
+     */
+    List<DeviceInterfaceDescription> getInterfaces();
 
     /**
      *  TODO Addition of more methods to make the behavior symmetrical.
-     *  Methods getInterfacesForVlan, getVlansForInterface, getTrunkforInterface,
-     *  getInterfacesForTrunk should be added to complete the behavior.
+     *  Methods getInterfacesForVlan(VlanId), hasAccessMode(), hasTrunkMode(),
+     *  getTrunkVlans(Interface), getAccessVlan(Interface) should be added to
+     *  complete the behavior.
      */
-
 }

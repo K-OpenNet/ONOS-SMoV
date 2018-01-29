@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import org.onosproject.store.primitives.DefaultDistributedSet;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -41,7 +40,7 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
      * @param setName name to be assigned to this set
      */
     public TestDistributedSet(String setName) {
-        set = new HashSet<>();
+        set = Sets.newConcurrentHashSet();
         listeners = new LinkedList<>();
         this.setName = setName;
     }
@@ -71,18 +70,24 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
 
     @Override
     public CompletableFuture<Boolean> add(E element) {
-        SetEvent<E> event =
-                new SetEvent<>(setName, SetEvent.Type.ADD, element);
-        notifyListeners(event);
-        return CompletableFuture.completedFuture(set.add(element));
+        boolean updated = set.add(element);
+        if (updated) {
+            SetEvent<E> event =
+                    new SetEvent<>(setName, SetEvent.Type.ADD, element);
+            notifyListeners(event);
+        }
+        return CompletableFuture.completedFuture(updated);
     }
 
     @Override
     public CompletableFuture<Boolean> remove(E element) {
-        SetEvent<E> event =
-                new SetEvent<>(setName, SetEvent.Type.REMOVE, element);
-        notifyListeners(event);
-        return CompletableFuture.completedFuture(set.remove(element));
+        boolean updated = set.remove(element);
+        if (updated) {
+            SetEvent<E> event =
+                    new SetEvent<>(setName, SetEvent.Type.REMOVE, element);
+            notifyListeners(event);
+        }
+        return CompletableFuture.completedFuture(updated);
     }
 
     @Override
@@ -108,8 +113,10 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
 
     @Override
     public CompletableFuture<Boolean> addAll(Collection<? extends E> c) {
-        c.forEach(this::add);
-        return CompletableFuture.completedFuture(true);
+        return c.stream()
+                .map(this::add)
+                .reduce(CompletableFuture.completedFuture(false),
+                        (l, r) -> l.thenCombine(r, Boolean::logicalOr));
     }
 
     @Override
@@ -119,15 +126,19 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
 
     @Override
     public CompletableFuture<Boolean> retainAll(Collection<? extends E> c) {
-        Set notInSet2;
-        notInSet2 = Sets.difference(set, (Set<?>) c);
+        Set<? extends E> s = (c instanceof Set) ?
+                             (Set<? extends E>) c :
+                             ImmutableSet.copyOf(c);
+        Set<E> notInSet2 = Sets.difference(set, s);
         return removeAll(ImmutableSet.copyOf(notInSet2));
     }
 
     @Override
     public CompletableFuture<Boolean> removeAll(Collection<? extends E> c) {
-        c.forEach(this::remove);
-        return CompletableFuture.completedFuture(true);
+        return c.stream()
+                .map(this::remove)
+                .reduce(CompletableFuture.completedFuture(false),
+                        (l, r) -> l.thenCombine(r, Boolean::logicalOr));
     }
 
     @Override
@@ -138,11 +149,6 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
     @Override
     public String name() {
         return this.setName;
-    }
-
-    @Override
-    public Type primitiveType() {
-        return super.primitiveType();
     }
 
     @Override
@@ -160,8 +166,8 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
      *
      * @return Builder
      **/
-    public static Builder builder() {
-        return new Builder();
+    public static <E> Builder<E> builder() {
+        return new Builder<>();
     }
 
     /**
@@ -172,7 +178,7 @@ public final class TestDistributedSet<E> extends DistributedSetAdapter<E> {
     public static class Builder<E> extends DistributedSetBuilder<E> {
         @Override
         public AsyncDistributedSet<E> build() {
-            return new TestDistributedSet(name());
+            return new TestDistributedSet<>(name());
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,16 @@ public class IGMPMembership extends IGMPGroup {
     public byte getRecordType() {
         return recordType;
     }
+
+    /**
+     * Sets the IGMP record type.
+     *
+     * @param type A multicast record type, like MODE_IS_INCLUDE or MODE_IS_EXCLUDE.
+     */
+    public void setRecordType(byte type) {
+        recordType = type;
+    }
+
 
     /**
      * Serialize this Membership Report.

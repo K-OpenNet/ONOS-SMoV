@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,17 +22,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.apache.karaf.shell.commands.Option;
-import org.onlab.util.Frequency;
-import org.onosproject.cli.Comparators;
+import org.onosproject.utils.Comparators;
 import org.onosproject.net.Device;
-import org.onosproject.net.OchPort;
-import org.onosproject.net.OduCltPort;
-import org.onosproject.net.OmsPort;
-import org.onosproject.net.OtuPort;
 import org.onosproject.net.Port;
-import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceService;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -47,9 +40,6 @@ import static org.onosproject.net.DeviceId.deviceId;
 public class DevicePortsListCommand extends DevicesListCommand {
 
     private static final String FMT = "  port=%s, state=%s, type=%s, speed=%s %s";
-    private static final String FMT_OCH = "  port=%s, state=%s, type=%s, signalType=%s, isTunable=%s %s";
-    private static final String FMT_ODUCLT_OTU = "  port=%s, state=%s, type=%s, signalType=%s %s";
-    private static final String FMT_OMS = "  port=%s, state=%s, type=%s, Freqs= %s / %s / %s GHz, totalChannels=%s %s";
 
     @Option(name = "-e", aliases = "--enabled", description = "Show only enabled ports",
             required = false, multiValued = false)
@@ -61,7 +51,7 @@ public class DevicePortsListCommand extends DevicesListCommand {
 
     @Argument(index = 0, name = "uri", description = "Device ID",
               required = false, multiValued = false)
-    String uri = null;
+    protected String uri = null;
 
     @Override
     protected void execute() {
@@ -72,6 +62,7 @@ public class DevicePortsListCommand extends DevicesListCommand {
             } else {
                 for (Device device : getSortedDevices(service)) {
                     printDevice(service, device);
+                    printPorts(service, device);
                 }
             }
 
@@ -83,6 +74,7 @@ public class DevicePortsListCommand extends DevicesListCommand {
                 print("%s", jsonPorts(service, new ObjectMapper(), device));
             } else {
                 printDevice(service, device);
+                printPorts(service, device);
             }
         }
     }
@@ -117,7 +109,7 @@ public class DevicePortsListCommand extends DevicesListCommand {
         for (Port port : service.getPorts(device.id())) {
             if (isIncluded(port)) {
                 ports.add(mapper.createObjectNode()
-                                  .put("port", portName(port.number()))
+                                  .put("port", port.number().toString())
                                   .put("isEnabled", port.isEnabled())
                                   .put("type", port.type().toString().toLowerCase())
                                   .put("portSpeed", port.portSpeed())
@@ -129,54 +121,24 @@ public class DevicePortsListCommand extends DevicesListCommand {
         return result;
     }
 
-    private String portName(PortNumber port) {
-        return port.equals(PortNumber.LOCAL) ? "local" : port.toString();
-    }
-
     // Determines if a port should be included in output.
-    private boolean isIncluded(Port port) {
+    protected boolean isIncluded(Port port) {
         return enabled && port.isEnabled() || disabled && !port.isEnabled() ||
                 !enabled && !disabled;
     }
 
-    @Override
-    protected void printDevice(DeviceService service, Device device) {
-        super.printDevice(service, device);
+    protected void printPorts(DeviceService service, Device device) {
         List<Port> ports = new ArrayList<>(service.getPorts(device.id()));
         Collections.sort(ports, Comparators.PORT_COMPARATOR);
         for (Port port : ports) {
             if (!isIncluded(port)) {
                 continue;
             }
-            String portName = portName(port.number());
+            String portName = port.number().toString();
             Object portIsEnabled = port.isEnabled() ? "enabled" : "disabled";
             String portType = port.type().toString().toLowerCase();
             String annotations = annotations(port.annotations());
-            switch (port.type()) {
-                case OCH:
-                     print(FMT_OCH, portName, portIsEnabled, portType,
-                             ((OchPort) port).signalType().toString(),
-                             ((OchPort) port).isTunable() ? "yes" : "no", annotations);
-                     break;
-                case ODUCLT:
-                     print(FMT_ODUCLT_OTU, portName, portIsEnabled, portType,
-                            ((OduCltPort) port).signalType().toString(), annotations);
-                     break;
-                case OMS:
-                     print(FMT_OMS, portName, portIsEnabled, portType,
-                                ((OmsPort) port).minFrequency().asHz() / Frequency.ofGHz(1).asHz(),
-                                ((OmsPort) port).maxFrequency().asHz() / Frequency.ofGHz(1).asHz(),
-                                ((OmsPort) port).grid().asHz() / Frequency.ofGHz(1).asHz(),
-                                ((OmsPort) port).totalChannels(), annotations);
-                    break;
-                case OTU:
-                    print(FMT_ODUCLT_OTU, portName, portIsEnabled, portType,
-                                ((OtuPort) port).signalType().toString(), annotations);
-                    break;
-                default:
-                     print(FMT, portName, portIsEnabled, portType, port.portSpeed(), annotations);
-                    break;
-            }
+            print(FMT, portName, portIsEnabled, portType, port.portSpeed(), annotations);
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,17 @@ package org.onosproject.openflow.controller.impl;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
+
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.util.concurrent.GlobalEventExecutor;
 
 import org.onlab.util.ItemNotFoundException;
 import org.onosproject.net.DeviceId;
@@ -46,13 +52,11 @@ import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
-import java.net.InetSocketAddress;
 import java.security.KeyStore;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -64,14 +68,22 @@ import static org.onosproject.openflow.controller.Dpid.uri;
 
 /**
  * The main controller class.  Handles all setup and network listeners
- * - Distributed ownership control of switch through IControllerRegistryService
  */
 public class Controller {
 
     protected static final Logger log = LoggerFactory.getLogger(Controller.class);
 
+   /**
+    * @deprecated in 1.10.0
+    */
+    @Deprecated
     protected static final OFFactory FACTORY13 = OFFactories.getFactory(OFVersion.OF_13);
+    /**
+     * @deprecated in 1.10.0
+     */
+    @Deprecated
     protected static final OFFactory FACTORY10 = OFFactories.getFactory(OFVersion.OF_10);
+
     private static final boolean TLS_DISABLED = false;
     private static final short MIN_KS_LENGTH = 6;
 
@@ -81,14 +93,15 @@ public class Controller {
 
     // Configuration options
     protected List<Integer> openFlowPorts = ImmutableList.of(6633, 6653);
-    protected int workerThreads = 16;
+    protected int workerThreads = 0;
 
     // Start time of the controller
     protected long systemStartTime;
 
     private OpenFlowAgent agent;
 
-    private NioServerSocketChannelFactory execFactory;
+    private EventLoopGroup bossGroup;
+    private EventLoopGroup workerGroup;
 
     protected String ksLocation;
     protected String tsLocation;
@@ -98,6 +111,7 @@ public class Controller {
 
     // Perf. related configuration
     protected static final int SEND_BUFFER_SIZE = 4 * 1024 * 1024;
+
     private DriverService driverService;
     private boolean enableOfTls = TLS_DISABLED;
 
@@ -105,11 +119,21 @@ public class Controller {
     // Getters/Setters
     // ***************
 
+    /**
+     * @return OF1.0 factory
+     * @deprecated in 1.10.0
+     */
+    @Deprecated
     public OFFactory getOFMessageFactory10() {
         return FACTORY10;
     }
 
 
+    /**
+     * @return OF1.3 factory
+     * @deprecated in 1.10.0
+     */
+    @Deprecated
     public OFFactory getOFMessageFactory13() {
         return FACTORY13;
     }
@@ -125,20 +149,19 @@ public class Controller {
 
         try {
             final ServerBootstrap bootstrap = createServerBootStrap();
+            bootstrap.option(ChannelOption.SO_REUSEADDR, true);
+            bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+            bootstrap.childOption(ChannelOption.TCP_NODELAY, true);
+            bootstrap.childOption(ChannelOption.SO_SNDBUF, Controller.SEND_BUFFER_SIZE);
+//            bootstrap.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK,
+//                                  new WriteBufferWaterMark(8 * 1024, 32 * 1024));
 
-            bootstrap.setOption("reuseAddr", true);
-            bootstrap.setOption("child.keepAlive", true);
-            bootstrap.setOption("child.tcpNoDelay", true);
-            bootstrap.setOption("child.sendBufferSize", Controller.SEND_BUFFER_SIZE);
+            bootstrap.childHandler(new OFChannelInitializer(this, null, sslContext));
 
-            ChannelPipelineFactory pfact =
-                    new OpenflowPipelineFactory(this, null, sslContext);
-            bootstrap.setPipelineFactory(pfact);
-            cg = new DefaultChannelGroup();
             openFlowPorts.forEach(port -> {
-                InetSocketAddress sa = new InetSocketAddress(port);
-                cg.add(bootstrap.bind(sa));
-                log.info("Listening for switch connections on {}", sa);
+                // TODO revisit if this is best way to listen to multiple ports
+                cg.add(bootstrap.bind(port).syncUninterruptibly().channel());
+                log.info("Listening for switch connections on {}", port);
             });
 
         } catch (Exception e) {
@@ -149,20 +172,43 @@ public class Controller {
 
     private ServerBootstrap createServerBootStrap() {
 
-        if (workerThreads == 0) {
-            execFactory = new NioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(groupedThreads("onos/of", "boss-%d")),
-                    Executors.newCachedThreadPool(groupedThreads("onos/of", "worker-%d")));
-            return new ServerBootstrap(execFactory);
-        } else {
-            execFactory = new NioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(groupedThreads("onos/of", "boss-%d")),
-                    Executors.newCachedThreadPool(groupedThreads("onos/of", "worker-%d")), workerThreads);
-            return new ServerBootstrap(execFactory);
+        int bossThreads = Math.max(1, openFlowPorts.size());
+        try {
+            bossGroup = new EpollEventLoopGroup(bossThreads, groupedThreads("onos/of", "boss-%d", log));
+            workerGroup = new EpollEventLoopGroup(workerThreads, groupedThreads("onos/of", "worker-%d", log));
+            ServerBootstrap bs = new ServerBootstrap()
+                    .group(bossGroup, workerGroup)
+                    .channel(EpollServerSocketChannel.class);
+            log.info("Using Epoll transport");
+            return bs;
+        } catch (Throwable e) {
+            log.debug("Failed to initialize native (epoll) transport: {}", e.getMessage());
         }
+
+// Requires 4.1.11 or later
+//        try {
+//            bossGroup = new KQueueEventLoopGroup(bossThreads, groupedThreads("onos/of", "boss-%d", log));
+//            workerGroup = new KQueueEventLoopGroup(workerThreads, groupedThreads("onos/of", "worker-%d", log));
+//            ServerBootstrap bs = new ServerBootstrap()
+//                    .group(bossGroup, workerGroup)
+//                    .channel(KQueueServerSocketChannel.class);
+//            log.info("Using Kqueue transport");
+//            return bs;
+//        } catch (Throwable e) {
+//            log.debug("Failed to initialize native (kqueue) transport. ", e.getMessage());
+//        }
+
+        bossGroup = new NioEventLoopGroup(bossThreads, groupedThreads("onos/of", "boss-%d", log));
+        workerGroup = new NioEventLoopGroup(workerThreads, groupedThreads("onos/of", "worker-%d", log));
+        log.info("Using Nio transport");
+        return new ServerBootstrap()
+                    .group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class);
     }
 
     public void setConfigParams(Dictionary<?, ?> properties) {
+        // TODO should be possible to reconfigure ports without restart,
+        // by updating ChannelGroup
         String ports = get(properties, "openflowPorts");
         if (!Strings.isNullOrEmpty(ports)) {
             this.openFlowPorts = Stream.of(ports.split(","))
@@ -188,6 +234,8 @@ public class Controller {
 
         this.systemStartTime = System.currentTimeMillis();
 
+        cg = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
+
         try {
             getTlsParameters();
             if (enableOfTls) {
@@ -196,7 +244,6 @@ public class Controller {
         } catch (Exception ex) {
             log.error("SSL init failed: {}", ex.getMessage());
         }
-
     }
 
     private void getTlsParameters() {
@@ -228,7 +275,6 @@ public class Controller {
     }
 
     private void initSsl() throws Exception {
-
         TrustManagerFactory tmFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
         KeyStore ts = KeyStore.getInstance("JKS");
         ts.load(new FileInputStream(tsLocation), tsPwd);
@@ -241,8 +287,6 @@ public class Controller {
 
         sslContext = SSLContext.getInstance("TLS");
         sslContext.init(kmf.getKeyManagers(), tmFactory.getTrustManagers(), null);
-
-
     }
 
     // **************
@@ -287,21 +331,26 @@ public class Controller {
             driver = driverService.getDriver(desc.getMfrDesc(), desc.getHwDesc(), desc.getSwDesc());
         }
 
-        if (driver != null && driver.hasBehaviour(OpenFlowSwitchDriver.class)) {
-            Dpid did = new Dpid(dpid);
-            DefaultDriverHandler handler =
-                    new DefaultDriverHandler(new DefaultDriverData(driver, deviceId(uri(did))));
-            OpenFlowSwitchDriver ofSwitchDriver =
-                    driver.createBehaviour(handler, OpenFlowSwitchDriver.class);
-            ofSwitchDriver.init(did, desc, ofv);
-            ofSwitchDriver.setAgent(agent);
-            ofSwitchDriver.setRoleHandler(new RoleManager(ofSwitchDriver));
-            log.info("OpenFlow handshaker found for device {}: {}", dpid, ofSwitchDriver);
-            return ofSwitchDriver;
+        if (driver == null) {
+            log.error("No OpenFlow driver for {} : {}", dpidObj, desc);
+            return null;
         }
-        log.error("No OpenFlow driver for {} : {}", dpid, desc);
-        return null;
 
+        log.info("Driver '{}' assigned to device {}", driver.name(), dpidObj);
+
+        if (!driver.hasBehaviour(OpenFlowSwitchDriver.class)) {
+            log.error("Driver {} does not support OpenFlowSwitchDriver behaviour", driver.name());
+            return null;
+        }
+
+        DefaultDriverHandler handler =
+                new DefaultDriverHandler(new DefaultDriverData(driver, deviceId(uri(dpidObj))));
+        OpenFlowSwitchDriver ofSwitchDriver =
+                driver.createBehaviour(handler, OpenFlowSwitchDriver.class);
+        ofSwitchDriver.init(dpidObj, desc, ofv);
+        ofSwitchDriver.setAgent(agent);
+        ofSwitchDriver.setRoleHandler(new RoleManager(ofSwitchDriver));
+        return ofSwitchDriver;
     }
 
     public void start(OpenFlowAgent ag, DriverService driverService) {
@@ -316,7 +365,19 @@ public class Controller {
     public void stop() {
         log.info("Stopping OpenFlow IO");
         cg.close();
-        execFactory.shutdown();
+
+        // Shut down all event loops to terminate all threads.
+        bossGroup.shutdownGracefully();
+        workerGroup.shutdownGracefully();
+
+        // Wait until all threads are terminated.
+        try {
+            bossGroup.terminationFuture().sync();
+            workerGroup.terminationFuture().sync();
+        } catch (InterruptedException e) {
+            log.warn("Interrupted while stopping", e);
+            Thread.currentThread().interrupt();
+        }
     }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,17 +21,23 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.onosproject.store.primitives.MapUpdate;
+import org.onosproject.store.primitives.TransactionId;
 import org.onosproject.store.service.AsyncConsistentMap;
 import org.onosproject.store.service.MapEvent;
 import org.onosproject.store.service.MapEventListener;
+import org.onosproject.store.service.TransactionLog;
+import org.onosproject.store.service.Version;
 import org.onosproject.store.service.Versioned;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
+
 import org.onosproject.utils.MeteringAgent;
 
 /**
@@ -48,6 +54,7 @@ public class MeteredAsyncConsistentMap<K, V>  extends DelegatingAsyncConsistentM
     private static final String CONTAINS_KEY = "containsKey";
     private static final String CONTAINS_VALUE = "containsValue";
     private static final String GET = "get";
+    private static final String GET_OR_DEFAULT = "getOrDefault";
     private static final String COMPUTE_IF = "computeIf";
     private static final String PUT = "put";
     private static final String PUT_AND_GET = "putAndGet";
@@ -59,6 +66,11 @@ public class MeteredAsyncConsistentMap<K, V>  extends DelegatingAsyncConsistentM
     private static final String ENTRY_SET = "entrySet";
     private static final String REPLACE = "replace";
     private static final String COMPUTE_IF_ABSENT = "computeIfAbsent";
+    private static final String BEGIN = "begin";
+    private static final String PREPARE = "prepare";
+    private static final String COMMIT = "commit";
+    private static final String ROLLBACK = "rollback";
+    private static final String PREPARE_AND_COMMIT = "prepareAndCommit";
     private static final String ADD_LISTENER = "addListener";
     private static final String REMOVE_LISTENER = "removeListener";
     private static final String NOTIFY_LISTENER = "notifyListener";
@@ -105,6 +117,13 @@ public class MeteredAsyncConsistentMap<K, V>  extends DelegatingAsyncConsistentM
         final MeteringAgent.Context timer = monitor.startTimer(GET);
         return super.get(key)
                     .whenComplete((r, e) -> timer.stop(e));
+    }
+
+    @Override
+    public CompletableFuture<Versioned<V>> getOrDefault(K key, V defaultValue) {
+        final MeteringAgent.Context timer = monitor.startTimer(GET_OR_DEFAULT);
+        return super.getOrDefault(key, defaultValue)
+                .whenComplete((r, e) -> timer.stop(e));
     }
 
     @Override
@@ -217,12 +236,12 @@ public class MeteredAsyncConsistentMap<K, V>  extends DelegatingAsyncConsistentM
     }
 
     @Override
-    public CompletableFuture<Void> addListener(MapEventListener<K, V> listener) {
+    public CompletableFuture<Void> addListener(MapEventListener<K, V> listener, Executor executor) {
         final MeteringAgent.Context timer = monitor.startTimer(ADD_LISTENER);
         synchronized (listeners) {
             InternalMeteredMapEventListener meteredListener =
                     listeners.computeIfAbsent(listener, k -> new InternalMeteredMapEventListener(listener));
-            return super.addListener(meteredListener)
+            return super.addListener(meteredListener, executor)
                         .whenComplete((r, e) -> timer.stop(e));
         }
     }
@@ -232,12 +251,47 @@ public class MeteredAsyncConsistentMap<K, V>  extends DelegatingAsyncConsistentM
         final MeteringAgent.Context timer = monitor.startTimer(REMOVE_LISTENER);
         InternalMeteredMapEventListener meteredListener = listeners.remove(listener);
         if (meteredListener != null) {
-            return super.removeListener(listener)
+            return super.removeListener(meteredListener)
                         .whenComplete((r, e) -> timer.stop(e));
         } else {
             timer.stop(null);
             return CompletableFuture.completedFuture(null);
         }
+    }
+
+    @Override
+    public CompletableFuture<Version> begin(TransactionId transactionId) {
+        final MeteringAgent.Context timer = monitor.startTimer(BEGIN);
+        return super.begin(transactionId)
+                .whenComplete((r, e) -> timer.stop(e));
+    }
+
+    @Override
+    public CompletableFuture<Boolean> prepare(TransactionLog<MapUpdate<K, V>> transactionLog) {
+        final MeteringAgent.Context timer = monitor.startTimer(PREPARE);
+        return super.prepare(transactionLog)
+                .whenComplete((r, e) -> timer.stop(e));
+    }
+
+    @Override
+    public CompletableFuture<Void> commit(TransactionId transactionId) {
+        final MeteringAgent.Context timer = monitor.startTimer(COMMIT);
+        return super.commit(transactionId)
+                    .whenComplete((r, e) -> timer.stop(e));
+    }
+
+    @Override
+    public CompletableFuture<Void> rollback(TransactionId transactionId) {
+        final MeteringAgent.Context timer = monitor.startTimer(ROLLBACK);
+        return super.rollback(transactionId)
+                    .whenComplete((r, e) -> timer.stop(e));
+    }
+
+    @Override
+    public CompletableFuture<Boolean> prepareAndCommit(TransactionLog<MapUpdate<K, V>> transactionLog) {
+        final MeteringAgent.Context timer = monitor.startTimer(PREPARE_AND_COMMIT);
+        return super.prepareAndCommit(transactionLog)
+                .whenComplete((r, e) -> timer.stop(e));
     }
 
     private class InternalMeteredMapEventListener implements MapEventListener<K, V> {

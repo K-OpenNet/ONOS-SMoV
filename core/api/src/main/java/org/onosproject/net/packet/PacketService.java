@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package org.onosproject.net.packet;
 
-import com.google.common.annotations.Beta;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.flow.TrafficSelector;
@@ -57,7 +56,6 @@ public interface PacketService {
      *
      * @return list of existing packet processor entries
      */
-    @Beta
     List<PacketProcessorEntry> getProcessors();
 
     /**
@@ -67,9 +65,7 @@ public interface PacketService {
      * @param selector the traffic selector used to match packets
      * @param priority the priority of the rule
      * @param appId    the application ID of the requester
-     * @deprecated 1.5.0 Falcon Release
      */
-    @Deprecated
     void requestPackets(TrafficSelector selector, PacketPriority priority,
                         ApplicationId appId);
 
@@ -95,9 +91,7 @@ public interface PacketService {
      * @param selector the traffic selector used to match packets
      * @param priority the priority of the rule
      * @param appId    the application ID of the requester
-     * @deprecated 1.5.0 Falcon Release
      */
-    @Deprecated
     void cancelPackets(TrafficSelector selector, PacketPriority priority,
                        ApplicationId appId);
 
@@ -111,11 +105,9 @@ public interface PacketService {
      * @param priority the priority of the rule
      * @param appId    the application ID of the requester
      * @param deviceId an optional deviceId
-     * @deprecated 1.5.0 Falcon Release
      */
     void cancelPackets(TrafficSelector selector, PacketPriority priority,
                        ApplicationId appId, Optional<DeviceId> deviceId);
-
 
     /**
      * Returns list of all existing requests ordered by priority.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@ package org.onosproject.codec.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.onlab.util.HexString;
 import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.core.DefaultGroupId;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.group.DefaultGroup;
@@ -71,7 +71,7 @@ public final class GroupCodec extends JsonCodec<Group> {
     public ObjectNode encode(Group group, CodecContext context) {
         checkNotNull(group, "Group cannot be null");
         ObjectNode result = context.mapper().createObjectNode()
-                .put(ID, group.id().toString())
+                .put(ID, group.id().id().toString())
                 .put(STATE, group.state().toString())
                 .put(LIFE, group.life())
                 .put(PACKETS, group.packets())
@@ -81,7 +81,7 @@ public final class GroupCodec extends JsonCodec<Group> {
                 .put(DEVICE_ID, group.deviceId().toString());
 
         if (group.appId() != null) {
-            result.put(APP_ID, group.appId().toString());
+            result.put(APP_ID, group.appId().name());
         }
 
         if (group.appCookie() != null) {
@@ -89,7 +89,7 @@ public final class GroupCodec extends JsonCodec<Group> {
         }
 
         if (group.givenGroupId() != null) {
-            result.put(GIVEN_GROUP_ID, group.givenGroupId());
+            result.put(GIVEN_GROUP_ID, group.givenGroupId().toString());
         }
 
         ArrayNode buckets = context.mapper().createArrayNode();
@@ -113,12 +113,16 @@ public final class GroupCodec extends JsonCodec<Group> {
         // parse group id
         int groupIdInt = nullIsIllegal(json.get(GROUP_ID),
                 GROUP_ID + MISSING_MEMBER_MESSAGE).asInt();
-        GroupId groupId = new DefaultGroupId(groupIdInt);
+        GroupId groupId = new GroupId(groupIdInt);
 
         // parse group key (appCookie)
         String groupKeyStr = nullIsIllegal(json.get(APP_COOKIE),
                 APP_COOKIE + MISSING_MEMBER_MESSAGE).asText();
-        GroupKey groupKey = new DefaultGroupKey(groupKeyStr.getBytes());
+        if (!groupKeyStr.startsWith("0x")) {
+            throw new IllegalArgumentException("APP_COOKIE must be a hex string starts with 0x");
+        }
+        GroupKey groupKey = new DefaultGroupKey(HexString.fromHexString(
+                groupKeyStr.split("0x")[1], ""));
 
         // parse device id
         DeviceId deviceId = DeviceId.deviceId(nullIsIllegal(json.get(DEVICE_ID),
@@ -146,12 +150,11 @@ public final class GroupCodec extends JsonCodec<Group> {
                 groupType = Group.Type.FAILOVER;
                 break;
             default:
-                log.warn("The requested type {} is not defined for group.", type);
-                return null;
+                nullIsIllegal(groupType, "The requested group type " + type + " is not valid");
         }
 
         // parse group buckets
-        // TODO: make sure that INDIRECT group only has one bucket
+
         GroupBuckets buckets = null;
         List<GroupBucket> groupBucketList = new ArrayList<>();
         JsonNode bucketsJson = json.get(BUCKETS);

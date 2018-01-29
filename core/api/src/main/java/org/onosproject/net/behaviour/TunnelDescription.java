@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,12 @@ import org.onosproject.net.Annotated;
 import org.onosproject.net.Description;
 
 import com.google.common.annotations.Beta;
+import org.onosproject.net.SparseAnnotations;
+
+import java.util.Optional;
 
 /**
- * Describes a tunnel.
+ * Describes a tunnel interface.
  */
 @Beta
 public interface TunnelDescription extends Description, Annotated {
@@ -57,18 +60,18 @@ public interface TunnelDescription extends Description, Annotated {
     }
 
     /**
-     * Returns the connection point source.
+     * Returns the identifier of the device where the interface is.
      *
-     * @return tunnel source ConnectionPoint
+     * @return device identifier
      */
-    TunnelEndPoint src();
+    Optional<String> deviceId();
 
     /**
-     * Returns the connection point destination.
+     * Return the name of the tunnel interface.
      *
-     * @return tunnel destination
+     * @return tunnel interface name
      */
-    TunnelEndPoint dst();
+    String ifaceName();
 
     /**
      * Returns the tunnel type.
@@ -78,9 +81,94 @@ public interface TunnelDescription extends Description, Annotated {
     Type type();
 
     /**
-     * Return the name of a tunnel.
+     * Returns the local connection point.
      *
-     * @return Tunnel Name
+     * @return tunnel source ConnectionPoint
      */
-    TunnelName tunnelName();
+    Optional<TunnelEndPoint> local();
+
+    /**
+     * Returns the remote connection point.
+     *
+     * @return tunnel destination
+     */
+    Optional<TunnelEndPoint> remote();
+
+    /**
+     * Returns the tunnel key.
+     *
+     * @return tunnel key
+     */
+    Optional<TunnelKey> key();
+
+    /**
+     * Builder of tunnel interface description entities.
+     */
+    interface Builder {
+
+        /**
+         * Returns new tunnel interface description.
+         *
+         * @return tunnel description
+         */
+        TunnelDescription build();
+
+        /**
+         * Returns tunnel interface description biulder with supplied device ID.
+         *
+         * @param deviceId device identifier
+         * @return tunnel description builder
+         */
+        Builder deviceId(String deviceId);
+
+        /**
+         * Returns tunnel interface description builder with a given interface name.
+         *
+         * @param name tunnel interface name
+         * @return tunnel description builder
+         */
+        Builder ifaceName(String name);
+
+        /**
+         * Returns tunnel interface description builder with a given tunnel type.
+         *
+         * @param type tunnel type
+         * @return tunnel description builder
+         */
+        Builder type(Type type);
+
+        /**
+         * Returns tunnel interface description builder with a given local
+         * tunnel endpoint.
+         *
+         * @param endpoint tunnel endpoint
+         * @return tunnel description builder
+         */
+        Builder local(TunnelEndPoint endpoint);
+
+        /**
+         * Returns tunnel interface description builder with a given remote
+         * tunnel endpoint.
+         *
+         * @param endpoint tunnel endpoint
+         * @return tunnel description builder
+         */
+        Builder remote(TunnelEndPoint endpoint);
+
+        /**
+         * Returns tunnel interface description builder with a tunnel key.
+         *
+         * @param tunnelKey tunnel key
+         * @return tunnel description builder
+         */
+        Builder key(TunnelKey tunnelKey);
+
+        /**
+         * Returns tunnel interface descriptions builder with other configurations.
+         *
+         * @param configs configurations
+         * @return tunnel description builder
+         */
+        Builder otherConfigs(SparseAnnotations configs);
+    }
 }

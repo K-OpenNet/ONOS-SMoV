@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
  */
 package org.onosproject.mastership;
 
-import org.joda.time.LocalDateTime;
+import org.onlab.util.Tools;
 import org.onosproject.cluster.RoleInfo;
 import org.onosproject.event.AbstractEvent;
 import org.onosproject.net.DeviceId;
 
 import com.google.common.base.MoreObjects;
+
+import java.util.Objects;
 
 /**
  * Describes a device mastership event.
@@ -44,7 +46,13 @@ public class MastershipEvent extends AbstractEvent<MastershipEvent.Type, DeviceI
          * the change in the backups list is accompanied by a change in
          * master, the event is subsumed by MASTER_CHANGED.
          */
-        BACKUPS_CHANGED
+        BACKUPS_CHANGED,
+
+        /**
+         * Signifies that the underlying storage for the Mastership state
+         * of this device is unavailable.
+         */
+        SUSPENDED
     }
 
     /**
@@ -84,9 +92,29 @@ public class MastershipEvent extends AbstractEvent<MastershipEvent.Type, DeviceI
     }
 
     @Override
+    public int hashCode() {
+        return Objects.hash(type(), subject(), roleInfo(), time());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj instanceof MastershipEvent) {
+            final MastershipEvent other = (MastershipEvent) obj;
+            return Objects.equals(this.type(), other.type()) &&
+                    Objects.equals(this.subject(), other.subject()) &&
+                    Objects.equals(this.roleInfo(), other.roleInfo()) &&
+                    Objects.equals(this.time(), other.time());
+        }
+        return false;
+    }
+
+    @Override
     public String toString() {
         return MoreObjects.toStringHelper(getClass())
-                .add("time", new LocalDateTime(time()))
+                .add("time", Tools.defaultOffsetDataTime(time()))
                 .add("type", type())
                 .add("subject", subject())
                 .add("roleInfo", roleInfo)

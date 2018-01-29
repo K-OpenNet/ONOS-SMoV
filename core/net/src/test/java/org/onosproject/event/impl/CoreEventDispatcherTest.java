@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,9 +27,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
- * Test of the even dispatcher mechanism.
+ * Test of the event dispatcher mechanism.
  */
 public class CoreEventDispatcherTest {
 
@@ -74,6 +75,17 @@ public class CoreEventDispatcherTest {
         dispatcher.post(new Thing("boom"));
         validate(gooSink);
         validate(prickleSink);
+    }
+
+    @Test
+    public void postEventSinkTakesTooLong() throws Exception {
+        SinkProcessTakesTooLong takesTooLong = new SinkProcessTakesTooLong();
+        dispatcher.setDispatchTimeLimit(250);
+        dispatcher.addSink(TooLongEvent.class, takesTooLong);
+        takesTooLong.latch = new CountDownLatch(1);
+        dispatcher.post(new TooLongEvent("XYZZY"));
+        takesTooLong.latch.await(1000, TimeUnit.MILLISECONDS);
+        assertTrue(takesTooLong.interrupted);
     }
 
     private void validate(Sink sink, String... strings) {
@@ -126,6 +138,27 @@ public class CoreEventDispatcherTest {
         public void process(Goo event) {
             process(event.subject());
             throw new IllegalStateException("BOOM!");
+        }
+    }
+
+    private static class TooLongEvent extends AbstractEvent<Type, String> {
+        protected TooLongEvent(String subject) {
+            super(Type.FOO, subject);
+        }
+    }
+
+    private static class SinkProcessTakesTooLong
+                         implements EventSink<TooLongEvent> {
+        boolean interrupted = false;
+        CountDownLatch latch;
+
+        public void process(TooLongEvent event) {
+            try {
+                Thread.sleep(5 * 1000);
+            } catch (InterruptedException ie) {
+                interrupted = true;
+            }
+            latch.countDown();
         }
     }
 

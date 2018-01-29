@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 describe('factory: view/topo/topoOblique.js', function() {
     var $log, fs, tos, flash;
 
-    beforeEach(module('ovTopo', 'onosUtil', 'onosLayer'));
+    beforeEach(module('ovTopo', 'onosUtil', 'onosLayer', 'onosNav', 'onosWidget', 'onosMast'));
 
     beforeEach(inject(function (_$log_, FnService,
                                 TopoObliqueService, FlashService) {
@@ -36,7 +36,8 @@ describe('factory: view/topo/topoOblique.js', function() {
 
     it('should define api functions', function () {
         expect(fs.areFunctions(tos, [
-            'initOblique', 'destroyOblique', 'isOblique', 'toggleOblique'
+            'initOblique', 'destroyOblique', 'isOblique', 'toggleOblique',
+            'setLionBundle',
         ])).toBeTruthy();
     });
 

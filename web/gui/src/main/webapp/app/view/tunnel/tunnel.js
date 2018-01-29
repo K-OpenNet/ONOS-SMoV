@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,13 +28,13 @@
         function ($log, $scope, $sce, fs, tbs) {
             tbs.buildTable({
                 scope: $scope,
-                tag: 'tunnel'
+                tag: 'tunnel',
             });
 
             $scope.$watch('tableData', function () {
                 if (!fs.isEmptyObject($scope.tableData)) {
                     $scope.tableData.forEach(function (tunnel) {
-                        //tunnel.direction = $sce.trustAsHtml(tunnel.direction);
+                        // tunnel.direction = $sce.trustAsHtml(tunnel.direction);
                     });
                 }
             });

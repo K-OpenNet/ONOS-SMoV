@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,29 +20,33 @@ import static org.onosproject.net.DeviceId.deviceId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.apache.karaf.shell.commands.Option;
 import org.onlab.packet.MplsLabel;
 import org.onlab.packet.VlanId;
+import org.onlab.util.Bandwidth;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.TributarySlot;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.newresource.DiscreteResourceId;
 import org.onosproject.net.intent.IntentId;
-import org.onosproject.net.newresource.ResourceAllocation;
-import org.onosproject.net.newresource.ResourceService;
-
-import com.google.common.base.Strings;
-import org.onosproject.net.newresource.Resources;
+import org.onosproject.net.resource.ResourceConsumerId;
+import org.onosproject.net.resource.Resources;
+import org.onosproject.net.resource.DiscreteResourceId;
+import org.onosproject.net.resource.ResourceAllocation;
+import org.onosproject.net.resource.ResourceService;
 
 /**
  * Lists allocated resources.
@@ -51,13 +55,15 @@ import org.onosproject.net.newresource.Resources;
          description = "Lists allocated resources")
 public class AllocationsCommand extends AbstractShellCommand {
 
-    @Option(name = "-t", aliases = "--type", description = "List of resource types",
+    @Option(name = "-t", aliases = "--type",
+            description = "resource types to include in the list",
             required = false, multiValued = true)
     String[] typeStrings = null;
 
     Set<String> typesToPrint;
 
-    @Option(name = "-i", aliases = "--intentId", description = "Intent ID",
+    @Option(name = "-i", aliases = "--intentId",
+            description = "Intent ID to include in the list",
             required = false, multiValued = true)
     String[] intentStrings;
 
@@ -127,7 +133,21 @@ public class AllocationsCommand extends AbstractShellCommand {
             // print DeviceId when Port was directly specified.
             print("%s", did);
         }
-        print("%s%s", Strings.repeat(" ", level), asVerboseString(num));
+
+        DiscreteResourceId resourceId = Resources.discrete(did, num).id();
+
+        List<String> portConsumers = resourceService.getResourceAllocations(resourceId)
+            .stream()
+            .filter(this::isSubjectToPrint)
+            .map(ResourceAllocation::consumerId)
+            .map(AllocationsCommand::asVerboseString)
+            .collect(Collectors.toList());
+        if (portConsumers.isEmpty()) {
+            print("%s%s", Strings.repeat(" ", level), asVerboseString(num));
+        } else {
+            print("%s%s allocated by %s", Strings.repeat(" ", level), asVerboseString(num),
+                                        portConsumers);
+        }
 
         // FIXME: This workaround induces a lot of distributed store access.
         //        ResourceService should have an API to get all allocations under a parent resource.
@@ -135,22 +155,23 @@ public class AllocationsCommand extends AbstractShellCommand {
                 .add(OchSignal.class)
                 .add(VlanId.class)
                 .add(MplsLabel.class)
+                .add(Bandwidth.class)
+                .add(TributarySlot.class)
                 .build();
 
-        DiscreteResourceId resourceId = Resources.discrete(did, num).id();
         for (Class<?> t : subResourceTypes) {
             resourceService.getResourceAllocations(resourceId, t).stream()
                     .filter(a -> isSubjectToPrint(a))
                     .forEach(a -> print("%s%s allocated by %s", Strings.repeat(" ", level + 1),
-                            a.resource().valueAs(Object.class).orElse(""), asVerboseString(a.consumer())));
+                            a.resource().valueAs(Object.class).orElse(""), asVerboseString(a.consumerId())));
 
         }
     }
 
     private boolean isSubjectToPrint(ResourceAllocation allocation) {
         if (!intentsToPrint.isEmpty()
-                && allocation.consumer() instanceof IntentId
-                && !intentsToPrint.contains(allocation.consumer().toString())) {
+                && allocation.consumerId().isClassOf(IntentId.class)
+                && !intentsToPrint.contains(allocation.consumerId().toString())) {
             return false;
         }
 
@@ -179,6 +200,10 @@ public class AllocationsCommand extends AbstractShellCommand {
         } else {
             return String.format("%s:%s", name, toString);
         }
+    }
+
+    private static String asVerboseString(ResourceConsumerId consumerId) {
+        return String.format("%s:%s", consumerId.consumerClass(), consumerId.value());
     }
 
 }

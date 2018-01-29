@@ -19,15 +19,15 @@ if ( ! $?JAVA_HOME ) then
         setenv JAVA_HOME `/usr/libexec/java_home -v 1.8`
     else if ( -d /usr/lib/jvm/java-8-oracle ) then
         setenv JAVA_HOME /usr/lib/jvm/java-8-oracle
-    else if ( -d /usr/lib/jvm/java-7-openjdk-amd64 ) then
-        setenv JAVA_HOME /usr/lib/jvm/java-7-openjdk-amd64
+    else if ( -d /usr/lib/jvm/java-8-openjdk-amd64 ) then
+        setenv JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64
     endif
 endif
 if ( ! $?MAVEN ) then
     setenv MAVEN $HOME/Applications/apache-maven-3.3.9
 endif
 if ( ! $?KARAF_VERSION ) then
-    setenv KARAF_VERSION 3.0.5
+    setenv KARAF_VERSION 3.0.8
 endif
 if ( ! $?KARAF_ROOT ) then
     setenv KARAF_ROOT $HOME/Applications/apache-karaf-$KARAF_VERSION

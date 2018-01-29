@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.onlab.packet.pim;
 
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.Deserializer;
-import org.onlab.packet.IPacket;
 import org.onlab.packet.IpPrefix;
 
 import java.nio.ByteBuffer;
@@ -180,13 +179,7 @@ public class PIMJoinPrune extends BasePacket {
         return data2;
     }
 
-    // TODO: I suppose I really need to implement this?
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        return this;
-    }
+
 
     /**
      * Return the J/P deserializer function.

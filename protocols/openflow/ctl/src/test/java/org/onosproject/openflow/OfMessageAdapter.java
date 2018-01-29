@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package org.onosproject.openflow;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
@@ -50,7 +50,19 @@ public class OfMessageAdapter implements OFMessage {
     }
 
     @Override
-    public void writeTo(ChannelBuffer channelBuffer) { }
+    public void writeTo(ByteBuf byteBuf) { }
+
+    @Override
+    public boolean equalsIgnoreXid(Object obj) {
+     // Do nothing here for now
+        return true;
+    }
+
+    @Override
+    public int hashCodeIgnoreXid() {
+     // Do nothing here for now
+        return 0;
+    }
 
     @Override
     public Builder createBuilder() {

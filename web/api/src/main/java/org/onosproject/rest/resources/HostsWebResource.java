@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.onosproject.net.HostId;
 import org.onosproject.net.HostLocation;
 import org.onosproject.net.SparseAnnotations;
 import org.onosproject.net.host.DefaultHostDescription;
+import org.onosproject.net.host.HostAdminService;
 import org.onosproject.net.host.HostProvider;
 import org.onosproject.net.host.HostProviderRegistry;
 import org.onosproject.net.host.HostProviderService;
@@ -36,6 +37,7 @@ import org.onosproject.net.provider.ProviderId;
 import org.onosproject.rest.AbstractWebResource;
 
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -64,15 +66,15 @@ import static org.onosproject.net.HostId.hostId;
 public class HostsWebResource extends AbstractWebResource {
 
     @Context
-    UriInfo uriInfo;
-    public static final String HOST_NOT_FOUND = "Host is not found";
-    private static final String[] REMOVAL_KEYS = {"mac", "vlan", "location", "ipAddresses"};
+    private UriInfo uriInfo;
+    private static final String HOST_NOT_FOUND = "Host is not found";
+    private static final String[] REMOVAL_KEYS = {"mac", "vlan", "locations", "ipAddresses"};
 
     /**
      * Get all end-station hosts.
      * Returns array of all known end-station hosts.
      *
-     * @return 200 OK
+     * @return 200 OK with array of all known end-station hosts.
      * @onos.rsModel Hosts
      */
     @GET
@@ -88,7 +90,7 @@ public class HostsWebResource extends AbstractWebResource {
      * Returns detailed properties of the specified end-station host.
      *
      * @param id host identifier
-     * @return 200 OK
+     * @return 200 OK with detailed properties of the specified end-station host
      * @onos.rsModel Host
      */
     @GET
@@ -107,7 +109,7 @@ public class HostsWebResource extends AbstractWebResource {
      *
      * @param mac  host MAC address
      * @param vlan host VLAN identifier
-     * @return 200 OK
+     * @return 200 OK with detailed properties of the specified end-station host
      * @onos.rsModel Host
      */
     @GET
@@ -160,11 +162,36 @@ public class HostsWebResource extends AbstractWebResource {
                 .build();
     }
 
+    /**
+     * Removes infrastructure device.
+     * Administratively deletes the specified device from the inventory of
+     * known devices.
+     *
+     * @param mac  host MAC address
+     * @param vlan host VLAN identifier
+     * @return 204 OK
+     * @onos.rsModel Host
+     */
+    @DELETE
+    @Path("{mac}/{vlan}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response removeHost(@PathParam("mac") String mac,
+                               @PathParam("vlan") String vlan) {
+        get(HostAdminService.class).removeHost(hostId(mac + "/" + vlan));
+        return Response.noContent().build();
+    }
+
+    /**
+     * Internal host provider that provides host events.
+     */
     private final class InternalHostProvider implements HostProvider {
         private final ProviderId providerId =
                 new ProviderId("host", "org.onosproject.rest", true);
         private HostProviderService hostProviderService;
 
+        /**
+         * Prevents from instantiation.
+         */
         private InternalHostProvider() {
         }
 
@@ -192,15 +219,21 @@ public class HostsWebResource extends AbstractWebResource {
         private HostId parseHost(JsonNode node) {
             MacAddress mac = MacAddress.valueOf(node.get("mac").asText());
             VlanId vlanId = VlanId.vlanId((short) node.get("vlan").asInt(VlanId.UNTAGGED));
-            JsonNode locationNode = node.get("location");
-            String deviceAndPort = locationNode.get("elementId").asText() + "/" +
-                    locationNode.get("port").asText();
-            HostLocation hostLocation = new HostLocation(ConnectPoint.deviceConnectPoint(deviceAndPort), 0);
 
-            Iterator<JsonNode> ipStrings = node.get("ipAddresses").elements();
+            Iterator<JsonNode> locationNodes = node.get("locations").elements();
+            Set<HostLocation> locations = new HashSet<>();
+            while (locationNodes.hasNext()) {
+                JsonNode locationNode = locationNodes.next();
+                String deviceAndPort = locationNode.get("elementId").asText() + "/" +
+                        locationNode.get("port").asText();
+                HostLocation hostLocation = new HostLocation(ConnectPoint.deviceConnectPoint(deviceAndPort), 0);
+                locations.add(hostLocation);
+            }
+
+            Iterator<JsonNode> ipNodes = node.get("ipAddresses").elements();
             Set<IpAddress> ips = new HashSet<>();
-            while (ipStrings.hasNext()) {
-                ips.add(IpAddress.valueOf(ipStrings.next().asText()));
+            while (ipNodes.hasNext()) {
+                ips.add(IpAddress.valueOf(ipNodes.next().asText()));
             }
 
             // try to remove elements from json node after reading them
@@ -208,7 +241,7 @@ public class HostsWebResource extends AbstractWebResource {
             // Update host inventory
 
             HostId hostId = HostId.hostId(mac, vlanId);
-            DefaultHostDescription desc = new DefaultHostDescription(mac, vlanId, hostLocation, ips, annotations);
+            DefaultHostDescription desc = new DefaultHostDescription(mac, vlanId, locations, ips, true, annotations);
             hostProviderService.hostDetected(hostId, desc, false);
             return hostId;
         }

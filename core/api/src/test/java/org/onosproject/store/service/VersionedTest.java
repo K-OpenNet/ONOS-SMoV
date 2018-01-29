@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ public class VersionedTest {
      */
     @Test
     public void testMap() {
-        Versioned<String> tempObj = stats1.<String>map(VersionedTest::transform);
+        Versioned<String> tempObj = stats1.map(VersionedTest::transform);
         assertThat(tempObj.value(), is("1"));
     }
 

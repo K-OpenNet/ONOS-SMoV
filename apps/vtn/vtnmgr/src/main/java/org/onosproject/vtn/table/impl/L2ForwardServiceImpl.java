@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.DefaultGroupId;
+import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.ExtensionTreatmentResolver;
@@ -83,7 +83,7 @@ public final class L2ForwardServiceImpl implements L2ForwardService {
             log.info("No other host port and tunnel in the device");
             return;
         }
-        Sets.newHashSet(localVmPorts).stream().forEach(lp -> {
+        Sets.newHashSet(localVmPorts).forEach(lp -> {
             TrafficSelector selector = DefaultTrafficSelector.builder()
                     .matchInPort(lp).matchEthDst(MacAddress.BROADCAST)
                     .add(Criteria.matchTunnelId(Long
@@ -101,7 +101,7 @@ public final class L2ForwardServiceImpl implements L2ForwardService {
             if (type == Objective.Operation.REMOVE && inPort.equals(lp)) {
                 flag = false;
             }
-            treatment.group(new DefaultGroupId(GROUP_ID));
+            treatment.group(new GroupId(GROUP_ID));
             ForwardingObjective.Builder objective = DefaultForwardingObjective
                     .builder().withTreatment(treatment.build())
                     .withSelector(selector).fromApp(appId).makePermanent()
@@ -124,7 +124,7 @@ public final class L2ForwardServiceImpl implements L2ForwardService {
             log.info("No other host port or tunnel ports in the device");
             return;
         }
-        Sets.newHashSet(localTunnelPorts).stream().forEach(tp -> {
+        Sets.newHashSet(localTunnelPorts).forEach(tp -> {
             TrafficSelector selector = DefaultTrafficSelector.builder()
                     .matchInPort(tp)
                     .add(Criteria.matchTunnelId(Long
@@ -142,7 +142,7 @@ public final class L2ForwardServiceImpl implements L2ForwardService {
                     .withSelector(selector).fromApp(appId).makePermanent()
                     .withFlag(Flag.SPECIFIC).withPriority(MAC_PRIORITY);
             if (type.equals(Objective.Operation.ADD)) {
-                if (Sets.newHashSet(localVmPorts).size() == 0) {
+                if (Sets.newHashSet(localVmPorts).isEmpty()) {
                     flowObjectiveService.forward(deviceId, objective.remove());
                 } else {
                     flowObjectiveService.forward(deviceId, objective.add());
@@ -161,6 +161,28 @@ public final class L2ForwardServiceImpl implements L2ForwardService {
         TrafficSelector selector = DefaultTrafficSelector.builder()
                 .matchTunnelId(Long.parseLong(segmentationId.toString()))
                 .matchEthDst(sourceMac).build();
+        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                .setOutput(outPort).build();
+        ForwardingObjective.Builder objective = DefaultForwardingObjective
+                .builder().withTreatment(treatment).withSelector(selector)
+                .fromApp(appId).withFlag(Flag.SPECIFIC)
+                .withPriority(MAC_PRIORITY);
+        if (type.equals(Objective.Operation.ADD)) {
+            flowObjectiveService.forward(deviceId, objective.add());
+        } else {
+            flowObjectiveService.forward(deviceId, objective.remove());
+        }
+
+    }
+
+    @Override
+    public void programExternalOut(DeviceId deviceId,
+                                SegmentationId segmentationId,
+                                PortNumber outPort, MacAddress sourceMac,
+                                Objective.Operation type) {
+        TrafficSelector selector = DefaultTrafficSelector.builder()
+                .matchTunnelId(Long.parseLong(segmentationId.toString()))
+                .matchEthSrc(sourceMac).build();
         TrafficTreatment treatment = DefaultTrafficTreatment.builder()
                 .setOutput(outPort).build();
         ForwardingObjective.Builder objective = DefaultForwardingObjective

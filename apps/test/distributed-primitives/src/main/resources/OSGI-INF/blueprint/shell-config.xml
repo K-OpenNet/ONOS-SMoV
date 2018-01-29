@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -33,6 +33,24 @@
         </command>
         <command>
             <action class="org.onosproject.distributedprimitives.cli.TransactionalMapTestPutCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.CounterTestCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.WorkQueueTestCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.ConsistentMapTestCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.EventuallyConsistentMapTestCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.AtomicValueTestCommand"/>
+        </command>
+        <command>
+            <action class="org.onosproject.distributedprimitives.cli.LeaderElectorTestCommand"/>
         </command>
     </command-bundle>
 

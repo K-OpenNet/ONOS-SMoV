@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,10 @@ import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.handler.timeout.IdleStateAwareChannelHandler;
-import org.jboss.netty.handler.timeout.ReadTimeoutException;
-import org.jboss.netty.handler.timeout.ReadTimeoutHandler;
+import org.jboss.netty.util.HashedWheelTimer;
+import org.jboss.netty.util.Timeout;
+import org.jboss.netty.util.Timer;
+import org.jboss.netty.util.TimerTask;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpAddress;
 import org.onosproject.bgp.controller.BgpCfg;
@@ -44,6 +46,7 @@ import org.onosproject.bgpio.types.BgpErrorType;
 import org.onosproject.bgpio.types.BgpValueType;
 import org.onosproject.bgpio.types.FourOctetAsNumCapabilityTlv;
 import org.onosproject.bgpio.types.MultiProtocolExtnCapabilityTlv;
+import org.onosproject.bgpio.types.RpdCapabilityTlv;
 import org.onosproject.bgpio.util.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,10 +58,13 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import static org.onlab.util.Tools.groupedThreads;
 
 /**
  * Channel handler deals with the bgp peer connection and dispatches messages from peer to the appropriate locations.
@@ -72,8 +78,8 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
     private BgpId thisbgpId;
     private Channel channel;
     private BgpKeepAliveTimer keepAliveTimer = null;
+    private short minHoldTime = 0;
     private short peerHoldTime = 0;
-    private short negotiatedHoldTime = 0;
     private long peerAsNum;
     private int peerIdentifier;
     private BgpPacketStatsImpl bgpPacketStats;
@@ -85,6 +91,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
     static final short AFI = 16388;
     static final byte RES = 0;
     static final byte SAFI = 71;
+    static final byte MAX_UNSUPPORTED_CAPABILITY = 5;
 
     // State needs to be volatile because the HandshakeTimeoutHandler
     // needs to check if the handshake is complete
@@ -110,6 +117,8 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
     private String peerAddr;
     private BgpCfg bgpconfig;
     List<BgpValueType> remoteBgpCapability;
+    private Timer timer = new HashedWheelTimer(groupedThreads("BgpChannel", "timer-%d", log));
+    private volatile Timeout holdTimerTimeout;
 
     /**
      * Create a new unconnected BGPChannelHandler.
@@ -181,14 +190,9 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                          * received in the OPEN message
                          */
                         h.peerHoldTime = pOpenmsg.getHoldTime();
-                        if (h.peerHoldTime < h.bgpconfig.getHoldTime()) {
-                            h.channel.getPipeline().replace("holdTime",
-                                                            "holdTime",
-                                                            new ReadTimeoutHandler(BgpPipelineFactory.TIMER,
-                                                                                   h.peerHoldTime));
-                        }
-
-                        log.info("Hold Time : " + h.peerHoldTime);
+                        h.minHoldTime = (short) Math.min(h.bgpconfig.getHoldTime(), pOpenmsg.getHoldTime());
+                        h.restartHoldTimeoutTimer();
+                        log.info("Hold Time : " + h.minHoldTime);
 
                         // update AS number
                         h.peerAsNum = pOpenmsg.getAsNumber();
@@ -236,14 +240,9 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                          * received in the OPEN message
                          */
                         h.peerHoldTime = pOpenmsg.getHoldTime();
-                        if (h.peerHoldTime < h.bgpconfig.getHoldTime()) {
-                            h.channel.getPipeline().replace("holdTime",
-                                                            "holdTime",
-                                                            new ReadTimeoutHandler(BgpPipelineFactory.TIMER,
-                                                                                   h.peerHoldTime));
-                        }
-
-                        log.debug("Hold Time : " + h.peerHoldTime);
+                        h.minHoldTime = (short) Math.min(h.bgpconfig.getHoldTime(), pOpenmsg.getHoldTime());
+                        h.restartHoldTimeoutTimer();
+                        log.debug("Hold Time : " + h.minHoldTime);
 
                         // update AS number
                         h.peerAsNum = pOpenmsg.getAsNumber();
@@ -277,11 +276,8 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                     final InetSocketAddress inetAddress = (InetSocketAddress) h.address;
                     h.thisbgpId = BgpId.bgpId(IpAddress.valueOf(inetAddress.getAddress()));
 
-                    // set session parameters
-                    h.negotiatedHoldTime = (h.peerHoldTime < h.bgpconfig.getHoldTime()) ? h.peerHoldTime
-                                                                                        : h.bgpconfig.getHoldTime();
                     h.sessionInfo = new BgpSessionInfoImpl(h.thisbgpId, h.bgpVersion, h.peerAsNum, h.peerHoldTime,
-                                                           h.peerIdentifier, h.negotiatedHoldTime, h.isIbgpSession,
+                                                           h.peerIdentifier, h.minHoldTime, h.isIbgpSession,
                                                            h.remoteBgpCapability);
 
                     h.bgpPeer = h.peerManager.getBgpPeerInstance(h.bgpController, h.sessionInfo, h.bgpPacketStats);
@@ -295,9 +291,9 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                      * time between KEEPALIVE messages would be one third of the Hold Time interval.
                      */
 
-                    if (h.negotiatedHoldTime != 0) {
+                    if (h.minHoldTime != 0) {
                         h.keepAliveTimer = new BgpKeepAliveTimer(h,
-                                                                (h.negotiatedHoldTime / BGP_MAX_KEEPALIVE_INTERVAL));
+                                                                (h.minHoldTime / BGP_MAX_KEEPALIVE_INTERVAL));
                     } else {
                         h.sendKeepAliveMessage();
                     }
@@ -306,6 +302,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
 
                     // set the state handshake completion.
                     h.setHandshakeComplete(true);
+                    h.restartHoldTimeoutTimer();
 
                     if (!h.peerManager.addConnectedPeer(h.thisbgpId, h.bgpPeer)) {
                         disconnectDuplicate(h);
@@ -322,6 +319,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             void processBgpMessage(BgpChannelHandler h, BgpMessage m) throws IOException, BgpParseException {
                 log.debug("Message received in established state " + m.getType());
                 // dispatch the message
+                h.restartHoldTimeoutTimer();
                 h.dispatchMessage(m);
             }
         };
@@ -370,6 +368,17 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
     private void stopKeepAliveTimer() {
         if ((keepAliveTimer != null) && (keepAliveTimer.getKeepAliveTimer() != null)) {
             keepAliveTimer.getKeepAliveTimer().cancel();
+        }
+    }
+
+    //Stop hold timer
+    private void stopSessionTimers() {
+        if ((keepAliveTimer != null) && (keepAliveTimer.getKeepAliveTimer() != null)) {
+            keepAliveTimer.getKeepAliveTimer().cancel();
+        }
+
+        if (holdTimerTimeout != null) {
+            holdTimerTimeout.cancel();
         }
     }
 
@@ -483,7 +492,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                 duplicateBgpIdFound = Boolean.FALSE;
             }
 
-           stopKeepAliveTimer();
+            stopSessionTimers();
         } else {
             bgpconfig.setPeerConnState(peerAddr, BgpPeerCfg.State.IDLE);
             log.warn("No bgp ip in channelHandler registered for " + "disconnected peer {}", getPeerInfoString());
@@ -493,43 +502,40 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) throws Exception {
 
-        log.info("[exceptionCaught]: " + e.toString());
+        log.error("[exceptionCaught]: " + e.toString());
 
-        if (e.getCause() instanceof ReadTimeoutException) {
-            // device timeout
-            log.error("Disconnecting device {} due to read timeout", getPeerInfoString());
-            sendNotification(BgpErrorType.HOLD_TIMER_EXPIRED, (byte) 0, null);
-            state = ChannelState.IDLE;
-            stopKeepAliveTimer();
-            ctx.getChannel().close();
-            return;
-        } else if (e.getCause() instanceof ClosedChannelException) {
+        if (e.getCause() instanceof ClosedChannelException) {
+            bgpController.activeSessionExceptionAdd(peerAddr, e.getCause().toString());
             log.debug("Channel for bgp {} already closed", getPeerInfoString());
         } else if (e.getCause() instanceof IOException) {
             log.error("Disconnecting peer {} due to IO Error: {}", getPeerInfoString(), e.getCause().getMessage());
+            bgpController.closedSessionExceptionAdd(peerAddr, e.getCause().toString());
             if (log.isDebugEnabled()) {
                 // still print stack trace if debug is enabled
                 log.debug("StackTrace for previous Exception: ", e.getCause());
             }
-            stopKeepAliveTimer();
+            stopSessionTimers();
             ctx.getChannel().close();
         } else if (e.getCause() instanceof BgpParseException) {
             byte[] data = new byte[] {};
             BgpParseException errMsg = (BgpParseException) e.getCause();
             byte errorCode = errMsg.getErrorCode();
             byte errorSubCode = errMsg.getErrorSubCode();
+            bgpController.activeSessionExceptionAdd(peerAddr, e.getCause().toString());
             ChannelBuffer tempCb = errMsg.getData();
             if (tempCb != null) {
-                int dataLength = tempCb.capacity();
+                int dataLength = tempCb.readableBytes();
                 data = new byte[dataLength];
                 tempCb.readBytes(data, 0, dataLength);
             }
             sendNotification(errorCode, errorSubCode, data);
         } else if (e.getCause() instanceof RejectedExecutionException) {
             log.warn("Could not process message: queue full");
+            bgpController.activeSessionExceptionAdd(peerAddr, e.getCause().toString());
         } else {
-            stopKeepAliveTimer();
+            stopSessionTimers();
             log.error("Error while processing message from peer " + getPeerInfoString() + "state " + this.state);
+            bgpController.closedSessionExceptionAdd(peerAddr, e.getCause().toString());
             ctx.getChannel().close();
         }
     }
@@ -671,6 +677,8 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
 
         bgpId = Ip4Address.valueOf(bgpconfig.getRouterId()).toInt();
 
+        boolean evpnCapability = bgpconfig.getEvpnCapability();
+
         if (flowSpec == BgpCfg.FlowSpec.IPV4) {
             flowSpecStatus = true;
         } else if (flowSpec == BgpCfg.FlowSpec.VPNV4) {
@@ -685,7 +693,9 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                 .setLsCapabilityTlv(bgpconfig.getLsCapability())
                 .setLargeAsCapabilityTlv(bgpconfig.getLargeASCapability())
                 .setFlowSpecCapabilityTlv(flowSpecStatus)
-                .setVpnFlowSpecCapabilityTlv(vpnFlowSpecStatus).build();
+                .setVpnFlowSpecCapabilityTlv(vpnFlowSpecStatus)
+                .setEvpnCapabilityTlv(evpnCapability)
+                .setFlowSpecRpdCapabilityTlv(bgpconfig.flowSpecRpdCapability()).build();
         log.debug("Sending open message to {}", channel.getRemoteAddress());
         channel.write(Collections.singletonList(msg));
 
@@ -730,7 +740,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
      * @throws IOException while processing error message
      */
     public void processUnknownMsg(byte errorCode, byte errorSubCode, byte data) throws BgpParseException, IOException {
-        log.debug("UNKNOWN message received");
+        log.debug("Unknown message received");
         byte[] byteArray = new byte[1];
         byteArray[0] = data;
         sendNotification(errorCode, errorSubCode, byteArray);
@@ -779,27 +789,39 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
      * @throws BgpParseException
      */
     private boolean capabilityValidation(BgpChannelHandler h, BgpOpenMsg openmsg) throws BgpParseException {
-        log.debug("capabilityValidation");
+        log.debug("capability validation");
 
         boolean isFourOctetCapabilityExits = false;
+        boolean isRpdCapabilityExits = false;
         int capAsNum = 0;
+        byte sendReceive = 0;
 
         List<BgpValueType> capabilityTlv = openmsg.getCapabilityTlv();
         ListIterator<BgpValueType> listIterator = capabilityTlv.listIterator();
-        List<BgpValueType> unSupportedCapabilityTlv = new LinkedList<>();
+        List<BgpValueType> unSupportedCapabilityTlv = new CopyOnWriteArrayList<BgpValueType>();
         ListIterator<BgpValueType> unSupportedCaplistIterator = unSupportedCapabilityTlv.listIterator();
         BgpValueType tempTlv;
         boolean isLargeAsCapabilityCfg = h.bgpconfig.getLargeASCapability();
+        boolean isFlowSpecRpdCapabilityCfg = h.bgpconfig.flowSpecRpdCapability();
         boolean isLsCapabilityCfg = h.bgpconfig.getLsCapability();
-        boolean isFlowSpecCapabilityCfg = false;
+        boolean isFlowSpecIpv4CapabilityCfg = false;
+        boolean isFlowSpecVpnv4CapabilityCfg = false;
         MultiProtocolExtnCapabilityTlv tempCapability;
         boolean isMultiProtocolLsCapability = false;
         boolean isMultiProtocolFlowSpecCapability = false;
         boolean isMultiProtocolVpnFlowSpecCapability = false;
         BgpCfg.FlowSpec flowSpec = h.bgpconfig.flowSpecCapability();
+        boolean isEvpnCapability = false;
+        boolean isEvpnCapabilityCfg = h.bgpconfig
+                .getEvpnCapability();
 
-        if (flowSpec != BgpCfg.FlowSpec.NONE) {
-            isFlowSpecCapabilityCfg = true;
+        if (flowSpec == BgpCfg.FlowSpec.IPV4) {
+            isFlowSpecIpv4CapabilityCfg = true;
+        } else if (flowSpec == BgpCfg.FlowSpec.VPNV4) {
+            isFlowSpecVpnv4CapabilityCfg = true;
+        } else if (flowSpec == BgpCfg.FlowSpec.IPV4_VPNV4) {
+            isFlowSpecIpv4CapabilityCfg = true;
+            isFlowSpecVpnv4CapabilityCfg = true;
         }
 
         while (listIterator.hasNext()) {
@@ -808,6 +830,10 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
                 tempCapability = (MultiProtocolExtnCapabilityTlv) tlv;
                 if (Constants.SAFI_FLOWSPEC_VALUE == tempCapability.getSafi()) {
                     isMultiProtocolFlowSpecCapability = true;
+                }
+
+                if (Constants.SAFI_EVPN_VALUE == tempCapability.getSafi()) {
+                    isEvpnCapability = true;
                 }
 
                 if (Constants.VPN_SAFI_FLOWSPEC_VALUE == tempCapability.getSafi()) {
@@ -821,6 +847,11 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             if (tlv.getType() == FOUR_OCTET_AS_NUM_CAPA_TYPE) {
                 isFourOctetCapabilityExits = true;
                 capAsNum = ((FourOctetAsNumCapabilityTlv) tlv).getInt();
+            }
+
+            if (tlv.getType() == RpdCapabilityTlv.TYPE) {
+                isRpdCapabilityExits = true;
+                sendReceive = ((RpdCapabilityTlv) tlv).sendReceive();
             }
         }
 
@@ -836,6 +867,12 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             }
         }
 
+        if (isRpdCapabilityExits) {
+            if (sendReceive > 2) {
+                throw new BgpParseException(BgpErrorType.OPEN_MESSAGE_ERROR, BgpErrorType.UNSUPPORTED_CAPABILITY, null);
+            }
+        }
+
         if ((isLsCapabilityCfg)) {
             if (!isMultiProtocolLsCapability) {
                 tempTlv = new MultiProtocolExtnCapabilityTlv(AFI, RES, SAFI);
@@ -843,13 +880,24 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             }
         }
 
-        if ((isFlowSpecCapabilityCfg)) {
+        if (isFlowSpecIpv4CapabilityCfg) {
             if (!isMultiProtocolFlowSpecCapability) {
                 tempTlv = new MultiProtocolExtnCapabilityTlv(Constants.AFI_FLOWSPEC_VALUE,
                                                              RES, Constants.SAFI_FLOWSPEC_VALUE);
                 unSupportedCapabilityTlv.add(tempTlv);
             }
+        }
 
+        if (isEvpnCapabilityCfg) {
+            if (!isEvpnCapability) {
+                tempTlv = new MultiProtocolExtnCapabilityTlv(Constants.AFI_EVPN_VALUE,
+                        RES,
+                        Constants.SAFI_EVPN_VALUE);
+                unSupportedCapabilityTlv.add(tempTlv);
+            }
+        }
+
+        if (isFlowSpecVpnv4CapabilityCfg) {
             if (!isMultiProtocolVpnFlowSpecCapability) {
                 tempTlv = new MultiProtocolExtnCapabilityTlv(Constants.AFI_FLOWSPEC_VALUE,
                                                              RES, Constants.VPN_SAFI_FLOWSPEC_VALUE);
@@ -864,7 +912,14 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             }
         }
 
-        if (unSupportedCapabilityTlv.size() == 3) {
+        if ((isFlowSpecRpdCapabilityCfg)) {
+            if (!isRpdCapabilityExits) {
+                tempTlv = new RpdCapabilityTlv(Constants.RPD_CAPABILITY_SEND_VALUE);
+                unSupportedCapabilityTlv.add(tempTlv);
+            }
+        }
+
+        if (unSupportedCapabilityTlv.size() == MAX_UNSUPPORTED_CAPABILITY) {
             ChannelBuffer buffer = ChannelBuffers.dynamicBuffer();
             while (unSupportedCaplistIterator.hasNext()) {
                 BgpValueType tlv = unSupportedCaplistIterator.next();
@@ -884,7 +939,7 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
      * @return true or false
      */
     private boolean asNumberValidation(BgpChannelHandler h, BgpOpenMsg openMsg) {
-        log.debug("AS Num validation");
+        log.debug("AS number validation");
 
         int capAsNum = 0;
         boolean isFourOctetCapabilityExits = false;
@@ -963,5 +1018,42 @@ class BgpChannelHandler extends IdleStateAwareChannelHandler {
             log.debug("InetAddress convertion failed");
         }
         return true;
+    }
+
+    /**
+     * Restarts the BGP hold Timeout Timer.
+     */
+    void restartHoldTimeoutTimer() {
+        if (peerHoldTime == 0) {
+            return;
+        }
+        if (holdTimerTimeout != null) {
+            holdTimerTimeout.cancel();
+        }
+        holdTimerTimeout = timer.newTimeout(new HoldTimerTimeout(), minHoldTime, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Timer class for BGP hold timer timeout.
+     */
+    private final class HoldTimerTimeout implements TimerTask {
+
+        @Override
+        public void run(Timeout timeout) throws Exception {
+            if (timeout.isCancelled()) {
+                return;
+            }
+            if (!channel.isOpen()) {
+                return;
+            }
+
+            log.debug("BGP hold timer expired: peer {}", channel.getRemoteAddress());
+
+            sendNotification(BgpErrorType.HOLD_TIMER_EXPIRED, (byte) 0, null);
+            bgpController.closedSessionExceptionAdd(peerAddr, "BGP hold timer expired");
+            stopSessionTimers();
+            state = ChannelState.IDLE;
+            channel.close();
+        }
     }
 }

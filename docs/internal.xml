@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2014 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
     <parent>
         <groupId>org.onosproject</groupId>
         <artifactId>onos</artifactId>
-        <version>1.5.1</version>
+        <version>1.13.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -49,7 +49,7 @@
                 <configuration>
                     <show>package</show>
                     <docfilessubdirs>true</docfilessubdirs>
-                    <doctitle>ONOS Java API (1.5.1)</doctitle>
+                    <doctitle>ONOS Java API (1.13.0-SNAPSHOT)</doctitle>
                     <excludePackageNames>@internal-excludes</excludePackageNames>
                     <sourceFileExcludes>
                         <sourceFileExclude>**/generated-sources/**</sourceFileExclude>
@@ -118,6 +118,18 @@
                         <group>
                             <title>OSPF Protocol &amp; Providers</title>
                             <packages>@internal-ospf</packages>
+                        </group>
+                        <group>
+                            <title>ISIS Protocol &amp; Providers</title>
+                            <packages>@internal-isis</packages>
+                        </group>
+                        <group>
+                            <title>LISP Protocol &amp; Providers</title>
+                            <packages>@internal-lisp</packages>
+                        </group>
+                        <group>
+                            <title>SNMP Protocol &amp; Providers</title>
+                            <packages>@internal-snmp</packages>
                         </group>
                         <group>
                             <title>REST Protocol &amp; Providers</title>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,42 @@ public final class Frequency implements RichComparable<Frequency> {
      */
     public long asHz() {
         return frequency;
+    }
+
+    /**
+     * Return the value this instance represents as KHz.
+     *
+     * @return frequency in kHz
+     */
+    public double asKHz() {
+        return (double) frequency / KHZ;
+    }
+
+    /**
+     * Return the value this instance represents as MHz.
+     *
+     * @return frequency in MHz
+     */
+    public double asMHz() {
+        return (double) frequency / MHZ;
+    }
+
+    /**
+     * Return the value this instance represents as GHz.
+     *
+     * @return frequency in GHz
+     */
+    public double asGHz() {
+        return (double) frequency / GHZ;
+    }
+
+    /**
+     * Return the value this instance represents as THz.
+     *
+     * @return frequency in THz
+     */
+    public double asTHz() {
+        return (double) frequency / THZ;
     }
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ public interface GraphPathSearch<V extends Vertex, E extends Edge<V>> {
          *
          * @return map of vertex to path cost bindings
          */
-        Map<V, Double> costs();
+        Map<V, Weight> costs();
     }
 
     /**
@@ -76,12 +76,12 @@ public interface GraphPathSearch<V extends Vertex, E extends Edge<V>> {
      * @param src      optional source vertex
      * @param dst      optional destination vertex; if null paths to all vertex
      *                 destinations will be searched
-     * @param weight   optional edge-weight; if null cost of each edge will be
-     *                 assumed to be 1.0
+     * @param weigher  optional edge-weigher; if null, {@link DefaultEdgeWeigher}
+     *                 will be used (assigns equal weights to all links)
      * @param maxPaths limit on number of paths; {@link GraphPathSearch#ALL_PATHS} if no limit
      * @return search results
      */
     Result<V, E> search(Graph<V, E> graph, V src, V dst,
-                        EdgeWeight<V, E> weight, int maxPaths);
+                        EdgeWeigher<V, E> weigher, int maxPaths);
 
 }

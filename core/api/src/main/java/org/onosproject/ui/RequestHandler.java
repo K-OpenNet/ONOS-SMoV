@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,12 @@ public abstract class RequestHandler {
     private UiMessageHandler parent;
 
 
+    /**
+     * Constructs a request handler instance that will handle events
+     * of the specified type.
+     *
+     * @param eventType type of event that will be handled
+     */
     public RequestHandler(String eventType) {
         this.eventType = eventType;
     }
@@ -53,19 +59,16 @@ public abstract class RequestHandler {
     /**
      * Processes the incoming message payload from the client.
      *
-     * @param sid message sequence identifier
      * @param payload request message payload
      */
-    // TODO: remove sid from signature
-    public abstract void process(long sid, ObjectNode payload);
-
+    public abstract void process(ObjectNode payload);
 
 
     // ===================================================================
     // === Convenience methods...
 
     /**
-     * Returns implementation of the specified service class.
+     * Returns an implementation of the specified service class.
      *
      * @param serviceClass service class
      * @param <T>          type of service
@@ -77,21 +80,19 @@ public abstract class RequestHandler {
     }
 
     /**
-     * Sends a message back to the client.
+     * Sends a message back to the client with the given event type and payload.
      *
      * @param eventType message event type
-     * @param sid       message sequence identifier
      * @param payload   message payload
      */
-    // TODO: remove sid from signature
-    protected void sendMessage(String eventType, long sid, ObjectNode payload) {
-        parent.connection().sendMessage(eventType, sid, payload);
+    protected void sendMessage(String eventType, ObjectNode payload) {
+        parent.connection().sendMessage(eventType, payload);
     }
 
     /**
      * Sends a message back to the client.
-     * Here, the message is preformatted; the assumption is it has its
-     * eventType, sid and payload attributes already filled in.
+     * Here, the message is preformatted; the assumption is that it has its
+     * "event" (event type) and "payload" attributes already filled in.
      *
      * @param message the message to send
      */
@@ -105,12 +106,10 @@ public abstract class RequestHandler {
      * Note that the message handlers must be defined in the same parent.
      *
      * @param eventType event type
-     * @param sid       sequence identifier
      * @param payload   message payload
      */
-    // TODO: remove sid from signature
-    protected void chain(String eventType, long sid, ObjectNode payload) {
-        parent.exec(eventType, sid, payload);
+    protected void chain(String eventType, ObjectNode payload) {
+        parent.exec(eventType, payload);
     }
 
     // ===================================================================
@@ -120,7 +119,7 @@ public abstract class RequestHandler {
      * Returns the specified node property as a string.
      *
      * @param node message event
-     * @param key property name
+     * @param key  property name
      * @return property as a string
      */
     protected String string(ObjectNode node, String key) {
@@ -130,13 +129,36 @@ public abstract class RequestHandler {
     /**
      * Returns the specified node property as a string, with a default fallback.
      *
-     * @param node         object node
-     * @param key          property name
-     * @param defValue     fallback value if property is absent
+     * @param node     object node
+     * @param key      property name
+     * @param defValue fallback value if property is absent
      * @return property as a string
      */
     protected String string(ObjectNode node, String key, String defValue) {
         return JsonUtils.string(node, key, defValue);
     }
 
+    /**
+     * Returns the specified node property as a boolean. More precisely, if
+     * the value for the given key is the string "true" then this returns true,
+     * false otherwise.
+     *
+     * @param node object node
+     * @param key  property name
+     * @return property as a boolean
+     */
+    protected boolean bool(ObjectNode node, String key) {
+        return JsonUtils.bool(node, key);
+    }
+
+    /**
+     * Returns the specified node property as a number.
+     *
+     * @param node object node
+     * @param key  property name
+     * @return property as a number
+     */
+    protected long number(ObjectNode node, String key) {
+        return JsonUtils.number(node, key);
+    }
 }

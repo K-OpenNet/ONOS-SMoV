@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2016 Open Networking Laboratory
+  ~ Copyright 2016-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -17,39 +17,46 @@
           description="Driver CLI activate/deactivate test">
     <group name="Drivers-Test">
 
-        <!-- Check initial state of select drivers -->
-        <step name="DriversTest.FindOvsCorsa"
-              exec="onos-find-driver ${OC1} ovs-corsa ovs" />
-        <step name="DriversTest.CheckOvsCorsa" requires="^"
-              exec="test '${ovsDriver}' != ''"/>
-        <step name="DriversTest.Default" requires="^"
-              exec="onos-find-driver ${OC1} default default" />
-        <step name="DriversTest.CheckDefault" requires="^"
-              exec="test '${defaultDriver}' != ''"/>
+        <!-- Check initial state of the Fujitsu driver -->
+        <step name="DriversTest.FindFujitsuInitial"
+              exec="onos-find-driver ${OC1} fujitsu-netconf fujitsu" env="!"/>
 
-        <!-- Deactivate drivers app -->
-        <step name="DriversTest.DeactivateDriversApp" requires="^"
-              exec="onos ${OCI} onos:app deactivate org.onosproject.drivers"/>
+	    <!-- Activate Fujitsu driver app -->
+        <!--
+        <step name="DriversTest.ActivateNetconfApp" requires="^"
+              exec="onos ${OCI} onos:app activate org.onosproject.netconf"/>
+        <step name="DriversTest.ActivateFujitsuDriverApp" requires="^"
+              exec="onos ${OCI} onos:app activate org.onosproject.drivers.fujitsu"/>
+        -->
 
-        <!-- Check that drivers are no longer present -->
-        <step name="DriversTest.AfterDeactivateFindOvsCorsa" requires="^"
-              exec="onos-find-driver ${OC1} ovs-corsa ovsInactive" env="!"/>
-        <step name="DriversTest.AfterDeactivateFindDefault" requires="^"
-              exec="onos-find-driver ${OC1} default defaultInactive" env="!"/>
+        <!-- Check that the activation was successful -->
+        <!--
+        <group name="DriversTest.Check-Fujitsu-App-Activated" requires="DriversTest.ActivateFujitsuDriverApp">
+            <parallel var="${OC#}">
+                <step name="DriversTest.Check-Fujitsu-App-Activated-${#}"
+                      exec="onos-check-apps ${OC#} drivers,openflow,proxyarp,dhcp,fujitsu includes"/>
+            </parallel>
+        </group>
+        -->
 
-        <!-- Reactivate all drivers -->
-        <step name="DriversTest.ActivateDriversApp" requires="^"
-              exec="onos ${OCI} onos:app activate org.onosproject.drivers"/>
+        <!-- Check that Fujitsu driver is active. -->
+        <!--
+        <step name="DriversTest.FindFujitsuAfterActivate" requires="^"
+              exec="onos-find-driver ${OC1} fujitsu-netconf fujitsu" />
+        <step name="DriversTest.CheckFujitsuAfterActivate" requires="^"
+              exec="test '${fujitsuDriver}' != ''"/>
+              -->
 
-        <!-- Check reactivated state of drivers -->
-        <step name="DriversTest.ReactivatedFindOvsCorsa" requires="^"
-              exec="onos-find-driver ${OC1} ovs-corsa ovs" />
-        <step name="DriversTest.ReactivatedCheckOvsCorsa" requires="^"
-              exec="test '${ovsDriver}' != ''"/>
-        <step name="DriversTest.ReactivatedDefault" requires="^"
-              exec="onos-find-driver ${OC1} default default" />
-        <step name="DriversTest.ReactivatedCheckDefault" requires="^"
-              exec="test '${defaultDriver}' != ''"/>
+        <!-- Deactivate Fujitsu driver app -->
+        <!--
+        <step name="DriversTest.DeactivateFujitsuDriverApp" requires="^"
+              exec="onos ${OCI} onos:app deactivate org.onosproject.drivers.fujitsu"/>
+        -->
+
+        <!-- Check that Fujitsu driver is no longer present -->
+        <step name="DriversTest.AfterDeactivateFindFujitsu" requires="^"
+              exec="onos-find-driver ${OC1} fujitsu fujitsuInactive" env="!"/>
+
 
     </group>
 </scenario>

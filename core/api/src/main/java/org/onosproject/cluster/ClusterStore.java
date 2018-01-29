@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,11 @@ package org.onosproject.cluster;
 
 import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
+import org.onosproject.core.Version;
 import org.onosproject.store.Store;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,12 +60,48 @@ public interface ClusterStore extends Store<ClusterEvent, ClusterStoreDelegate> 
     ControllerNode.State getState(NodeId nodeId);
 
     /**
+     * Returns the version of the specified controller node.
+     *
+     * @param nodeId controller instance identifier
+     * @return controller version
+     */
+    Version getVersion(NodeId nodeId);
+
+    /**
+     * Marks the current node as fully started.
+     *
+     * @param started true indicates all components have been started
+     */
+    void markFullyStarted(boolean started);
+
+    /**
      * Returns the system when the availability state was last updated.
      *
      * @param nodeId controller node identifier
      * @return system time when the availability state was last updated.
      */
-    DateTime getLastUpdated(NodeId nodeId);
+    default Instant getLastUpdatedInstant(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdated(nodeId))
+                    .map(DateTime::getMillis)
+                    .map(Instant::ofEpochMilli)
+                    .orElse(null);
+    }
+
+    /**
+     * Returns the system when the availability state was last updated.
+     *
+     * @param nodeId controller node identifier
+     * @return system time when the availability state was last updated.
+     *
+     * @deprecated in 1.12.0
+     */
+    @Deprecated
+    default DateTime getLastUpdated(NodeId nodeId) {
+        return Optional.ofNullable(getLastUpdatedInstant(nodeId))
+                .map(Instant::toEpochMilli)
+                .map(DateTime::new)
+                .orElse(null);
+    }
 
     /**
      * Adds a new controller node to the cluster.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,13 +23,14 @@ import org.onlab.packet.IpAddress;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.BridgeConfig;
+import org.onosproject.net.behaviour.BridgeDescription;
 import org.onosproject.net.behaviour.BridgeName;
+import org.onosproject.net.behaviour.DefaultBridgeDescription;
 import org.onosproject.net.behaviour.DefaultTunnelDescription;
-import org.onosproject.net.behaviour.IpTunnelEndPoint;
-import org.onosproject.net.behaviour.TunnelConfig;
+import org.onosproject.net.behaviour.InterfaceConfig;
 import org.onosproject.net.behaviour.TunnelDescription;
-import org.onosproject.net.behaviour.TunnelEndPoint;
-import org.onosproject.net.behaviour.TunnelName;
+import org.onosproject.net.behaviour.TunnelEndPoints;
+import org.onosproject.net.behaviour.TunnelKeys;
 import org.onosproject.net.driver.DriverHandler;
 
 /**
@@ -43,6 +44,20 @@ public final class VtnConfig {
         {
             put("key", "flow");
             put("remote_ip", "flow");
+            put("dst_port", "4790");
+            put("in_nsi", "flow");
+            put("in_nsp", "flow");
+            put("out_nsi", "flow");
+            put("out_nsp", "flow");
+            put("in_nshc1", "flow");
+            put("out_nshc1", "flow");
+            put("in_nshc2", "flow");
+            put("out_nshc2", "flow");
+            put("in_nshc3", "flow");
+            put("out_nshc3", "flow");
+            put("in_nshc4", "flow");
+            put("out_nshc4", "flow");
+            put("exts", "gpe");
         }
     };
     /**
@@ -62,7 +77,16 @@ public final class VtnConfig {
      */
     public static void applyBridgeConfig(DriverHandler handler, String dpid, String exPortName) {
         BridgeConfig bridgeConfig = handler.behaviour(BridgeConfig.class);
-        bridgeConfig.addBridge(BridgeName.bridgeName(DEFAULT_BRIDGE_NAME), dpid, exPortName);
+        BridgeDescription bridgeDesc = DefaultBridgeDescription.builder()
+                .name(DEFAULT_BRIDGE_NAME)
+                .failMode(BridgeDescription.FailMode.SECURE)
+                .datapathId(dpid)
+                .disableInBand()
+                .enableLocalController()
+                .build();
+
+        bridgeConfig.addBridge(bridgeDesc);
+        bridgeConfig.addPort(BridgeName.bridgeName(DEFAULT_BRIDGE_NAME), exPortName);
     }
 
     /**
@@ -70,43 +94,34 @@ public final class VtnConfig {
      *
      * @param handler DriverHandler
      * @param srcIp the ipAddress of the local controller device
-     * @param dstIp the ipAddress of the remote controller device
      */
-    public static void applyTunnelConfig(DriverHandler handler, IpAddress srcIp,
-                                  IpAddress dstIp) {
+    public static void applyTunnelConfig(DriverHandler handler, IpAddress srcIp) {
         DefaultAnnotations.Builder optionBuilder = DefaultAnnotations.builder();
         for (String key : DEFAULT_TUNNEL_OPTIONS.keySet()) {
             optionBuilder.set(key, DEFAULT_TUNNEL_OPTIONS.get(key));
         }
-        TunnelConfig tunnelConfig = handler.behaviour(TunnelConfig.class);
-        TunnelEndPoint tunnelAsSrc = IpTunnelEndPoint.ipTunnelPoint(srcIp);
-        TunnelDescription tunnel = new DefaultTunnelDescription(
-                                                                tunnelAsSrc,
-                                                                null,
-                                                                TunnelDescription.Type.VXLAN,
-                                                                TunnelName.tunnelName(DEFAULT_TUNNEL),
-                                                                optionBuilder.build());
-        tunnelConfig.createTunnelInterface(BridgeName.bridgeName(DEFAULT_BRIDGE_NAME), tunnel);
+
+        InterfaceConfig interfaceConfig = handler.behaviour(InterfaceConfig.class);
+        TunnelDescription tunnel = DefaultTunnelDescription.builder()
+                .deviceId(DEFAULT_BRIDGE_NAME)
+                .ifaceName(DEFAULT_TUNNEL)
+                .type(TunnelDescription.Type.VXLAN)
+                .local(TunnelEndPoints.ipTunnelEndpoint(srcIp))
+                .remote(TunnelEndPoints.flowTunnelEndpoint())
+                .key(TunnelKeys.flowTunnelKey())
+                .otherConfigs(optionBuilder.build())
+                .build();
+        interfaceConfig.addTunnelMode(DEFAULT_TUNNEL, tunnel);
     }
 
     /**
      * Creates or update tunnel in the controller device.
      *
      * @param handler DriverHandler
-     * @param srcIp the ipAddress of the local controller device
-     * @param dstIp the ipAddress of the remote controller device
      */
-    public static void removeTunnelConfig(DriverHandler handler, IpAddress srcIp,
-                                   IpAddress dstIp) {
-        TunnelConfig tunnelConfig = handler.behaviour(TunnelConfig.class);
-        TunnelEndPoint tunnelAsSrc = IpTunnelEndPoint.ipTunnelPoint(srcIp);
-        TunnelEndPoint tunnelAsDst = IpTunnelEndPoint.ipTunnelPoint(dstIp);
-        TunnelDescription tunnel = new DefaultTunnelDescription(
-                                                                tunnelAsSrc,
-                                                                tunnelAsDst,
-                                                                TunnelDescription.Type.VXLAN,
-                                                                null);
-        tunnelConfig.removeTunnel(tunnel);
+    public static void removeTunnelConfig(DriverHandler handler) {
+        InterfaceConfig interfaceConfig = handler.behaviour(InterfaceConfig.class);
+        interfaceConfig.removeTunnelMode(DEFAULT_TUNNEL);
     }
 
     /**

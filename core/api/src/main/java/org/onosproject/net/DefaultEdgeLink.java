@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ public class DefaultEdgeLink extends DefaultLink implements EdgeLink {
                            HostLocation hostLocation, boolean isIngress,
                            Annotations... annotations) {
         super(providerId, isIngress ? hostPoint : hostLocation,
-              isIngress ? hostLocation : hostPoint, Type.EDGE, annotations);
+              isIngress ? hostLocation : hostPoint, Type.EDGE, State.ACTIVE, annotations);
         checkArgument(hostPoint.elementId() instanceof HostId,
                       "Host point does not refer to a host ID");
         this.hostId = (HostId) hostPoint.elementId();
@@ -81,6 +81,8 @@ public class DefaultEdgeLink extends DefaultLink implements EdgeLink {
     /**
      * Creates a an edge link, to the specified end-station.
      *
+     * The edge link inherits the target host annotations.
+     *
      * @param host      host
      * @param isIngress true to indicate host-to-network direction; false
      *                  for network-to-host direction
@@ -90,7 +92,7 @@ public class DefaultEdgeLink extends DefaultLink implements EdgeLink {
         checkNotNull(host, "Host cannot be null");
         return new DefaultEdgeLink(ProviderId.NONE,
                                    new ConnectPoint(host.id(), PortNumber.P0),
-                                   host.location(), isIngress);
+                                   host.location(), isIngress, host.annotations());
     }
 
 }

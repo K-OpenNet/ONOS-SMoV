@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,20 +28,17 @@ import org.onosproject.net.Link;
 import org.onosproject.net.Path;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.intent.Intent;
-import org.onosproject.net.intent.IntentCompiler;
 import org.onosproject.net.intent.IntentException;
 import org.onosproject.net.intent.IntentExtensionService;
 import org.onosproject.net.intent.LinkCollectionIntent;
 import org.onosproject.net.intent.MultiPointToSinglePointIntent;
-import org.onosproject.net.intent.PointToPointIntent;
-import org.onosproject.net.resource.link.LinkResourceAllocations;
-import org.onosproject.net.topology.PathService;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.onosproject.net.intent.constraint.PartialFailureConstraint.intentAllowsPartialFailure;
 
@@ -52,13 +49,10 @@ import static org.onosproject.net.intent.constraint.PartialFailureConstraint.int
  */
 @Component(immediate = true)
 public class MultiPointToSinglePointIntentCompiler
-        implements IntentCompiler<MultiPointToSinglePointIntent> {
+        extends ConnectivityIntentCompiler<MultiPointToSinglePointIntent> {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected IntentExtensionService intentManager;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected PathService pathService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
@@ -70,32 +64,32 @@ public class MultiPointToSinglePointIntentCompiler
 
     @Deactivate
     public void deactivate() {
-        intentManager.unregisterCompiler(PointToPointIntent.class);
+        intentManager.unregisterCompiler(MultiPointToSinglePointIntent.class);
     }
 
     @Override
-    public List<Intent> compile(MultiPointToSinglePointIntent intent, List<Intent> installable,
-                                Set<LinkResourceAllocations> resources) {
+    public List<Intent> compile(MultiPointToSinglePointIntent intent, List<Intent> installable) {
         Map<DeviceId, Link> links = new HashMap<>();
         ConnectPoint egressPoint = intent.egressPoint();
 
         final boolean allowMissingPaths = intentAllowsPartialFailure(intent);
-        boolean partialTree = false;
-        boolean anyMissingPaths = false;
+        boolean hasPaths = false;
+        boolean missingSomePaths = false;
+
         for (ConnectPoint ingressPoint : intent.ingressPoints()) {
             if (ingressPoint.deviceId().equals(egressPoint.deviceId())) {
                 if (deviceService.isAvailable(ingressPoint.deviceId())) {
-                    partialTree = true;
+                    hasPaths = true;
                 } else {
-                    anyMissingPaths = true;
+                    missingSomePaths = true;
                 }
-
                 continue;
             }
 
-            Path path = getPath(ingressPoint, intent.egressPoint());
+            Path path = getPath(intent, ingressPoint.deviceId(), egressPoint.deviceId());
+
             if (path != null) {
-                partialTree = true;
+                hasPaths = true;
 
                 for (Link link : path.links()) {
                     if (links.containsKey(link.dst().deviceId())) {
@@ -109,43 +103,46 @@ public class MultiPointToSinglePointIntentCompiler
                     links.put(link.src().deviceId(), link);
                 }
             } else {
-                anyMissingPaths = true;
+                missingSomePaths = true;
             }
         }
 
-        if (!partialTree) {
-            throw new IntentException("Could not find any paths between ingress and egress points.");
-        } else if (!allowMissingPaths && anyMissingPaths) {
-            throw new IntentException("Missing some paths between ingress and egress ports.");
+        // Allocate bandwidth on existing paths if a bandwidth constraint is set
+        List<ConnectPoint> ingressCPs =
+                intent.filteredIngressPoints().stream()
+                                              .map(fcp -> fcp.connectPoint())
+                                              .collect(Collectors.toList());
+        ConnectPoint egressCP = intent.filteredEgressPoint().connectPoint();
+
+        List<ConnectPoint> pathCPs =
+                links.values().stream()
+                              .flatMap(l -> Stream.of(l.src(), l.dst()))
+                              .collect(Collectors.toList());
+
+        pathCPs.addAll(ingressCPs);
+        pathCPs.add(egressCP);
+
+        allocateBandwidth(intent, pathCPs);
+
+        if (!hasPaths) {
+            throw new IntentException("Cannot find any path between ingress and egress points.");
+        } else if (!allowMissingPaths && missingSomePaths) {
+            throw new IntentException("Missing some paths between ingress and egress points.");
         }
 
         Intent result = LinkCollectionIntent.builder()
                 .appId(intent.appId())
-                .selector(intent.selector())
+                .key(intent.key())
                 .treatment(intent.treatment())
+                .selector(intent.selector())
                 .links(Sets.newHashSet(links.values()))
-                .ingressPoints(intent.ingressPoints())
-                .egressPoints(ImmutableSet.of(intent.egressPoint()))
+                .filteredIngressPoints(intent.filteredIngressPoints())
+                .filteredEgressPoints(ImmutableSet.of(intent.filteredEgressPoint()))
                 .priority(intent.priority())
                 .constraints(intent.constraints())
+                .resourceGroup(intent.resourceGroup())
                 .build();
 
         return Collections.singletonList(result);
-    }
-
-    /**
-     * Computes a path between two ConnectPoints.
-     *
-     * @param one start of the path
-     * @param two end of the path
-     * @return Path between the two
-     */
-    private Path getPath(ConnectPoint one, ConnectPoint two) {
-        Set<Path> paths = pathService.getPaths(one.deviceId(), two.deviceId());
-        if (paths.isEmpty()) {
-            return null;
-        }
-        // TODO: let's be more intelligent about this eventually
-        return paths.iterator().next();
     }
 }

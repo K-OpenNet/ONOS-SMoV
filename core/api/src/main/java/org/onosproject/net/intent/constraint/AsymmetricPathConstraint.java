@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,49 +16,11 @@
 package org.onosproject.net.intent.constraint;
 
 import com.google.common.annotations.Beta;
-import org.onosproject.net.Link;
-import org.onosproject.net.Path;
-import org.onosproject.net.intent.Constraint;
-import org.onosproject.net.resource.link.LinkResourceService;
-
-import java.util.Objects;
-
-import static com.google.common.base.MoreObjects.toStringHelper;
 
 /**
  * Constraint that serves as a request for asymmetric bi-directional path.
  */
 @Beta
-public class AsymmetricPathConstraint implements Constraint {
+public final class AsymmetricPathConstraint extends MarkerConstraint {
 
-    @Override
-    public double cost(Link link, LinkResourceService resourceService) {
-        return 1;
-    }
-
-    @Override
-    public boolean validate(Path path, LinkResourceService resourceService) {
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(true);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public String toString() {
-        return toStringHelper(this).toString();
-    }
 }

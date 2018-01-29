@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@
  */
 package org.onosproject.net.flow;
 
-import com.google.common.annotations.Beta;
+import com.google.common.hash.Funnel;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.DefaultGroupId;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
 
@@ -26,7 +28,11 @@ import java.util.Objects;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.onosproject.net.flow.TableId.Type.INDEX;
 
+/**
+ * Default flow rule.
+ */
 public class DefaultFlowRule implements FlowRule {
 
     private final DeviceId deviceId;
@@ -41,11 +47,18 @@ public class DefaultFlowRule implements FlowRule {
 
     private final int timeout;
     private final boolean permanent;
+    private final int hardTimeout;
+    private final FlowRemoveReason reason;
     private final GroupId groupId;
 
-    private final Integer tableId;
+    private final TableId tableId;
     private final FlowRuleExtPayLoad payLoad;
 
+    /**
+     * Creates a new flow rule from an existing rule.
+     *
+     * @param rule new flow rule
+     */
     public DefaultFlowRule(FlowRule rule) {
         this.deviceId = rule.deviceId();
         this.priority = rule.priority();
@@ -55,16 +68,18 @@ public class DefaultFlowRule implements FlowRule {
         this.groupId = rule.groupId();
         this.id = rule.id();
         this.timeout = rule.timeout();
+        this.hardTimeout = rule.hardTimeout();
+        this.reason = rule.reason();
         this.permanent = rule.isPermanent();
         this.created = System.currentTimeMillis();
-        this.tableId = rule.tableId();
+        this.tableId = rule.table();
         this.payLoad = rule.payLoad();
     }
 
     private DefaultFlowRule(DeviceId deviceId, TrafficSelector selector,
                             TrafficTreatment treatment, Integer priority,
-                            FlowId flowId, Boolean permanent, Integer timeout,
-                            Integer tableId) {
+                            FlowId flowId, Boolean permanent, Integer timeout, Integer hardTimeout,
+                            FlowRemoveReason reason, TableId tableId) {
 
         this.deviceId = deviceId;
         this.selector = selector;
@@ -74,12 +89,14 @@ public class DefaultFlowRule implements FlowRule {
         this.id = flowId;
         this.permanent = permanent;
         this.timeout = timeout;
+        this.hardTimeout = hardTimeout;
+        this.reason = reason;
         this.tableId = tableId;
         this.created = System.currentTimeMillis();
 
 
         //FIXME: fields below will be removed.
-        this.groupId = new DefaultGroupId(0);
+        this.groupId = new GroupId(0);
         this.payLoad = null;
     }
 
@@ -95,26 +112,54 @@ public class DefaultFlowRule implements FlowRule {
      * @param timeout the timeout for this flow requested by an application
      * @param permanent whether the flow is permanent i.e. does not time out
      * @param payLoad 3rd-party origin private flow
+     * @deprecated in Junco release. Use FlowRule.Builder instead.
      */
+    @Deprecated
     public DefaultFlowRule(DeviceId deviceId, TrafficSelector selector,
                            TrafficTreatment treatment, int priority,
                            ApplicationId appId, int timeout, boolean permanent,
                            FlowRuleExtPayLoad payLoad) {
+        this(deviceId, selector, treatment, priority, appId, timeout, 0, permanent, payLoad);
+    }
 
-        if (priority < FlowRule.MIN_PRIORITY) {
-            throw new IllegalArgumentException("Priority cannot be less than "
-                    + MIN_PRIORITY);
-        }
+
+    /**
+     * Support for the third party flow rule. Creates a flow rule of flow table.
+     *
+     * @param deviceId the identity of the device where this rule applies
+     * @param selector the traffic selector that identifies what traffic this
+     *            rule
+     * @param treatment the traffic treatment that applies to selected traffic
+     * @param priority the flow rule priority given in natural order
+     * @param appId the application id of this flow
+     * @param timeout the timeout for this flow requested by an application
+     * @param hardTimeout the hard timeout located switch's flow table for this flow requested by an application
+     * @param permanent whether the flow is permanent i.e. does not time out
+     * @param payLoad 3rd-party origin private flow
+     * @deprecated in Junco release. Use FlowRule.Builder instead.
+     */
+    @Deprecated
+    public DefaultFlowRule(DeviceId deviceId, TrafficSelector selector,
+                           TrafficTreatment treatment, int priority,
+                           ApplicationId appId, int timeout, int hardTimeout, boolean permanent,
+                           FlowRuleExtPayLoad payLoad) {
+
+        checkArgument(priority >= MIN_PRIORITY, "Priority cannot be less than " +
+                MIN_PRIORITY);
+        checkArgument(priority <= MAX_PRIORITY, "Priority cannot be greater than " +
+                MAX_PRIORITY);
 
         this.deviceId = deviceId;
         this.priority = priority;
         this.selector = selector;
         this.treatment = treatment;
         this.appId = appId.id();
-        this.groupId = new DefaultGroupId(0);
+        this.groupId = new GroupId(0);
         this.timeout = timeout;
+        this.reason = FlowRemoveReason.NO_REASON;
+        this.hardTimeout = hardTimeout;
         this.permanent = permanent;
-        this.tableId = 0;
+        this.tableId = DEFAULT_TABLE;
         this.created = System.currentTimeMillis();
         this.payLoad = payLoad;
 
@@ -141,17 +186,43 @@ public class DefaultFlowRule implements FlowRule {
      * @param timeout the timeout for this flow requested by an application
      * @param permanent whether the flow is permanent i.e. does not time out
      * @param payLoad 3rd-party origin private flow
-     *
+     * @deprecated in Junco release. Use FlowRule.Builder instead.
      */
+    @Deprecated
     public DefaultFlowRule(DeviceId deviceId, TrafficSelector selector,
                            TrafficTreatment treatment, int priority,
                            ApplicationId appId, GroupId groupId, int timeout,
                            boolean permanent, FlowRuleExtPayLoad payLoad) {
+        this(deviceId, selector, treatment, priority, appId, groupId, timeout, 0, permanent, payLoad);
+    }
 
-        if (priority < FlowRule.MIN_PRIORITY) {
-            throw new IllegalArgumentException("Priority cannot be less than "
-                    + MIN_PRIORITY);
-        }
+    /**
+     * Support for the third party flow rule. Creates a flow rule of group
+     * table.
+     *
+     * @param deviceId the identity of the device where this rule applies
+     * @param selector the traffic selector that identifies what traffic this
+     *            rule
+     * @param treatment the traffic treatment that applies to selected traffic
+     * @param priority the flow rule priority given in natural order
+     * @param appId the application id of this flow
+     * @param groupId the group id of this flow
+     * @param timeout the timeout for this flow requested by an application
+     * @param hardTimeout the hard timeout located switch's flow table for this flow requested by an application
+     * @param permanent whether the flow is permanent i.e. does not time out
+     * @param payLoad 3rd-party origin private flow
+     * @deprecated in Junco release. Use FlowRule.Builder instead.
+     */
+    @Deprecated
+    public DefaultFlowRule(DeviceId deviceId, TrafficSelector selector,
+                           TrafficTreatment treatment, int priority,
+                           ApplicationId appId, GroupId groupId, int timeout, int hardTimeout,
+                           boolean permanent, FlowRuleExtPayLoad payLoad) {
+
+        checkArgument(priority >= MIN_PRIORITY, "Priority cannot be less than " +
+                MIN_PRIORITY);
+        checkArgument(priority <= MAX_PRIORITY, "Priority cannot be greater than " +
+                MAX_PRIORITY);
 
         this.deviceId = deviceId;
         this.priority = priority;
@@ -160,9 +231,11 @@ public class DefaultFlowRule implements FlowRule {
         this.appId = appId.id();
         this.groupId = groupId;
         this.timeout = timeout;
+        this.reason = FlowRemoveReason.NO_REASON;
+        this.hardTimeout = hardTimeout;
         this.permanent = permanent;
         this.created = System.currentTimeMillis();
-        this.tableId = 0;
+        this.tableId = DEFAULT_TABLE;
         this.payLoad = payLoad;
 
         /*
@@ -209,7 +282,6 @@ public class DefaultFlowRule implements FlowRule {
         return treatment;
     }
 
-    @Override
     /*
      * The priority and statistics can change on a given treatment and selector
      *
@@ -217,6 +289,7 @@ public class DefaultFlowRule implements FlowRule {
      *
      * @see java.lang.Object#equals(java.lang.Object)
      */
+    @Override
     public int hashCode() {
         return Objects.hash(deviceId, selector, tableId, payLoad);
     }
@@ -226,7 +299,6 @@ public class DefaultFlowRule implements FlowRule {
         return Objects.hash(deviceId, selector, tableId, payLoad);
     }
 
-    @Override
     /*
      * The priority and statistics can change on a given treatment and selector
      *
@@ -234,6 +306,7 @@ public class DefaultFlowRule implements FlowRule {
      *
      * @see java.lang.Object#equals(java.lang.Object)
      */
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -276,35 +349,65 @@ public class DefaultFlowRule implements FlowRule {
     }
 
     @Override
+    public int hardTimeout() {
+        return hardTimeout;
+    }
+
+    @Override
+    public FlowRemoveReason reason() {
+        return reason;
+    }
+
+    @Override
     public boolean isPermanent() {
         return permanent;
     }
 
     @Override
     public int tableId() {
+        // Workaround until we remove this method. Deprecated in Loon.
+        return tableId.type() == INDEX ? ((IndexTableId) tableId).id() : tableId.hashCode();
+    }
+
+    @Override
+    public TableId table() {
         return tableId;
     }
 
-    @Beta
+    /**
+     * Returns the wallclock time that the flow was created.
+     *
+     * @return creation time in milliseconds since epoch
+     */
     public long created() {
         return created;
     }
 
+    /**
+     * Returns a default flow rule builder.
+     *
+     * @return builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Default flow rule builder.
+     */
     public static final class Builder implements FlowRule.Builder {
 
         private FlowId flowId;
         private ApplicationId appId;
         private Integer priority;
         private DeviceId deviceId;
-        private Integer tableId = 0;
+        private TableId tableId = DEFAULT_TABLE;
         private TrafficSelector selector = DefaultTrafficSelector.builder().build();
         private TrafficTreatment treatment = DefaultTrafficTreatment.builder().build();
         private Integer timeout;
         private Boolean permanent;
+        private Integer hardTimeout = 0;
+        private FlowRemoveReason reason = FlowRemoveReason.NO_REASON;
 
         @Override
         public FlowRule.Builder withCookie(long cookie) {
@@ -332,6 +435,12 @@ public class DefaultFlowRule implements FlowRule {
 
         @Override
         public FlowRule.Builder forTable(int tableId) {
+            this.tableId = IndexTableId.of(tableId);
+            return this;
+        }
+
+        @Override
+        public FlowRule.Builder forTable(TableId tableId) {
             this.tableId = tableId;
             return this;
         }
@@ -363,7 +472,23 @@ public class DefaultFlowRule implements FlowRule {
         }
 
         @Override
+        public FlowRule.Builder withHardTimeout(int timeout) {
+            this.permanent = false;
+            this.hardTimeout = timeout;
+            this.timeout = timeout;
+            return this;
+        }
+
+        @Override
+        public FlowRule.Builder withReason(FlowRemoveReason reason) {
+            this.reason = reason;
+            return this;
+        }
+
+        @Override
         public FlowRule build() {
+            FlowId localFlowId;
+            checkNotNull(tableId, "Table id cannot be null");
             checkArgument((flowId != null) ^ (appId != null), "Either an application" +
                     " id or a cookie must be supplied");
             checkNotNull(selector, "Traffic selector cannot be null");
@@ -373,15 +498,18 @@ public class DefaultFlowRule implements FlowRule {
             checkNotNull(priority, "Priority cannot be null");
             checkArgument(priority >= MIN_PRIORITY, "Priority cannot be less than " +
                     MIN_PRIORITY);
-
+            checkArgument(priority <= MAX_PRIORITY, "Priority cannot be greater than " +
+                    MAX_PRIORITY);
             // Computing a flow ID based on appId takes precedence over setting
             // the flow ID directly
             if (appId != null) {
-                flowId = computeFlowId(appId);
+                localFlowId = computeFlowId(appId);
+            } else {
+                localFlowId = flowId;
             }
 
             return new DefaultFlowRule(deviceId, selector, treatment, priority,
-                                       flowId, permanent, timeout, tableId);
+                                       localFlowId, permanent, timeout, hardTimeout, reason, tableId);
         }
 
         private FlowId computeFlowId(ApplicationId appId) {
@@ -390,9 +518,21 @@ public class DefaultFlowRule implements FlowRule {
         }
 
         private int hash() {
-            return Objects.hash(deviceId, priority, selector, tableId);
-        }
+            // Guava documentation recommends using putUnencodedChars to hash raw character bytes within any encoding
+            // unless cross-language compatibility is needed. See the Hasher.putString documentation for more info.
+            Funnel<TrafficSelector> selectorFunnel = (from, into) -> from.criteria()
+                    .forEach(c -> into.putUnencodedChars(c.toString()));
 
+            HashFunction hashFunction = Hashing.murmur3_32();
+            HashCode hashCode = hashFunction.newHasher()
+                    .putUnencodedChars(deviceId.toString())
+                    .putObject(selector, selectorFunnel)
+                    .putInt(priority)
+                    .putUnencodedChars(tableId.toString())
+                    .hash();
+
+            return hashCode.asInt();
+        }
     }
 
     @Override

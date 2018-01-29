@@ -1,5 +1,5 @@
 /*
- * Copyright 2015,2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@
 
     // constants
     var msgGS = 'GlyphService.',
-        rg = "registerGlyphs(): ",
-        rgs = "registerGlyphSet(): ";
+        rg = 'registerGlyphs(): ',
+        rgs = 'registerGlyphSet(): ';
 
     // ----------------------------------------------------------------------
 
@@ -42,7 +42,7 @@
         if (!overwrite && glyphs.get(key)) {
             dups.push(key);
         } else {
-            glyphs.set(key, {id: key, vb: vbox, d: value});
+            glyphs.set(key, { id: key, vb: vbox, d: value });
         }
     }
 
@@ -166,7 +166,7 @@
                 width: sz,
                 height: sz,
                 'class': 'glyph',
-                'xlink:href': '#' + glyphId
+                'xlink:href': '#' + glyphId,
             };
 
         if (xns) {
@@ -196,7 +196,7 @@
                 glyph: glyph,
                 glyphDefined: glyphDefined,
                 loadDefs: loadDefs,
-                addGlyph: addGlyph
+                addGlyph: addGlyph,
             };
             return api;
         }]

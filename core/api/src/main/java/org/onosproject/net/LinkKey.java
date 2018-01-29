@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,12 @@
  */
 package org.onosproject.net;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.common.base.MoreObjects;
+import org.onosproject.net.link.LinkDescription;
 
 import java.util.Objects;
 
-import com.google.common.base.MoreObjects;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 // TODO Consider renaming.
 // it's an identifier for a Link, but it's not ElementId, so not using LinkId.
@@ -29,8 +30,21 @@ import com.google.common.base.MoreObjects;
  */
 public final class LinkKey {
 
+    private static final String DELIM = "-";
+
     private final ConnectPoint src;
     private final ConnectPoint dst;
+
+    /**
+     * Creates a link identifier with source and destination connection point.
+     *
+     * @param src source connection point
+     * @param dst destination connection point
+     */
+    private LinkKey(ConnectPoint src, ConnectPoint dst) {
+        this.src = checkNotNull(src);
+        this.dst = checkNotNull(dst);
+    }
 
     /**
      * Returns source connection point.
@@ -51,35 +65,12 @@ public final class LinkKey {
     }
 
     /**
-     * Creates a link identifier with source and destination connection point.
+     * Returns a string suitable to be used as an identifier.
      *
-     * @param src source connection point
-     * @param dst destination connection point
+     * @return string as identifier
      */
-    private LinkKey(ConnectPoint src, ConnectPoint dst) {
-        this.src = checkNotNull(src);
-        this.dst = checkNotNull(dst);
-    }
-
-    /**
-     * Creates a link identifier with source and destination connection point.
-     *
-     * @param src source connection point
-     * @param dst destination connection point
-     * @return a link identifier
-     */
-    public static LinkKey linkKey(ConnectPoint src, ConnectPoint dst) {
-        return new LinkKey(src, dst);
-    }
-
-    /**
-     * Creates a link identifier for the specified link.
-     *
-     * @param link link descriptor
-     * @return a link identifier
-     */
-    public static LinkKey linkKey(Link link) {
-        return new LinkKey(link.src(), link.dst());
+    public String asId() {
+        return src + DELIM + dst;
     }
 
     @Override
@@ -107,4 +98,36 @@ public final class LinkKey {
                 .add("dst", dst)
                 .toString();
     }
+
+    /**
+     * Creates a link identifier with source and destination connection point.
+     *
+     * @param src source connection point
+     * @param dst destination connection point
+     * @return a link identifier
+     */
+    public static LinkKey linkKey(ConnectPoint src, ConnectPoint dst) {
+        return new LinkKey(src, dst);
+    }
+
+    /**
+     * Creates a link identifier for the specified link.
+     *
+     * @param link link descriptor
+     * @return a link identifier
+     */
+    public static LinkKey linkKey(Link link) {
+        return new LinkKey(link.src(), link.dst());
+    }
+
+    /**
+     * Creates a link identifier for the specified link.
+     *
+     * @param link {@link Description}
+     * @return a link identifier
+     */
+    public static LinkKey linkKey(LinkDescription link) {
+        return new LinkKey(link.src(), link.dst());
+    }
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 /*
  ONOS GUI -- Remote -- Web Socket Service - Unit Tests
  */
+
 describe('factory: fw/remote/websocket.js', function () {
     var $log, fs, wss;
 
@@ -53,7 +54,13 @@ describe('factory: fw/remote/websocket.js', function () {
             return {
                 protocol: function () { return 'http'; },
                 host: function () { return 'foo'; },
-                port: function () { return '80'; }
+                port: function () { return '80'; },
+                search: function() {
+                    return {debug: 'true'};
+                },
+                absUrl: function () {
+                    return 'ws://foo:123/onos/ui/websock/path';
+                }
             };
         })
     }));
@@ -72,9 +79,11 @@ describe('factory: fw/remote/websocket.js', function () {
 
     it('should define api functions', function () {
         expect(fs.areFunctions(wss, [
-            'resetSid', 'resetState',
+            'resetState',
             'createWebSocket', 'bindHandlers', 'unbindHandlers',
-            'addOpenListener', 'removeOpenListener', 'sendEvent'
+            'addOpenListener', 'removeOpenListener', 'sendEvent',
+            'isConnected', 'loggedInUser',
+            '_setVeilDelegate', '_setLoadingDelegate'
         ])).toBeTruthy();
     });
 
@@ -109,11 +118,13 @@ describe('factory: fw/remote/websocket.js', function () {
     it('should send pending events, handleOpen', function () {
         var fakeEvent = {
             event: 'mockEv',
-            sid: 1,
             payload: { mock: 'thing' }
         };
         wss.sendEvent(fakeEvent.event, fakeEvent.payload);
-        expect(mockWebSocket.send).not.toHaveBeenCalled();
+        // on opening the socket, a single authentication event should have
+        // been sent already...
+        expect(mockWebSocket.send.calls.count()).toEqual(1);
+
         wss.createWebSocket({ wsport: 1234 });
         mockWebSocket.onopen();
         expect(mockWebSocket.send).toHaveBeenCalledWith(JSON.stringify(fakeEvent));

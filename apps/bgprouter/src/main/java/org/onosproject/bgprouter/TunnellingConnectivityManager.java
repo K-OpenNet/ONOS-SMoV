@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import org.onlab.packet.IpAddress;
 import org.onlab.packet.TCP;
 import org.onlab.packet.TpPort;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -160,7 +160,7 @@ public class TunnellingConnectivityManager {
                     interfaceService.getInterfacesByPort(context.inPacket().receivedFrom());
 
             if (interfaces.stream()
-                    .flatMap(intf -> intf.ipAddresses().stream())
+                    .flatMap(intf -> intf.ipAddressesList().stream())
                     .anyMatch(ia -> ia.ipAddress().equals(dstAddress))) {
                 outputPort = bgpSpeaker.connectPoint();
             }

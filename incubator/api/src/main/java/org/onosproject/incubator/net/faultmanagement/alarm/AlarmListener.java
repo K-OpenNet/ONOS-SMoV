@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.onosproject.incubator.net.faultmanagement.alarm;
 
 import org.onosproject.event.EventListener;
 
-
 /**
- * Entity capable of receiving Alarm related events.
+ * Entity capable of receiving alarm related events.
  */
 public interface AlarmListener extends EventListener<AlarmEvent> {
 }

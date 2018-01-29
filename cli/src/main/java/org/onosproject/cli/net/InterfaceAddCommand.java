@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import org.apache.karaf.shell.commands.Option;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceAdminService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceAdminService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.host.InterfaceIpAddress;
 
@@ -33,7 +33,7 @@ import java.util.List;
 /**
  * Adds a new interface configuration.
  */
-@Command(scope = "onos", name = "add-interface",
+@Command(scope = "onos", name = "interface-add",
         description = "Adds a new configured interface")
 public class InterfaceAddCommand extends AbstractShellCommand {
 

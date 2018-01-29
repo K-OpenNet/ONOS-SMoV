@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,23 +15,26 @@
  */
 package org.onosproject.store.intent.impl;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.stream.IntStream;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onosproject.cfg.ComponentConfigService;
+import org.onosproject.cfg.ConfigProperty;
 import org.onosproject.cluster.ClusterServiceAdapter;
-import org.onosproject.core.IdGenerator;
+import org.onosproject.cluster.NodeId;
+import org.onosproject.net.intent.AbstractIntentTest;
 import org.onosproject.net.intent.HostToHostIntent;
 import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentData;
 import org.onosproject.net.intent.IntentState;
 import org.onosproject.net.intent.IntentTestsMocks;
-import org.onosproject.net.intent.MockIdGenerator;
-import org.onosproject.net.intent.IntentPartitionServiceAdapter;
+import org.onosproject.net.intent.WorkPartitionServiceAdapter;
 import org.onosproject.store.service.TestStorageService;
+
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -42,32 +45,33 @@ import static org.onosproject.net.NetTestTools.hid;
 /**
  * Gossip Intent Store test using database adapter.
  */
-public class GossipIntentStoreTest {
+public class GossipIntentStoreTest extends AbstractIntentTest {
 
     private GossipIntentStore intentStore;
-    private IdGenerator idGenerator;
     private HostToHostIntent.Builder builder1;
 
+    @Override
     @Before
     public void setUp() {
         intentStore = new GossipIntentStore();
         intentStore.storageService = new TestStorageService();
-        intentStore.partitionService = new IntentPartitionServiceAdapter();
+        intentStore.partitionService = new WorkPartitionServiceAdapter();
         intentStore.clusterService = new ClusterServiceAdapter();
-        idGenerator = new MockIdGenerator();
-        Intent.bindIdGenerator(idGenerator);
+        super.setUp();
         builder1 = HostToHostIntent
                         .builder()
                         .one(hid("12:34:56:78:91:ab/1"))
                         .two(hid("12:34:56:78:91:ac/1"))
                         .appId(APP_ID);
-        intentStore.activate();
+        intentStore.configService = new MockComponentConfigService();
+        intentStore.activate(null);
     }
 
+    @Override
     @After
-    public void cleanUp() {
+    public void tearDown() {
         intentStore.deactivate();
-        Intent.unbindIdGenerator(idGenerator);
+        super.tearDown();
     }
 
     /**
@@ -170,11 +174,11 @@ public class GossipIntentStoreTest {
         );
 
         // now purge the intent that was created
-        IntentData purge = new IntentData(
-                intent,
-                IntentState.PURGE_REQ,
-                new IntentTestsMocks.MockTimestamp(12));
-        intentStore.write(purge);
+        IntentData purgeAssigned =
+                IntentData.assign(IntentData.purge(intent),
+                                  new IntentTestsMocks.MockTimestamp(12),
+                                  new NodeId("node-id"));
+        intentStore.write(purgeAssigned);
 
         // check that no intents are left
         assertThat(intentStore.getIntentCount(), is(0L));
@@ -230,5 +234,47 @@ public class GossipIntentStoreTest {
         pendingDataIteratorSelected.forEach(
                 data -> assertThat(data, is(installed))
         );
+    }
+
+    private class MockComponentConfigService implements ComponentConfigService {
+
+        public MockComponentConfigService() {
+
+        }
+
+        @Override
+        public Set<String> getComponentNames() {
+            return null;
+        }
+
+        @Override
+        public void registerProperties(Class<?> componentClass) {
+
+        }
+
+        @Override
+        public void unregisterProperties(Class<?> componentClass, boolean clear) {
+
+        }
+
+        @Override
+        public Set<ConfigProperty> getProperties(String componentName) {
+            return null;
+        }
+
+        @Override
+        public void setProperty(String componentName, String name, String value) {
+
+        }
+
+        @Override
+        public void preSetProperty(String componentName, String name, String value) {
+
+        }
+
+        @Override
+        public void unsetProperty(String componentName, String name) {
+
+        }
     }
 }

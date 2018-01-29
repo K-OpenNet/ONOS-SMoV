@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,18 @@
 package org.onosproject.store.service;
 
 import java.util.Collection;
-import java.util.Objects;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import org.onosproject.store.primitives.DefaultConsistentMap;
-import org.onosproject.store.primitives.TransactionId;
+import org.onosproject.store.primitives.MapUpdate;
 
 /**
  * A distributed, strongly consistent map whose methods are all executed asynchronously.
@@ -52,7 +54,7 @@ import org.onosproject.store.primitives.TransactionId;
  * the returned future will be {@link CompletableFuture#complete completed} when the
  * operation finishes.
  */
-public interface AsyncConsistentMap<K, V> extends DistributedPrimitive {
+public interface AsyncConsistentMap<K, V> extends DistributedPrimitive, Transactional<MapUpdate<K, V>> {
 
     @Override
     default DistributedPrimitive.Type primitiveType() {
@@ -105,6 +107,17 @@ public interface AsyncConsistentMap<K, V> extends DistributedPrimitive {
      * this map contains no mapping for the key
      */
     CompletableFuture<Versioned<V>> get(K key);
+
+    /**
+     * Returns the value (and version) to which the specified key is mapped, or the provided
+     * default value if this map contains no mapping for the key.
+     *
+     * @param key the key whose associated value (and version) is to be returned
+     * @param defaultValue the default value to return if the key is not set
+     * @return a future value (and version) to which the specified key is mapped, or null if
+     * this map contains no mapping for the key
+     */
+    CompletableFuture<Versioned<V>> getOrDefault(K key, V defaultValue);
 
     /**
      * If the specified key is not already associated with a value (or is mapped to null),
@@ -240,8 +253,9 @@ public interface AsyncConsistentMap<K, V> extends DistributedPrimitive {
     CompletableFuture<Set<Entry<K, Versioned<V>>>> entrySet();
 
     /**
-     * If the specified key is not already associated with a value
-     * associates it with the given value and returns null, else returns the current value.
+     * If the specified key is not already associated with a value associates
+     * it with the given value and returns null, else behaves as a get
+     * returning the existing mapping without making any changes.
      *
      * @param key key with which the specified value is to be associated
      * @param value value to be associated with the specified key
@@ -308,7 +322,18 @@ public interface AsyncConsistentMap<K, V> extends DistributedPrimitive {
      * @param listener listener to notify about map events
      * @return future that will be completed when the operation finishes
      */
-    CompletableFuture<Void> addListener(MapEventListener<K, V> listener);
+    default CompletableFuture<Void> addListener(MapEventListener<K, V> listener) {
+        return addListener(listener, MoreExecutors.directExecutor());
+    }
+
+    /**
+     * Registers the specified listener to be notified whenever the map is updated.
+     *
+     * @param listener listener to notify about map events
+     * @param executor executor to use for handling incoming map events
+     * @return future that will be completed when the operation finishes
+     */
+    CompletableFuture<Void> addListener(MapEventListener<K, V> listener, Executor executor);
 
     /**
      * Unregisters the specified listener such that it will no longer
@@ -320,34 +345,12 @@ public interface AsyncConsistentMap<K, V> extends DistributedPrimitive {
     CompletableFuture<Void> removeListener(MapEventListener<K, V> listener);
 
     /**
-     * Prepares a transaction for commitment.
-     * @param transaction transaction
-     * @return {@code true} if prepare is successful and transaction is ready to be committed;
-     * {@code false} otherwise
-     */
-    CompletableFuture<Boolean> prepare(MapTransaction<K, V> transaction);
-
-    /**
-     * Commits a previously prepared transaction.
-     * @param transactionId transaction identifier
-     * @return future that will be completed when the operation finishes
-     */
-    CompletableFuture<Void> commit(TransactionId transactionId);
-
-    /**
-     * Aborts a previously prepared transaction.
-     * @param transactionId transaction identifier
-     * @return future that will be completed when the operation finishes
-     */
-    CompletableFuture<Void> rollback(TransactionId transactionId);
-
-    /**
      * Returns a new {@link ConsistentMap} that is backed by this instance.
      *
      * @return new {@code ConsistentMap} instance
      */
     default ConsistentMap<K, V> asConsistentMap() {
-        return asConsistentMap(DistributedPrimitive.DEFAULT_OPERTATION_TIMEOUT_MILLIS);
+        return asConsistentMap(DistributedPrimitive.DEFAULT_OPERATION_TIMEOUT_MILLIS);
     }
 
     /**

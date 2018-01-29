@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,25 @@ public class PathServiceAdapter implements PathService {
     }
 
     @Override
+    public Set<Path> getPaths(ElementId src, ElementId dst,
+                              LinkWeigher weigher) {
+        return null;
+    }
+
+    @Override
     public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst) {
         return null;
     }
 
     @Override
-    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst, LinkWeight weight) {
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                              LinkWeight weight) {
+        return null;
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                              LinkWeigher weigher) {
         return null;
     }
 
@@ -56,6 +69,13 @@ public class PathServiceAdapter implements PathService {
     @Override
     public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
                                               LinkWeight weight,
+                                              Map<Link, Object> riskProfile) {
+        return null;
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(ElementId src, ElementId dst,
+                                              LinkWeigher weigher,
                                               Map<Link, Object> riskProfile) {
         return null;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ package org.onosproject.driver.query;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+import com.google.common.collect.ImmutableSet;
 import org.onlab.packet.VlanId;
-import org.onlab.util.GuavaCollectors;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.VlanQuery;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
@@ -35,6 +35,9 @@ public class FullVlanAvailable
     implements VlanQuery {
 
     private static final int MAX_VLAN_ID = VlanId.MAX_VLAN;
+    private static final Set<Integer> EXCLUDED = ImmutableSet.of(
+            (int) VlanId.NO_VID,
+            (int) VlanId.RESERVED);
     private static final Set<VlanId> ENTIRE_VLAN = getEntireVlans();
 
     @Override
@@ -44,8 +47,9 @@ public class FullVlanAvailable
 
     private static Set<VlanId> getEntireVlans() {
         return IntStream.range(0, MAX_VLAN_ID)
+                .filter(x -> !EXCLUDED.contains(x))
                 .mapToObj(x -> VlanId.vlanId((short) x))
-                .collect(GuavaCollectors.toImmutableSet());
+                .collect(ImmutableSet.toImmutableSet());
     }
 
 }

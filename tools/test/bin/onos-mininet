@@ -6,7 +6,7 @@
 [ ! -d "$ONOS_ROOT" ] && echo "ONOS_ROOT is not defined" >&2 && exit 1
 . $ONOS_ROOT/tools/build/envDefaults
 
-export MAX_WAIT=60
+export MAX_WAIT=${ONOS_MN_TIMEOUT:-90}
 
 cmd="$1" && shift
 log="screenlog.0"
@@ -65,5 +65,11 @@ stop)
     $mininet -X "stuff \"^C\\n\"" 2>/dev/null && \
         $mininet -X "stuff \"^C\\n\"" 2>/dev/null && \
         $mininet -X "stuff \"exit\\n\"" 2>/dev/null
+    ssh -t -t $remote sudo mn -c
+
+    ;;
+cleanup)
+    ssh -t -t $remote sudo mn -c
+    ssh -t -t $remote "screen -list | grep mininet | cut -d. -f1 | tr -d '\t' | xargs kill -9; screen -wipe; exit 0"
     ;;
 esac

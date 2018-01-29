@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,16 @@
  */
 package org.onlab.packet;
 
-import java.net.InetAddress;
+import com.google.common.net.InetAddresses;
+import com.google.common.primitives.UnsignedBytes;
+
 import java.net.Inet4Address;
 import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
-import com.google.common.net.InetAddresses;
-import com.google.common.primitives.UnsignedBytes;
 
 
 /**
@@ -33,7 +35,7 @@ public class IpAddress implements Comparable<IpAddress> {
     private static final int BIT_MASK = 0x000000ff;
 
     // IP Versions
-    public enum Version { INET, INET6 };
+    public enum Version { INET, INET6 }
 
     // lengths of address, in bytes
     public static final int INET_BYTE_LENGTH = 4;
@@ -67,6 +69,14 @@ public class IpAddress implements Comparable<IpAddress> {
             this.octets = null;
             break;
         }
+    }
+
+    /**
+     * Default constructor for Kryo serialization.
+     */
+    protected IpAddress() {
+        this.version = null;
+        this.octets = null;
     }
 
     /**
@@ -139,6 +149,20 @@ public class IpAddress implements Comparable<IpAddress> {
      */
     public byte[] toOctets() {
         return Arrays.copyOf(octets, octets.length);
+    }
+
+    /**
+     * Returns the IP address as InetAddress.
+     *
+     * @return InetAddress
+     */
+    public InetAddress toInetAddress() {
+        try {
+            return InetAddress.getByAddress(octets);
+        } catch (UnknownHostException e) {
+            // Should never reach here
+            return null;
+        }
     }
 
     /**
@@ -317,12 +341,23 @@ public class IpAddress implements Comparable<IpAddress> {
     /**
      * Check if this IP address is a multicast address.
      *
-     * @return true if this address a multicast address
+     * @return true if this address is a multicast address
      */
     public boolean isMulticast() {
         return isIp4() ?
                 Ip4Prefix.IPV4_MULTICAST_PREFIX.contains(this.getIp4Address()) :
                 Ip6Prefix.IPV6_MULTICAST_PREFIX.contains(this.getIp6Address());
+    }
+
+    /**
+     * Check if this IP address is a link-local address.
+     *
+     * @return true if this address is a link-local address
+     */
+    public boolean isLinkLocal() {
+        return isIp4() ?
+                Ip4Prefix.IPV4_LINK_LOCAL_PREFIX.contains(this.getIp4Address()) :
+                Ip6Prefix.IPV6_LINK_LOCAL_PREFIX.contains(this.getIp6Address());
     }
 
     @Override
@@ -513,7 +548,7 @@ public class IpAddress implements Comparable<IpAddress> {
      */
     private String ipv6ToStringHelper() {
         //Populate a buffer with the string of the full address with leading zeros stripped
-        StringBuffer buff = new StringBuffer();
+        StringBuilder buff = new StringBuilder();
         buff.append(String.format("%x:%x:%x:%x:%x:%x:%x:%x",
                 (((octets[0] & BIT_MASK) << 8) | (octets[1] & BIT_MASK)),
                 (((octets[2] & BIT_MASK) << 8) | (octets[3] & BIT_MASK)),

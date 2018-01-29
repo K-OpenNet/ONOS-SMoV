@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,16 @@
  */
 package org.onosproject.incubator.rpc.grpc;
 
-import static org.onosproject.incubator.rpc.grpc.GrpcDeviceUtils.asMap;
-
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import org.onosproject.grpc.Link.LinkDetectedMsg;
-import org.onosproject.grpc.Link.LinkType;
-import org.onosproject.grpc.Link.LinkVanishedMsg;
-import org.onosproject.grpc.Link.Void;
-import org.onosproject.grpc.LinkProviderServiceRpcGrpc;
-import org.onosproject.grpc.LinkProviderServiceRpcGrpc.LinkProviderServiceRpcFutureStub;
+import com.google.common.annotations.Beta;
+import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.Channel;
+import org.onosproject.grpc.net.link.LinkProviderServiceRpcGrpc;
+import org.onosproject.grpc.net.link.LinkProviderServiceRpcGrpc.LinkProviderServiceRpcFutureStub;
+import org.onosproject.grpc.net.link.LinkService.LinkDetectedMsg;
+import org.onosproject.grpc.net.link.LinkService.LinkVanishedMsg;
+import org.onosproject.grpc.net.link.LinkService.Void;
+import org.onosproject.grpc.net.link.models.LinkEnumsProto.LinkTypeProto;
+import org.onosproject.grpc.net.models.ConnectPointProtoOuterClass.ConnectPointProto;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Link.Type;
@@ -38,10 +36,11 @@ import org.onosproject.net.provider.ProviderId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.api.client.repackaged.com.google.common.annotations.Beta;
-import com.google.common.util.concurrent.ListenableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import io.grpc.Channel;
+import static org.onosproject.incubator.protobuf.models.ProtobufUtils.asMap;
 
 /**
  * Proxy object to handle LinkProviderService calls.
@@ -82,10 +81,7 @@ class LinkProviderServiceClientProxy
             log.error("linkDetected({}) failed", linkDescription, e);
             invalidate();
             Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            log.error("linkDetected({}) failed", linkDescription, e);
-            invalidate();
-        } catch (TimeoutException e) {
+        } catch (ExecutionException | TimeoutException e) {
             log.error("linkDetected({}) failed", linkDescription, e);
             invalidate();
         }
@@ -105,10 +101,7 @@ class LinkProviderServiceClientProxy
             log.error("linkVanished({}) failed", linkDescription, e);
             invalidate();
             Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            log.error("linkVanished({}) failed", linkDescription, e);
-            invalidate();
-        } catch (TimeoutException e) {
+        } catch (ExecutionException | TimeoutException e) {
             log.error("linkVanished({}) failed", linkDescription, e);
             invalidate();
         }
@@ -128,10 +121,7 @@ class LinkProviderServiceClientProxy
             log.error("linksVanished({}) failed", connectPoint, e);
             invalidate();
             Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            log.error("linksVanished({}) failed", connectPoint, e);
-            invalidate();
-        } catch (TimeoutException e) {
+        } catch (ExecutionException | TimeoutException e) {
             log.error("linksVanished({}) failed", connectPoint, e);
             invalidate();
         }
@@ -151,10 +141,7 @@ class LinkProviderServiceClientProxy
             log.error("linksVanished({}) failed", deviceId, e);
             invalidate();
             Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            log.error("linksVanished({}) failed", deviceId, e);
-            invalidate();
-        } catch (TimeoutException e) {
+        } catch (ExecutionException | TimeoutException e) {
             log.error("linksVanished({}) failed", deviceId, e);
             invalidate();
         }
@@ -237,26 +224,26 @@ class LinkProviderServiceClientProxy
     /**
      * Translates ONOS object to gRPC message.
      *
-     * @param type {@link Link.Type}
-     * @return gRPC LinkType
+     * @param type {@link org.onosproject.net.Link.Type Link.Type}
+     * @return gRPC LinkTypeProto
      */
-    private LinkType translate(Type type) {
+    private LinkTypeProto translate(Type type) {
         switch (type) {
         case DIRECT:
-            return LinkType.DIRECT;
+            return LinkTypeProto.DIRECT;
         case EDGE:
-            return LinkType.EDGE;
+            return LinkTypeProto.EDGE;
         case INDIRECT:
-            return LinkType.INDIRECT;
+            return LinkTypeProto.INDIRECT;
         case OPTICAL:
-            return LinkType.OPTICAL;
+            return LinkTypeProto.OPTICAL;
         case TUNNEL:
-            return LinkType.TUNNEL;
+            return LinkTypeProto.TUNNEL;
         case VIRTUAL:
-            return LinkType.VIRTUAL;
+            return LinkTypeProto.VIRTUAL;
 
         default:
-            return LinkType.DIRECT;
+            return LinkTypeProto.DIRECT;
 
         }
     }
@@ -265,10 +252,10 @@ class LinkProviderServiceClientProxy
      * Translates ONOS object to gRPC message.
      *
      * @param cp {@link ConnectPoint}
-     * @return gRPC ConnectPoint
+     * @return gRPC ConnectPointProto
      */
-    private org.onosproject.grpc.Link.ConnectPoint translate(ConnectPoint cp) {
-        return org.onosproject.grpc.Link.ConnectPoint.newBuilder()
+    private ConnectPointProto translate(ConnectPoint cp) {
+        return ConnectPointProto.newBuilder()
                 .setDeviceId(cp.deviceId().toString())
                 .setPortNumber(cp.port().toString())
                 .build();

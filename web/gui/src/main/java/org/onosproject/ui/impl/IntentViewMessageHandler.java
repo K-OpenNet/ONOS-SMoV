@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,12 +112,12 @@ public class IntentViewMessageHandler extends UiMessageHandler {
 
         private void populateRow(TableModel.Row row, Intent intent, IntentService is) {
             row.cell(APP_ID, intent.appId())
-                .cell(KEY, intent.key())
-                .cell(TYPE, intent.getClass().getSimpleName())
-                .cell(PRIORITY, intent.priority())
-                .cell(STATE, is.getIntentState(intent.key()))
-                .cell(RESOURCES, intent)
-                .cell(DETAILS, intent);
+                    .cell(KEY, intent.key())
+                    .cell(TYPE, intent.getClass().getSimpleName())
+                    .cell(PRIORITY, intent.priority())
+                    .cell(STATE, is.getIntentState(intent.key()))
+                    .cell(RESOURCES, intent)
+                    .cell(DETAILS, intent);
         }
 
         private final class ResourcesFormatter implements CellFormatter {

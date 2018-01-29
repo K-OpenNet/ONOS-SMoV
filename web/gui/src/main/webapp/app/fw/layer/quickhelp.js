@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,11 @@
     'use strict';
 
     // injected references
-    var $log, fs, sus;
+    var $log, fs, sus, ls;
 
     // configuration
     var defaultSettings = {
-            fade: 500
+            fade: 500,
         },
         w = '100%',
         h = '80%',
@@ -56,12 +56,12 @@
         leftArrow: 'L-arrow',
         upArrow: 'U-arrow',
         rightArrow: 'R-arrow',
-        downArrow: 'D-arrow'
+        downArrow: 'D-arrow',
     };
 
     // list of needed bindings to use in aggregateData
     var neededBindings = [
-        'globalKeys', 'globalFormat', 'viewKeys', 'viewGestures'
+        'globalKeys', 'globalFormat', 'viewKeys', 'viewGestures',
     ];
 
     // ===========================================
@@ -88,7 +88,7 @@
                 aggKey = el.append('g').attr('visibility', 'hidden'),
                 gcol = el.append('g').attr({
                     'class': cls,
-                    transform: sus.translate(xCount, 0)
+                    transform: sus.translate(xCount, 0),
                 });
 
             c.forEach(function (j) {
@@ -101,12 +101,12 @@
                     gcol.append('text').text(k)
                         .attr({
                             'class': 'key',
-                            y: oy
+                            y: oy,
                         });
                     gcol.append('text').text(v)
                         .attr({
                             'class': 'desc',
-                            y: oy
+                            y: oy,
                         });
                 }
 
@@ -140,7 +140,7 @@
         var entering = rows.enter()
             .append('g')
             .attr({
-                'class': 'qhrow'
+                'class': 'qhrow',
             });
 
         entering.each(function (r, i) {
@@ -169,7 +169,7 @@
         rect.attr({
             width: paneW,
             height: paneH,
-            transform: sus.translate(-paneW/2-pad, 0)
+            transform: sus.translate(-paneW/2-pad, 0),
         });
 
     }
@@ -202,11 +202,13 @@
         fmt.forEach(function (k) {
             var v = map.get(k),
                 a = fs.isA(v),
-                d = (a && a[1]);
+                d = (a && a[1]),
+                dfn = fs.isF(d),
+                dval = (dfn && dfn()) || d;
 
             // '-' marks a separator; d is the description
-            if (k === '-' || d) {
-                b.push([mkKeyDisp(k), d]);
+            if (k === '-' || dval) {
+                b.push([mkKeyDisp(k), dval]);
             }
         });
         return b;
@@ -268,23 +270,27 @@
         addRow(mkArrRow(vgest));
     }
 
+    function qhlionTitle() {
+        var lion = ls.bundle('core.fw.QuickHelp');
+        return lion('qh_title');
+    }
 
     function popBind(bindings) {
         pane = svg.append('g')
             .attr({
                 class: 'help',
-                opacity: 0
+                opacity: 0,
             });
 
         rect = pane.append('rect')
             .attr('rx', 8);
 
         pane.append('text')
-            .text('Quick Help')
+            .text(qhlionTitle())
             .attr({
                 class: 'title',
                 dy: '1.2em',
-                transform: sus.translate(-pad,0)
+                transform: sus.translate(-pad, 0),
             });
 
         items = pane.append('g');
@@ -310,7 +316,7 @@
             .attr({
                 width: w,
                 height: h,
-                viewBox: vbox
+                viewBox: vbox,
             });
     }
 
@@ -332,7 +338,7 @@
                 'needed bindings for help panel not provided:',
                 neededBindings
             );
-            return false
+            return false;
         }
         return true;
     }
@@ -342,12 +348,13 @@
 
     angular.module('onosLayer')
     .factory('QuickHelpService',
-        ['$log', 'FnService', 'SvgUtilService',
+        ['$log', 'FnService', 'SvgUtilService', 'LionService',
 
-        function (_$log_, _fs_, _sus_) {
+        function (_$log_, _fs_, _sus_, _ls_) {
             $log = _$log_;
             fs = _fs_;
             sus = _sus_;
+            ls = _ls_;
 
             function initQuickHelp(opts) {
                 settings = angular.extend({}, defaultSettings, fs.isO(opts));
@@ -380,7 +387,7 @@
             return {
                 initQuickHelp: initQuickHelp,
                 showQuickHelp: showQuickHelp,
-                hideQuickHelp: hideQuickHelp
+                hideQuickHelp: hideQuickHelp,
             };
         }]);
 

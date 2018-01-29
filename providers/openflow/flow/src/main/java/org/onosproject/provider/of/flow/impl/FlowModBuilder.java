@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,8 @@ import org.onosproject.net.flow.criteria.UdpPortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.criteria.VlanPcpCriterion;
 import org.onosproject.openflow.controller.ExtensionSelectorInterpreter;
+import org.onosproject.provider.of.flow.util.NoMappingFoundException;
+import org.onosproject.provider.of.flow.util.OpenFlowValueMapper;
 import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFFlowMod;
 import org.projectfloodlight.openflow.protocol.match.Match;
@@ -131,7 +133,10 @@ public abstract class FlowModBuilder {
         case OF_10:
             return new FlowModBuilderVer10(flowRule, factory, xid, driverService);
         case OF_13:
+        case OF_14:
             return new FlowModBuilderVer13(flowRule, factory, xid, driverService);
+        case OF_15:
+            return new FlowModBuilderVer15(flowRule, factory, xid, driverService);
         default:
             throw new UnsupportedOperationException(
                     "No flow mod builder for protocol version " + factory.getVersion());
@@ -306,30 +311,66 @@ public abstract class FlowModBuilder {
                 mBuilder.setExact(MatchField.TCP_SRC,
                                   TransportPort.of(tcpPortCriterion.tcpPort().toInt()));
                 break;
+            case TCP_SRC_MASKED:
+                tcpPortCriterion = (TcpPortCriterion) c;
+                mBuilder.setMasked(MatchField.TCP_SRC,
+                                   TransportPort.of(tcpPortCriterion.tcpPort().toInt()),
+                                   TransportPort.of(tcpPortCriterion.mask().toInt()));
+                break;
             case TCP_DST:
                 tcpPortCriterion = (TcpPortCriterion) c;
                 mBuilder.setExact(MatchField.TCP_DST,
                                   TransportPort.of(tcpPortCriterion.tcpPort().toInt()));
+                break;
+            case TCP_DST_MASKED:
+                tcpPortCriterion = (TcpPortCriterion) c;
+                mBuilder.setMasked(MatchField.TCP_DST,
+                                   TransportPort.of(tcpPortCriterion.tcpPort().toInt()),
+                                   TransportPort.of(tcpPortCriterion.mask().toInt()));
                 break;
             case UDP_SRC:
                 udpPortCriterion = (UdpPortCriterion) c;
                 mBuilder.setExact(MatchField.UDP_SRC,
                                   TransportPort.of(udpPortCriterion.udpPort().toInt()));
                 break;
+            case UDP_SRC_MASKED:
+                udpPortCriterion = (UdpPortCriterion) c;
+                mBuilder.setMasked(MatchField.UDP_SRC,
+                                   TransportPort.of(udpPortCriterion.udpPort().toInt()),
+                                   TransportPort.of(udpPortCriterion.mask().toInt()));
+                break;
             case UDP_DST:
                 udpPortCriterion = (UdpPortCriterion) c;
                 mBuilder.setExact(MatchField.UDP_DST,
                                   TransportPort.of(udpPortCriterion.udpPort().toInt()));
+                break;
+            case UDP_DST_MASKED:
+                udpPortCriterion = (UdpPortCriterion) c;
+                mBuilder.setMasked(MatchField.UDP_DST,
+                                   TransportPort.of(udpPortCriterion.udpPort().toInt()),
+                                   TransportPort.of(udpPortCriterion.mask().toInt()));
                 break;
             case SCTP_SRC:
                 sctpPortCriterion = (SctpPortCriterion) c;
                 mBuilder.setExact(MatchField.SCTP_SRC,
                                   TransportPort.of(sctpPortCriterion.sctpPort().toInt()));
                 break;
+            case SCTP_SRC_MASKED:
+                sctpPortCriterion = (SctpPortCriterion) c;
+                mBuilder.setMasked(MatchField.SCTP_SRC,
+                                   TransportPort.of(sctpPortCriterion.sctpPort().toInt()),
+                                   TransportPort.of(sctpPortCriterion.mask().toInt()));
+                break;
             case SCTP_DST:
                 sctpPortCriterion = (SctpPortCriterion) c;
                 mBuilder.setExact(MatchField.SCTP_DST,
                                   TransportPort.of(sctpPortCriterion.sctpPort().toInt()));
+                break;
+            case SCTP_DST_MASKED:
+                sctpPortCriterion = (SctpPortCriterion) c;
+                mBuilder.setMasked(MatchField.SCTP_DST,
+                                   TransportPort.of(sctpPortCriterion.sctpPort().toInt()),
+                                   TransportPort.of(sctpPortCriterion.mask().toInt()));
                 break;
             case ICMPV4_TYPE:
                 IcmpTypeCriterion icmpType = (IcmpTypeCriterion) c;

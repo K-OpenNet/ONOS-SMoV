@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,9 +38,7 @@ import org.onosproject.store.AbstractStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -71,6 +69,7 @@ public class ApplicationArchive
 
     // Magic strings to search for at the beginning of the archive stream
     private static final String XML_MAGIC = "<?xml ";
+    private static final String ZIP_MAGIC = "PK";
 
     // Magic strings to search for and how deep to search it into the archive stream
     private static final String APP_MAGIC = "<app ";
@@ -92,14 +91,15 @@ public class ApplicationArchive
 
     private static final String ROLE = "security.role";
     private static final String APP_PERMISSIONS = "security.permissions.app-perm";
-    private static final String NET_PERMISSIONS = "security.permissions.net-perm";
+    private static final String VNET_PERMISSIONS = "security.permissions.vnet-perm";
     private static final String JAVA_PERMISSIONS = "security.permissions.java-perm";
 
+    private static final String JAR = ".jar";
     private static final String OAR = ".oar";
-    private static final String PNG = "png";
     private static final String APP_XML = "app.xml";
     private static final String APP_PNG = "app.png";
     private static final String M2_PREFIX = "m2";
+    private static final String FEATURES_XML = "features.xml";
 
     private static final String ROOT = "../";
     private static final String M2_ROOT = "system/";
@@ -203,10 +203,15 @@ public class ApplicationArchive
                 expandPlainApplication(cache, desc);
             } else {
                 bis.reset();
-                expandZippedApplication(bis, desc);
+                boolean isSelfContainedJar = expandZippedApplication(bis, desc);
+
+                if (isSelfContainedJar) {
+                    bis.reset();
+                    stageSelfContainedJar(bis, desc);
+                }
 
                 bis.reset();
-                saveApplication(bis, desc);
+                saveApplication(bis, desc, isSelfContainedJar);
             }
 
             installArtifacts(desc);
@@ -218,8 +223,9 @@ public class ApplicationArchive
 
     // Indicates whether the stream encoded in the given bytes is plain XML.
     private boolean isPlainXml(byte[] bytes) {
-        return substring(bytes, XML_MAGIC.length()).equals(XML_MAGIC) ||
-                substring(bytes, APP_MAGIC_DEPTH).contains(APP_MAGIC);
+        return !substring(bytes, ZIP_MAGIC.length()).equals(ZIP_MAGIC) &&
+                (substring(bytes, XML_MAGIC.length()).equals(XML_MAGIC) ||
+                 substring(bytes, APP_MAGIC_DEPTH).contains(APP_MAGIC));
     }
 
     // Returns the substring of maximum possible length from the specified bytes.
@@ -246,7 +252,7 @@ public class ApplicationArchive
 
     /**
      * Returns application archive stream for the specified application. This
-     * will be either the application ZIP file or the application XML file.
+     * will be either the application OAR file, JAR file or the plain XML file.
      *
      * @param appName application name
      * @return application archive stream
@@ -254,6 +260,9 @@ public class ApplicationArchive
     public synchronized InputStream getApplicationInputStream(String appName) {
         try {
             File appFile = appFile(appName, appName + OAR);
+            if (!appFile.exists()) {
+                appFile = appFile(appName, appName + JAR);
+            }
             return new FileInputStream(appFile.exists() ? appFile : appFile(appName, APP_XML));
         } catch (FileNotFoundException e) {
             throw new ApplicationException("Application " + appName + " not found");
@@ -319,15 +328,29 @@ public class ApplicationArchive
         // put short description to description field
         String desc = compactDescription(readme);
 
-        return new DefaultApplicationDescription(name, version, title, desc, origin,
-                                                 category, url, readme, icon,
-                                                 role, perms, featuresRepo,
-                                                 features, requiredApps);
+        return DefaultApplicationDescription.builder()
+            .withName(name)
+            .withVersion(version)
+            .withTitle(title)
+            .withDescription(desc)
+            .withOrigin(origin)
+            .withCategory(category)
+            .withUrl(url)
+            .withReadme(readme)
+            .withIcon(icon)
+            .withRole(role)
+            .withPermissions(perms)
+            .withFeaturesRepo(featuresRepo)
+            .withFeatures(features)
+            .withRequiredApps(requiredApps)
+            .build();
     }
 
     // Expands the specified ZIP stream into app-specific directory.
-    private void expandZippedApplication(InputStream stream, ApplicationDescription desc)
+    // Returns true of the application is a self-contained jar rather than an oar file.
+    private boolean expandZippedApplication(InputStream stream, ApplicationDescription desc)
             throws IOException {
+        boolean isSelfContained = false;
         ZipInputStream zis = new ZipInputStream(stream);
         ZipEntry entry;
         File appDir = new File(appsDir, desc.name());
@@ -336,11 +359,69 @@ public class ApplicationArchive
                 byte[] data = ByteStreams.toByteArray(zis);
                 zis.closeEntry();
                 File file = new File(appDir, entry.getName());
-                createParentDirs(file);
-                write(data, file);
+                if (isTopLevel(file)) {
+                    createParentDirs(file);
+                    write(data, file);
+                } else {
+                    isSelfContained = true;
+                }
             }
         }
         zis.close();
+        return isSelfContained;
+    }
+
+    // Returns true if the specified file is a top-level app file, i.e. app.xml,
+    // features.xml, .jar or a directory; false if anything else.
+    private boolean isTopLevel(File file) {
+        String name = file.getName();
+        return name.equals(APP_XML) || name.endsWith(FEATURES_XML) || name.endsWith(JAR) || file.isDirectory();
+    }
+
+    // Expands the self-contained JAR stream into the app-specific directory,
+    // using the bundle coordinates retrieved from the features.xml file.
+    private void stageSelfContainedJar(InputStream stream, ApplicationDescription desc)
+            throws IOException {
+        // First extract the bundle coordinates
+        String coords = getSelfContainedBundleCoordinates(desc);
+        if (coords == null) {
+            return;
+        }
+
+        // Split the coordinates into segments and build the file name.
+        String[] f = coords.substring(4).split("/");
+        String base = "m2/" + f[0].replace('.', '/') + "/" + f[1] + "/" + f[2] + "/" + f[1] + "-" + f[2];
+        String jarName = base + (f.length < 4 ? "" : "-" + f[3]) + ".jar";
+        String featuresName =  base + "-features.xml";
+
+        // Create the file directory structure and copy the file there.
+        File jar = appFile(desc.name(), jarName);
+        boolean ok = jar.getParentFile().exists() || jar.getParentFile().mkdirs();
+        if (ok) {
+            Files.write(toByteArray(stream), jar);
+            Files.copy(appFile(desc.name(), FEATURES_XML), appFile(desc.name(), featuresName));
+            if (!appFile(desc.name(), FEATURES_XML).delete()) {
+                log.warn("Unable to delete self-contained application {} features.xml", desc.name());
+            }
+        } else {
+            throw new IOException("Unable to save self-contained application " + desc.name());
+        }
+    }
+
+    // Returns the bundle coordinates from the features.xml file.
+    private String getSelfContainedBundleCoordinates(ApplicationDescription desc) {
+        try {
+            XMLConfiguration cfg = new XMLConfiguration();
+            cfg.setAttributeSplittingDisabled(true);
+            cfg.setDelimiterParsingDisabled(true);
+            cfg.load(appFile(desc.name(), FEATURES_XML));
+            return cfg.getString("feature.bundle")
+                    .replaceFirst("wrap:", "")
+                    .replaceFirst("\\$Bundle-.*$", "");
+        } catch (ConfigurationException e) {
+            log.warn("Self-contained application {} has no features.xml", desc.name());
+            return null;
+        }
     }
 
     // Saves the specified XML stream into app-specific directory.
@@ -352,11 +433,12 @@ public class ApplicationArchive
         write(stream, file);
     }
 
-
     // Saves the specified ZIP stream into a file under app-specific directory.
-    private void saveApplication(InputStream stream, ApplicationDescription desc)
+    private void saveApplication(InputStream stream, ApplicationDescription desc,
+                                 boolean isSelfContainedJar)
             throws IOException {
-        Files.write(toByteArray(stream), appFile(desc.name(), desc.name() + OAR));
+        String name = desc.name() + (isSelfContainedJar ? JAR : OAR);
+        Files.write(toByteArray(stream), appFile(desc.name(), name));
     }
 
     // Installs application artifacts into M2 repository.
@@ -433,9 +515,19 @@ public class ApplicationArchive
             String name = (String) o;
             permissionList.add(new Permission(AppPermission.class.getName(), name));
         }
-        for (Object o : cfg.getList(NET_PERMISSIONS)) {
-            //TODO: TO BE FLESHED OUT WHEN NETWORK PERMISSIONS ARE SUPPORTED
-            break;
+
+        List<HierarchicalConfiguration> vnetfields =
+                cfg.configurationsAt(VNET_PERMISSIONS);
+        for (HierarchicalConfiguration sub : vnetfields) {
+            String permission = sub.getString("permission");
+            String vnetId = sub.getString("vnetId");
+
+            if (permission != null && vnetId != null) {
+                if (vnetId.equals("*")) {
+                    vnetId = "ALL";
+                }
+                permissionList.add(new Permission(AppPermission.class.getName(), permission + "_" + vnetId));
+            }
         }
 
         List<HierarchicalConfiguration> fields =
@@ -454,25 +546,20 @@ public class ApplicationArchive
 
     // Returns the byte stream from icon.png file in oar application archive.
     private byte[] getApplicationIcon(String appName) {
-
-        byte[] icon = new byte[0];
         File iconFile = iconFile(appName, APP_PNG);
-
-        if (!iconFile.exists()) {
-            // assume that we can always fallback to default icon
-            iconFile = new File(appsDir, APP_PNG);
-        }
-
         try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ImageIO.write(ImageIO.read(iconFile), PNG, bos);
-            icon = bos.toByteArray();
-            bos.close();
+            final InputStream iconStream;
+            if (iconFile.exists()) {
+                iconStream = new FileInputStream(iconFile);
+            } else {
+                // assume that we can always fallback to default icon
+                iconStream = ApplicationArchive.class.getResourceAsStream("/" + APP_PNG);
+            }
+            return ByteStreams.toByteArray(iconStream);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.warn("Unable to read app icon for app {}", appName, e);
         }
-
-        return icon;
+        return new byte[0];
     }
 
     // Returns application role type

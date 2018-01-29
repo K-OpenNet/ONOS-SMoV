@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
     var $log, $window, fs, mast, is;
 
     // constants
-    var tableIconTdSize = 33,
+    var tableIconTdSize = 40,
         pdg = 22,
         flashTime = 1500,
         colWidth = 'col-width',
@@ -82,11 +82,11 @@
         if (haveItems) {
             setTdWidths(tableElems.thead, width);
             setTdWidths(tableElems.tbody, width);
-            setHeight(tableElems.thead, tableElems.table.select('.table-body'), height);
         } else {
             setTdWidths(tableElems.thead, width);
             _width(tableElems.tbody, width + 'px');
         }
+        setHeight(tableElems.thead, tableElems.table.select('.table-body'), height);
     }
 
     // sort columns state model and functions
@@ -94,7 +94,7 @@
         s: {
             first: null,
             second: null,
-            touched: null
+            touched: null,
         },
 
         reset: function () {
@@ -132,7 +132,7 @@
                 s2 = s.second;
             api[s1.dir](s1.adiv);
             s2 && api.none(s2.adiv);
-        }
+        },
     };
 
     // Functions for sorting table rows by header
@@ -157,12 +157,12 @@
             firstCol: s1.id,
             firstDir: s1.dir,
             secondCol: id2,
-            secondDir: dir2
+            secondDir: dir2,
         };
     }
 
     angular.module('onosWidget')
-    .directive('onosTableResize', ['$log','$window', 'FnService', 'MastService',
+    .directive('onosTableResize', ['$log', '$window', 'FnService', 'MastService',
 
         function (_$log_, _$window_, _fs_, _mast_) {
         return function (scope, element) {
@@ -175,7 +175,7 @@
                 tableElems = {
                     table: table,
                     thead: table.select('.table-header').select('table'),
-                    tbody: table.select('.table-body').select('table')
+                    tbody: table.select('.table-body').select('table'),
                 },
                 wsz;
 
@@ -185,7 +185,7 @@
             scope.$watchCollection(function () {
                 return {
                     h: $window.innerHeight,
-                    w: $window.innerWidth
+                    w: $window.innerWidth,
                 };
             }, function () {
                 wsz = fs.windowSize(0, 30);

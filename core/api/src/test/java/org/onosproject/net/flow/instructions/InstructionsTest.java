@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
  */
 package org.onosproject.net.flow.instructions;
 
-import java.util.List;
-
+import com.google.common.testing.EqualsTester;
 import org.junit.Test;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
@@ -24,18 +23,26 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.MplsLabel;
 import org.onlab.packet.TpPort;
 import org.onlab.packet.VlanId;
-import org.onosproject.core.DefaultGroupId;
+import org.onlab.util.ImmutableByteSequence;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.ChannelSpacing;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.GridType;
-import org.onosproject.net.IndexedLambda;
 import org.onosproject.net.Lambda;
 import org.onosproject.net.OduSignalId;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.flow.StatTriggerField;
+import org.onosproject.net.flow.StatTriggerFlag;
 import org.onosproject.net.meter.MeterId;
+import org.onosproject.net.pi.model.PiActionId;
+import org.onosproject.net.pi.model.PiActionParamId;
+import org.onosproject.net.pi.runtime.PiAction;
+import org.onosproject.net.pi.runtime.PiActionParam;
+import org.onosproject.net.pi.runtime.PiTableAction;
 
-import com.google.common.testing.EqualsTester;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -102,20 +109,19 @@ public class InstructionsTest {
     @Test
     public void testImmutabilityOfInstructions() {
         assertThatClassIsImmutable(Instructions.OutputInstruction.class);
-        assertThatClassIsImmutable(L0ModificationInstruction.ModLambdaInstruction.class);
         assertThatClassIsImmutable(L0ModificationInstruction.ModOchSignalInstruction.class);
         assertThatClassIsImmutable(L1ModificationInstruction.ModOduSignalIdInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModEtherInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModVlanIdInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModVlanPcpInstruction.class);
-        assertThatClassIsImmutable(L2ModificationInstruction.PopVlanInstruction.class);
         assertThatClassIsImmutable(L3ModificationInstruction.ModIPInstruction.class);
         assertThatClassIsImmutable(L3ModificationInstruction.ModIPv6FlowLabelInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModMplsLabelInstruction.class);
-        assertThatClassIsImmutable(L2ModificationInstruction.PushHeaderInstructions.class);
+        assertThatClassIsImmutable(L2ModificationInstruction.ModMplsHeaderInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModMplsBosInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModMplsTtlInstruction.class);
         assertThatClassIsImmutable(L2ModificationInstruction.ModTunnelIdInstruction.class);
+        assertThatClassIsImmutable(PiInstruction.class);
     }
 
     //  NoActionInstruction
@@ -196,48 +202,6 @@ public class InstructionsTest {
     }
 
     //  ModLambdaInstruction
-
-    private final IndexedLambda lambda1 = new IndexedLambda(1);
-    private final IndexedLambda lambda2 = new IndexedLambda(2);
-    private final Instruction lambdaInstruction1 = Instructions.modL0Lambda(lambda1);
-    private final Instruction sameAsLambdaInstruction1 = Instructions.modL0Lambda(lambda1);
-    private final Instruction lambdaInstruction2 = Instructions.modL0Lambda(lambda2);
-
-    /**
-     * Test the modL0Lambda method.
-     */
-    @Test
-    public void testCreateLambdaMethod() {
-        final Instruction instruction = Instructions.modL0Lambda(lambda1);
-        final L0ModificationInstruction.ModLambdaInstruction lambdaInstruction =
-                checkAndConvert(instruction,
-                        Instruction.Type.L0MODIFICATION,
-                        L0ModificationInstruction.ModLambdaInstruction.class);
-        assertThat(lambdaInstruction.lambda(), is(equalTo((short) lambda1.index())));
-    }
-
-    /**
-     * Test the equals() method of the ModLambdaInstruction class.
-     */
-
-    @Test
-    public void testModLambdaInstructionEquals() throws Exception {
-        checkEqualsAndToString(lambdaInstruction1,
-                               sameAsLambdaInstruction1,
-                               lambdaInstruction2);
-    }
-
-    /**
-     * Test the hashCode() method of the ModLambdaInstruction class.
-     */
-
-    @Test
-    public void testModLambdaInstructionHashCode() {
-        assertThat(lambdaInstruction1.hashCode(),
-                   is(equalTo(sameAsLambdaInstruction1.hashCode())));
-        assertThat(lambdaInstruction1.hashCode(),
-                is(not(equalTo(lambdaInstruction2.hashCode()))));
-    }
 
     private final Lambda och1 = Lambda.ochSignal(GridType.DWDM, ChannelSpacing.CHL_100GHZ, 4, 8);
     private final Lambda och2 = Lambda.ochSignal(GridType.CWDM, ChannelSpacing.CHL_100GHZ, 4, 8);
@@ -778,8 +742,8 @@ public class InstructionsTest {
 
     //  GroupInstruction
 
-    private final GroupId groupId1 = new DefaultGroupId(1);
-    private final GroupId groupId2 = new DefaultGroupId(2);
+    private final GroupId groupId1 = new GroupId(1);
+    private final GroupId groupId2 = new GroupId(2);
     private final Instruction groupInstruction1 = Instructions.createGroup(groupId1);
     private final Instruction sameAsGroupInstruction1 = Instructions.createGroup(groupId1);
     private final Instruction groupInstruction2 = Instructions.createGroup(groupId2);
@@ -867,6 +831,49 @@ public class InstructionsTest {
         checkEqualsAndToString(meterInstruction1,
                                sameAsMeterInstruction1,
                                meterInstruction2);
+    }
+
+    private long packetCountValue1 = 5L;
+    private long byteCountValue1 = 10L;
+    private long packetCountValue2 = 10L;
+    private long byteCountValue2 = 5L;
+    private StatTriggerFlag flag1 = StatTriggerFlag.ONLY_FIRST;
+    private StatTriggerFlag flag2 = StatTriggerFlag.PERIODIC;
+    Map<StatTriggerField, Long> statTriggerFieldMap1 = new EnumMap<StatTriggerField, Long>(StatTriggerField.class) {
+        {
+            put(StatTriggerField.BYTE_COUNT, packetCountValue1);
+            put(StatTriggerField.PACKET_COUNT, byteCountValue1);
+        }
+    };
+    Map<StatTriggerField, Long> statTriggerFieldMap2 = new EnumMap<StatTriggerField, Long>(StatTriggerField.class) {
+        {
+            put(StatTriggerField.BYTE_COUNT, packetCountValue2);
+            put(StatTriggerField.PACKET_COUNT, byteCountValue2);
+        }
+    };
+
+    final Instruction statInstruction1 = Instructions.statTrigger(statTriggerFieldMap1, flag1);
+    final Instruction statInstruction1Same = Instructions.statTrigger(statTriggerFieldMap1, flag1);
+    final Instruction statInstruction2 = Instructions.statTrigger(statTriggerFieldMap2, flag2);
+
+    @Test
+    public void testStatTriggerTrafficMethod() {
+        final Instruction instruction = Instructions.statTrigger(statTriggerFieldMap1, flag1);
+        final Instructions.StatTriggerInstruction statTriggerInstruction =
+                checkAndConvert(instruction,
+                        Instruction.Type.STAT_TRIGGER,
+                        Instructions.StatTriggerInstruction.class);
+        assertThat(statTriggerInstruction.getStatTriggerFieldMap(), is(equalTo(statTriggerFieldMap1)));
+        assertThat(statTriggerInstruction.getStatTriggerFlag(), is(equalTo(flag1)));
+        assertThat(statTriggerInstruction.getStatTriggerFieldMap(), is(not(equalTo(statTriggerFieldMap2))));
+        assertThat(statTriggerInstruction.getStatTriggerFlag(), is(not(equalTo(flag2))));
+    }
+
+    @Test
+    public void testStatTriggerTrafficInstructionEquals() {
+        checkEqualsAndToString(statInstruction1,
+                statInstruction1Same,
+                statInstruction2);
     }
 
     //  TableTypeTransition
@@ -1014,13 +1021,13 @@ public class InstructionsTest {
                                extensionInstruction2);
     }
 
-    //  PushHeaderInstructions
+    //  ModMplsHeaderInstructions
 
     private final EthType ethType1 = new EthType(1);
     private final EthType ethType2 = new EthType(2);
-    private final Instruction pushHeaderInstruction1 = Instructions.popMpls(ethType1);
-    private final Instruction sameAsPushHeaderInstruction1 = Instructions.popMpls(ethType1);
-    private final Instruction pushHeaderInstruction2 = Instructions.popMpls(ethType2);
+    private final Instruction modMplsHeaderInstruction1 = Instructions.popMpls(ethType1);
+    private final Instruction sameAsModMplsHeaderInstruction1 = Instructions.popMpls(ethType1);
+    private final Instruction modMplsHeaderInstruction2 = Instructions.popMpls(ethType2);
 
     /**
      * Test the pushMpls method.
@@ -1028,12 +1035,12 @@ public class InstructionsTest {
     @Test
     public void testPushMplsMethod() {
         final Instruction instruction = Instructions.pushMpls();
-        final L2ModificationInstruction.PushHeaderInstructions pushHeaderInstruction =
+        final L2ModificationInstruction.ModMplsHeaderInstruction pushHeaderInstruction =
                 checkAndConvert(instruction,
                                 Instruction.Type.L2MODIFICATION,
-                                L2ModificationInstruction.PushHeaderInstructions.class);
+                                L2ModificationInstruction.ModMplsHeaderInstruction.class);
         assertThat(pushHeaderInstruction.ethernetType().toString(),
-                   is(EthType.EtherType.MPLS_MULTICAST.toString()));
+                   is(EthType.EtherType.MPLS_UNICAST.toString()));
         assertThat(pushHeaderInstruction.subtype(),
                    is(L2ModificationInstruction.L2SubType.MPLS_PUSH));
     }
@@ -1044,12 +1051,12 @@ public class InstructionsTest {
     @Test
     public void testPopMplsMethod() {
         final Instruction instruction = Instructions.popMpls();
-        final L2ModificationInstruction.PushHeaderInstructions pushHeaderInstruction =
+        final L2ModificationInstruction.ModMplsHeaderInstruction pushHeaderInstruction =
                 checkAndConvert(instruction,
                                 Instruction.Type.L2MODIFICATION,
-                                L2ModificationInstruction.PushHeaderInstructions.class);
+                                L2ModificationInstruction.ModMplsHeaderInstruction.class);
         assertThat(pushHeaderInstruction.ethernetType().toString(),
-                   is(EthType.EtherType.MPLS_MULTICAST.toString()));
+                   is(EthType.EtherType.MPLS_UNICAST.toString()));
         assertThat(pushHeaderInstruction.subtype(),
                    is(L2ModificationInstruction.L2SubType.MPLS_POP));
     }
@@ -1060,10 +1067,10 @@ public class InstructionsTest {
     @Test
     public void testPopMplsEthertypeMethod() {
         final Instruction instruction = Instructions.popMpls(new EthType(1));
-        final L2ModificationInstruction.PushHeaderInstructions pushHeaderInstruction =
+        final L2ModificationInstruction.ModMplsHeaderInstruction pushHeaderInstruction =
                 checkAndConvert(instruction,
                                 Instruction.Type.L2MODIFICATION,
-                                L2ModificationInstruction.PushHeaderInstructions.class);
+                                L2ModificationInstruction.ModMplsHeaderInstruction.class);
         assertThat(pushHeaderInstruction.ethernetType().toShort(), is((short) 1));
         assertThat(pushHeaderInstruction.subtype(),
                    is(L2ModificationInstruction.L2SubType.MPLS_POP));
@@ -1075,10 +1082,10 @@ public class InstructionsTest {
     @Test
     public void testPushVlanMethod() {
         final Instruction instruction = Instructions.pushVlan();
-        final L2ModificationInstruction.PushHeaderInstructions pushHeaderInstruction =
+        final L2ModificationInstruction.ModVlanHeaderInstruction pushHeaderInstruction =
                 checkAndConvert(instruction,
                                 Instruction.Type.L2MODIFICATION,
-                                L2ModificationInstruction.PushHeaderInstructions.class);
+                                L2ModificationInstruction.ModVlanHeaderInstruction.class);
         assertThat(pushHeaderInstruction.ethernetType().toString(),
                    is(EthType.EtherType.VLAN.toString()));
         assertThat(pushHeaderInstruction.subtype(),
@@ -1087,14 +1094,14 @@ public class InstructionsTest {
 
     /**
      * Tests the equals(), hashCode() and toString() methods of the
-     * PushHeaderInstructions class.
+     * ModMplsHeaderInstructions class.
      */
 
     @Test
-    public void testPushHeaderInstructionsEquals() {
-        checkEqualsAndToString(pushHeaderInstruction1,
-                               sameAsPushHeaderInstruction1,
-                               pushHeaderInstruction2);
+    public void testModMplsHeaderInstructionsEquals() {
+        checkEqualsAndToString(modMplsHeaderInstruction1,
+                sameAsModMplsHeaderInstruction1,
+                modMplsHeaderInstruction2);
     }
 
     //  ModMplsTtlInstruction
@@ -1118,7 +1125,7 @@ public class InstructionsTest {
 
     /**
      * Tests the equals(), hashCode() and toString() methods of the
-     * PushHeaderInstructions class.
+     * ModMplsTtlInstructions class.
      */
 
     @Test
@@ -1151,7 +1158,7 @@ public class InstructionsTest {
 
     /**
      * Tests the equals(), hashCode() and toString() methods of the
-     * PushHeaderInstructions class.
+     * ModMplsBosInstructions class.
      */
 
     @Test
@@ -1161,10 +1168,10 @@ public class InstructionsTest {
                                modMplsBosInstruction2);
     }
 
-    //  PopVlanInstruction
+    //  ModVlanHeaderInstruction
 
-    private final Instruction popVlanInstruction1 = Instructions.popVlan();
-    private final Instruction sameAsPopVlanInstruction1 = Instructions.popVlan();
+    private final Instruction modVlanHeaderInstruction1 = Instructions.popVlan();
+    private final Instruction sameAsModVlanHeaderInstruction1 = Instructions.popVlan();
 
     /**
      * Test the popVlan method.
@@ -1172,23 +1179,23 @@ public class InstructionsTest {
     @Test
     public void testPopVlanMethod() {
         final Instruction instruction = Instructions.popVlan();
-        final L2ModificationInstruction.PopVlanInstruction popVlanInstruction =
+        final L2ModificationInstruction.ModVlanHeaderInstruction popVlanInstruction =
                 checkAndConvert(instruction,
                                 Instruction.Type.L2MODIFICATION,
-                                L2ModificationInstruction.PopVlanInstruction.class);
+                                L2ModificationInstruction.ModVlanHeaderInstruction.class);
         assertThat(popVlanInstruction.subtype(),
                    is(L2ModificationInstruction.L2SubType.VLAN_POP));
     }
 
     /**
      * Tests the equals(), hashCode() and toString() methods of the
-     * PushHeaderInstructions class.
+     * ModVlanHeaderInstructions class.
      */
 
     @Test
-    public void testPopVlanInstructionsEquals() {
+    public void testModVlanHeaderInstructionsEquals() {
         new EqualsTester()
-                .addEqualityGroup(popVlanInstruction1, sameAsPopVlanInstruction1)
+                .addEqualityGroup(modVlanHeaderInstruction1, sameAsModVlanHeaderInstruction1)
                 .testEquals();
     }
 
@@ -1351,6 +1358,45 @@ public class InstructionsTest {
                 .addEqualityGroup(modArpTtlInstruction1, sameAsModArpTtlInstruction1)
                 .addEqualityGroup(modArpTtlInstruction2)
                 .addEqualityGroup(modArpTtlInstruction3)
+                .testEquals();
+    }
+
+    // PiInstruction
+    PiTableAction piTableAction1 = PiAction.builder()
+            .withId(PiActionId.of("set_egress_port_0"))
+            .withParameter(new PiActionParam(PiActionParamId.of("port"),
+                                                             ImmutableByteSequence.copyFrom(10))).build();
+    PiTableAction piTableAction2 = PiAction.builder()
+            .withId(PiActionId.of("set_egress_port_0"))
+            .withParameter(new PiActionParam(PiActionParamId.of("port"),
+                    ImmutableByteSequence.copyFrom(20))).build();
+    private final Instruction piSetEgressPortInstruction1 = new PiInstruction(piTableAction1);
+    private final Instruction sameAsPiSetEgressPortInstruction1 = new PiInstruction(piTableAction1);
+    private final Instruction piSetEgressPortInstruction2 = new PiInstruction(piTableAction2);
+
+    /**
+     * Test the PiInstruction() method.
+     */
+    @Test
+    public void testPiMethod() {
+        final Instruction instruction = new PiInstruction(piTableAction1);
+        final PiInstruction piInstruction = checkAndConvert(instruction,
+                Instruction.Type.PROTOCOL_INDEPENDENT, PiInstruction.class);
+
+        assertThat(piInstruction.action(), is(piTableAction1));
+        assertThat(piInstruction.type(), is(Instruction.Type.PROTOCOL_INDEPENDENT));
+    }
+
+    /**
+     * Tests the equals(), hashCode() and toString() methods of the
+     * PiInstruction class.
+     */
+
+    @Test
+    public void testPiInstructionEquals() {
+        new EqualsTester()
+                .addEqualityGroup(piSetEgressPortInstruction1, sameAsPiSetEgressPortInstruction1)
+                .addEqualityGroup(piSetEgressPortInstruction2)
                 .testEquals();
     }
 

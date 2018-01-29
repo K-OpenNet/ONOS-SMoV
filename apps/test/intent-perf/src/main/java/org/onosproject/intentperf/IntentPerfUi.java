@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -131,7 +131,7 @@ public class IntentPerfUi {
 
         private void send(Sample sample) {
             if (streamingEnabled) {
-                connection().sendMessage("intentPerfSample", 0, sampleNode(sample));
+                connection().sendMessage("intentPerfSample", sampleNode(sample));
             }
         }
 
@@ -157,7 +157,7 @@ public class IntentPerfUi {
             }
 
             @Override
-            public void process(long sid, ObjectNode payload) {
+            public void process(ObjectNode payload) {
                 streamingEnabled = true;
                 sendInitData();
             }
@@ -171,7 +171,7 @@ public class IntentPerfUi {
 
                 collector.getSampleHeaders().forEach(an::add);
                 collector.getSamples().forEach(s -> sn.add(sampleNode(s)));
-                sendMessage("intentPerfInit", 0, rootNode);
+                sendMessage("intentPerfInit", rootNode);
             }
         }
 
@@ -184,7 +184,7 @@ public class IntentPerfUi {
             }
 
             @Override
-            public void process(long sid, ObjectNode payload) {
+            public void process(ObjectNode payload) {
                 streamingEnabled = false;
             }
         }

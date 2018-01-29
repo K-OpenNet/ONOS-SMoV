@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -148,15 +148,15 @@ public abstract class L2ModificationInstruction implements Instruction {
         }
     }
 
-    // TODO This instruction is reused for Pop-Mpls. Consider renaming.
-    public static final class PushHeaderInstructions extends
-            L2ModificationInstruction {
-
+    /**
+     * Represents a MPLS header modification instruction.
+     */
+    public static final class ModMplsHeaderInstruction extends L2ModificationInstruction {
 
         private final L2SubType subtype;
         private final EthType ethernetType; // Ethernet type value: 16 bits
 
-        PushHeaderInstructions(L2SubType subType, EthType ethernetType) {
+        ModMplsHeaderInstruction(L2SubType subType, EthType ethernetType) {
             this.subtype = subType;
             this.ethernetType = ethernetType;
         }
@@ -167,7 +167,7 @@ public abstract class L2ModificationInstruction implements Instruction {
 
         @Override
         public L2SubType subtype() {
-            return this.subtype;
+            return subtype;
         }
 
         @Override
@@ -185,16 +185,14 @@ public abstract class L2ModificationInstruction implements Instruction {
             if (this == obj) {
                 return true;
             }
-            if (obj instanceof PushHeaderInstructions) {
-                PushHeaderInstructions that = (PushHeaderInstructions) obj;
-                return  Objects.equals(subtype, that.subtype) &&
-                        Objects.equals(this.ethernetType, that.ethernetType);
+            if (obj instanceof ModMplsHeaderInstruction) {
+                ModMplsHeaderInstruction that = (ModMplsHeaderInstruction) obj;
+                return Objects.equals(subtype, that.subtype) &&
+                       Objects.equals(this.ethernetType, that.ethernetType);
             }
             return false;
         }
     }
-
-
 
     /**
      * Represents a VLAN id modification instruction.
@@ -284,13 +282,24 @@ public abstract class L2ModificationInstruction implements Instruction {
     }
 
     /**
-     * Represents a VLAN POP modification instruction.
+     * Represents a VLAN Header modification instruction.
      */
-    public static final class PopVlanInstruction extends L2ModificationInstruction {
-        private final L2SubType subtype;
+    public static final class ModVlanHeaderInstruction extends L2ModificationInstruction {
 
-        PopVlanInstruction(L2SubType subType) {
+        private final L2SubType subtype;
+        private EthType ethernetType; // Ethernet type value: 16 bits
+
+        ModVlanHeaderInstruction(L2SubType subType, EthType ethernetType) {
             this.subtype = subType;
+            this.ethernetType = ethernetType;
+        }
+
+        ModVlanHeaderInstruction(L2SubType subType) {
+            this(subType, EthType.EtherType.UNKNOWN.ethType());
+        }
+
+        public EthType ethernetType() {
+            return ethernetType;
         }
 
         @Override
@@ -300,12 +309,15 @@ public abstract class L2ModificationInstruction implements Instruction {
 
         @Override
         public String toString() {
-            return subtype().toString();
+            // etherType is not specified in VLAN_POP case. Ignore it.
+            return subtype().equals(L2SubType.VLAN_POP) ?
+                    subtype().toString() :
+                    subtype().toString() + SEPARATOR + ethernetType;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(type(), subtype);
+            return Objects.hash(type(), subtype, ethernetType);
         }
 
         @Override
@@ -313,9 +325,10 @@ public abstract class L2ModificationInstruction implements Instruction {
             if (this == obj) {
                 return true;
             }
-            if (obj instanceof PopVlanInstruction) {
-                PopVlanInstruction that = (PopVlanInstruction) obj;
-                return  Objects.equals(subtype, that.subtype);
+            if (obj instanceof ModVlanHeaderInstruction) {
+                ModVlanHeaderInstruction that = (ModVlanHeaderInstruction) obj;
+                return Objects.equals(subtype, that.subtype) &&
+                        Objects.equals(this.ethernetType, that.ethernetType);
             }
             return false;
         }

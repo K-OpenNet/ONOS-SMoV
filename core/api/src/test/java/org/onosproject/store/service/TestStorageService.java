@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,13 +34,13 @@ public class TestStorageService extends StorageServiceAdapter {
     }
 
     @Override
-    public <E> DistributedQueueBuilder<E> queueBuilder() {
-        throw new UnsupportedOperationException("queueBuilder");
+    public AtomicCounterBuilder atomicCounterBuilder() {
+        return TestAtomicCounter.builder();
     }
 
     @Override
-    public AtomicCounterBuilder atomicCounterBuilder() {
-        return TestAtomicCounter.builder();
+    public AtomicIdGeneratorBuilder atomicIdGeneratorBuilder() {
+        return TestAtomicIdGenerator.builder();
     }
 
     @Override
@@ -51,5 +51,20 @@ public class TestStorageService extends StorageServiceAdapter {
     @Override
     public TransactionContextBuilder transactionContextBuilder() {
         throw new UnsupportedOperationException("transactionContextBuilder");
+    }
+
+    @Override
+    public <K, V> ConsistentMultimapBuilder<K, V> consistentMultimapBuilder() {
+        return TestConsistentMultimap.builder();
+    }
+
+    @Override
+    public <T> Topic<T> getTopic(String name, Serializer serializer) {
+        return new TestTopic(name);
+    }
+
+    @Override
+    public <K> AtomicCounterMapBuilder<K> atomicCounterMapBuilder() {
+        return TestAtomicCounterMap.builder();
     }
 }

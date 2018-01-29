@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,11 +44,151 @@ public class IntentData { //FIXME need to make this "immutable"
 
     private final IntentState request; //TODO perhaps we want a full fledged object for requests
     private IntentState state;
-    private Timestamp version;
+    /**
+     * Intent's user request version.
+     * <p>
+     * version is assigned when an Intent was picked up by batch worker
+     * and added to pending map.
+     */
+    private final Timestamp version;
+    /**
+     * Intent's internal state version.
+     */
+    // ~= mutation count
+    private int internalStateVersion;
     private NodeId origin;
     private int errorCount;
 
     private List<Intent> installables;
+
+    /**
+     * Creates IntentData for Intent submit request.
+     *
+     * @param intent to request
+     * @return IntentData
+     */
+    public static IntentData submit(Intent intent) {
+        return new IntentData(checkNotNull(intent), INSTALL_REQ);
+    }
+
+    /**
+     * Creates IntentData for Intent withdraw request.
+     *
+     * @param intent to request
+     * @return IntentData
+     */
+    public static IntentData withdraw(Intent intent) {
+        return new IntentData(checkNotNull(intent), WITHDRAW_REQ);
+    }
+
+    /**
+     * Creates IntentData for Intent purge request.
+     *
+     * @param intent to request
+     * @return IntentData
+     */
+    public static IntentData purge(Intent intent) {
+        return new IntentData(checkNotNull(intent), PURGE_REQ);
+    }
+
+    /**
+     * Creates updated IntentData after assigning task to a node.
+     *
+     * @param data IntentData to update work assignment
+     * @param timestamp to assign to current request
+     * @param node node which was assigned to handle this request (local node id)
+     * @return updated IntentData object
+     */
+    public static IntentData assign(IntentData data, Timestamp timestamp, NodeId node) {
+        IntentData assigned = new IntentData(data, checkNotNull(timestamp));
+        assigned.origin = checkNotNull(node);
+        assigned.internalStateVersion++;
+        return assigned;
+    }
+
+    /**
+     * Creates a copy of given IntentData.
+     *
+     * @param data intent data to copy
+     * @return copy
+     */
+    public static IntentData copy(IntentData data) {
+        return new IntentData(data);
+    }
+
+    /**
+     * Create a copy of IntentData in next state.
+     *
+     * @param data intent data to copy
+     * @param nextState to transition to
+     * @return next state
+     */
+    public static IntentData nextState(IntentData data, IntentState nextState) {
+        IntentData next = new IntentData(data);
+        // TODO state machine sanity check
+        next.setState(checkNotNull(nextState));
+        return next;
+    }
+
+    // TODO Should this be method of it's own, or
+    // should nextState(*, CORRUPT) call increment error count?
+    /**
+     * Creates a copy of IntentData in corrupt state,
+     * incrementing error count.
+     *
+     * @param data intent data to copy
+     * @return next state
+     */
+    public static IntentData corrupt(IntentData data) {
+        IntentData next = new IntentData(data);
+        next.setState(IntentState.CORRUPT);
+        next.incrementErrorCount();
+        return next;
+    }
+
+    /**
+     * Creates updated IntentData with compilation result.
+     *
+     * @param data IntentData to update
+     * @param installables compilation result
+     * @return updated IntentData object
+     */
+    public static IntentData compiled(IntentData data, List<Intent> installables) {
+        return new IntentData(data, checkNotNull(installables));
+    }
+
+
+    /**
+     * Constructor for creating IntentData representing user request.
+     *
+     * @param intent this metadata references
+     * @param reqState request state
+     */
+    private IntentData(Intent intent,
+                       IntentState reqState) {
+        this.intent = checkNotNull(intent);
+        this.request = checkNotNull(reqState);
+        this.version = null;
+        this.state = reqState;
+        this.installables = ImmutableList.of();
+    }
+
+    /**
+     * Constructor for creating updated IntentData.
+     *
+     * @param original IntentData to copy from
+     * @param newReqVersion new request version
+     */
+    private IntentData(IntentData original, Timestamp newReqVersion) {
+        intent = original.intent;
+        state = original.state;
+        request = original.request;
+        version = newReqVersion;
+        internalStateVersion = original.internalStateVersion;
+        origin = original.origin;
+        installables = original.installables;
+        errorCount = original.errorCount;
+    }
 
     /**
      * Creates a new intent data object.
@@ -56,7 +196,11 @@ public class IntentData { //FIXME need to make this "immutable"
      * @param intent intent this metadata references
      * @param state intent state
      * @param version version of the intent for this key
+     *
+     * @deprecated in 1.11.0
      */
+    // used to create initial IntentData (version = null)
+    @Deprecated
     public IntentData(Intent intent, IntentState state, Timestamp version) {
         checkNotNull(intent);
         checkNotNull(state);
@@ -74,7 +218,11 @@ public class IntentData { //FIXME need to make this "immutable"
      * @param state intent state
      * @param version version of the intent for this key
      * @param origin ID of the node where the data was originally created
+     *
+     * @deprecated in 1.11.0
      */
+    // No longer used in the code base anywhere
+    @Deprecated
     public IntentData(Intent intent, IntentState state, Timestamp version, NodeId origin) {
         checkNotNull(intent);
         checkNotNull(state);
@@ -89,10 +237,43 @@ public class IntentData { //FIXME need to make this "immutable"
     }
 
     /**
+     * Creates a new intent data object.
+     *
+     * @param intent intent this metadata references
+     * @param state intent state
+     * @param request intent request
+     * @param version version of the intent for this key
+     * @param origin ID of the node where the data was originally created
+     *
+     * @deprecated in 1.11.0
+     */
+    // No longer used in the code base anywhere
+    // was used when IntentData is picked up by some of the node and was assigned with a version
+    @Deprecated
+    public IntentData(Intent intent, IntentState state, IntentState request, Timestamp version, NodeId origin) {
+        checkNotNull(intent);
+        checkNotNull(state);
+        checkNotNull(request);
+        checkNotNull(version);
+        checkNotNull(origin);
+
+        this.intent = intent;
+        this.state = state;
+        this.request = request;
+        this.version = version;
+        this.origin = origin;
+    }
+
+    /**
      * Copy constructor.
      *
      * @param intentData intent data to copy
+     *
+     * @deprecated in 1.11.0 use {@link #copy(IntentData)} instead
      */
+    // used to create a defensive copy
+    // to be made private
+    @Deprecated
     public IntentData(IntentData intentData) {
         checkNotNull(intentData);
 
@@ -100,6 +281,7 @@ public class IntentData { //FIXME need to make this "immutable"
         state = intentData.state;
         request = intentData.request;
         version = intentData.version;
+        internalStateVersion = intentData.internalStateVersion;
         origin = intentData.origin;
         installables = intentData.installables;
         errorCount = intentData.errorCount;
@@ -110,17 +292,26 @@ public class IntentData { //FIXME need to make this "immutable"
      *
      * @param original original data
      * @param installables new installable intents to set
+     *
+     * @deprecated in 1.11.0 use {@link #compiled(IntentData, List)} instead
      */
+    // used to create an instance who reached stable state
+    // note that state is mutable field, so it gets altered else where
+    // (probably that design is mother of all intent bugs)
+    @Deprecated
     public IntentData(IntentData original, List<Intent> installables) {
         this(original);
+        this.internalStateVersion++;
 
-        this.installables = ImmutableList.copyOf(checkNotNull(installables));
+        this.installables = checkNotNull(installables).isEmpty() ?
+                      ImmutableList.of() : ImmutableList.copyOf(installables);
     }
 
     // kryo constructor
     protected IntentData() {
         intent = null;
         request = null;
+        version = null;
     }
 
     /**
@@ -155,12 +346,17 @@ public class IntentData { //FIXME need to make this "immutable"
     }
 
     /**
-     * Returns the version of the intent for this key.
+     * Returns the request version of the intent for this key.
      *
      * @return intent version
      */
     public Timestamp version() {
         return version;
+    }
+
+    // had to be made public for the store timestamp provider
+    public int internalStateVersion() {
+        return internalStateVersion;
     }
 
     /**
@@ -178,6 +374,7 @@ public class IntentData { //FIXME need to make this "immutable"
      * @param newState new state of the intent
      */
     public void setState(IntentState newState) {
+        this.internalStateVersion++;
         this.state = newState;
     }
 
@@ -232,6 +429,13 @@ public class IntentData { //FIXME need to make this "immutable"
         } else if (currentData.version().isOlderThan(newData.version())) {
             return true;
         } else if (currentData.version().isNewerThan(newData.version())) {
+            log.trace("{} update not acceptable: current is newer", newData.key());
+            return false;
+        }
+
+        assert (currentData.version().equals(newData.version()));
+        if (currentData.internalStateVersion >= newData.internalStateVersion) {
+            log.trace("{} update not acceptable: current is newer internally", newData.key());
             return false;
         }
 
@@ -242,9 +446,17 @@ public class IntentData { //FIXME need to make this "immutable"
         switch (newState) {
         case INSTALLING:
             if (currentState == INSTALLING) {
+                log.trace("{} update not acceptable: no-op INSTALLING", newData.key());
                 return false;
             }
             // FALLTHROUGH
+        case REALLOCATING:
+            if (currentState == REALLOCATING) {
+                log.trace("{} update not acceptable: no-op REALLOCATING", newData.key());
+                return false;
+            } else if (currentState == INSTALLED) {
+                return true;
+            }
         case INSTALLED:
             if (currentState == INSTALLED) {
                 return false;
@@ -258,11 +470,13 @@ public class IntentData { //FIXME need to make this "immutable"
 
         case WITHDRAWING:
             if (currentState == WITHDRAWING) {
+                log.trace("{} update not acceptable: no-op WITHDRAWING", newData.key());
                 return false;
             }
             // FALLTHROUGH
         case WITHDRAWN:
             if (currentState == WITHDRAWN) {
+                log.trace("{} update not acceptable: no-op WITHDRAWN", newData.key());
                 return false;
             } else if (currentState == INSTALLING || currentState == INSTALLED
                     || currentState == PURGE_REQ) {
@@ -274,12 +488,14 @@ public class IntentData { //FIXME need to make this "immutable"
 
         case FAILED:
             if (currentState == FAILED) {
+                log.trace("{} update not acceptable: no-op FAILED", newData.key());
                 return false;
             }
             return true;
 
         case CORRUPT:
             if (currentState == CORRUPT) {
+                log.trace("{} update not acceptable: no-op CORRUPT", newData.key());
                 return false;
             }
             return true;
@@ -322,6 +538,7 @@ public class IntentData { //FIXME need to make this "immutable"
                 .add("key", key())
                 .add("state", state())
                 .add("version", version())
+                .add("internalStateVersion", internalStateVersion)
                 .add("intent", intent())
                 .add("origin", origin())
                 .add("installables", installables())

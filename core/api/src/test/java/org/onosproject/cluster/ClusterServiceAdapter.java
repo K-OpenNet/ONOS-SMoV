@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
  */
 package org.onosproject.cluster;
 
+import java.time.Instant;
 import java.util.Set;
 
-import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
 
 import com.google.common.collect.ImmutableSet;
+import org.onosproject.core.Version;
 
 /**
  * Test adapter for the cluster service.
@@ -50,7 +51,12 @@ public class ClusterServiceAdapter implements ClusterService {
     }
 
     @Override
-    public DateTime getLastUpdated(NodeId nodeId) {
+    public Version getVersion(NodeId nodeId) {
+        return null;
+    }
+
+    @Override
+    public Instant getLastUpdatedInstant(NodeId nodeId) {
         return null;
     }
 

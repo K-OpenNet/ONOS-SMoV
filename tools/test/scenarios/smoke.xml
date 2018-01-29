@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -16,19 +16,25 @@
 <scenario name="smoke" description="ONOS smoke test">
     <import file="${ONOS_SCENARIOS}/prerequisites.xml"/>
     <import file="${ONOS_SCENARIOS}/net-prerequisites.xml"/>
-
     <import file="${ONOS_SCENARIOS}/setup.xml"/>
+    <import file="${ONOS_SCENARIOS}/app-reactivate.xml"/>
+    <import file="${ONOS_SCENARIOS}/maps-cli.xml"/>
+    <import file="${ONOS_SCENARIOS}/dist-test.xml"/>
+    <import file="${ONOS_SCENARIOS}/smoke-internal.xml"/>
+    <import file="${ONOS_SCENARIOS}/yang-smoke.xml"/>
+    <import file="${ONOS_SCENARIOS}/yang-live-compile.xml"/>
+
     <dependency name="Setup" requires="Prerequisites,Net-Prerequisites"/>
-
-    <import file="${ONOS_SCENARIOS}/net-smoke.xml"/>
     <dependency name="Net-Smoke" requires="Setup"/>
-
-    <import file="${ONOS_SCENARIOS}/archetypes.xml"/>
-    <dependency name="Archetypes" requires="Setup"/>
-
-    <import file="${ONOS_SCENARIOS}/drivers-test.xml"/>
-    <dependency name="Drivers-Test" requires="Setup,Net-Smoke,Archetypes"/>
+    <dependency name="App-Reactivation" requires="Setup"/>
+    <dependency name="Maps-Cli" requires="Setup"/>
+    <dependency name="Drivers-Test" requires="Setup"/>
+    <dependency name="Meta-App" requires="Setup"/>
+    <dependency name="Netcfg" requires="Setup"/>
+    <dependency name="Distributed-Primitives" requires="Setup"/>
+    <dependency name="YANG-Smoke" requires="Setup,~Distributed-Primitives"/>
+    <dependency name="YANG-Live-Compile" requires="Setup,~YANG-Smoke"/>
 
     <import file="${ONOS_SCENARIOS}/wrapup.xml"/>
-    <dependency name="Wrapup" requires="~Archetypes,~Setup,~Net-Smoke"/>
+    <dependency name="Wrapup" requires="~Setup,~Net-Smoke,~App-Reactivation,~Drivers-Test,~Meta-App,~Netcfg,~YANG-Smoke,~YANG-Live-Compile"/>
 </scenario>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ public final class MeterCodec extends JsonCodec<Meter> {
                 .put(DEVICE_ID, meter.deviceId().toString());
 
         if (meter.appId() != null) {
-            result.put(APP_ID, meter.appId().toString());
+            result.put(APP_ID, meter.appId().name());
         }
 
         if (meter.state() != null) {

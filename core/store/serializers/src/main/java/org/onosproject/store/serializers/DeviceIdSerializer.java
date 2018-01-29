@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,12 @@ import com.esotericsoftware.kryo.io.Output;
 * Kryo Serializer for {@link DeviceId}.
 */
 public final class DeviceIdSerializer extends Serializer<DeviceId> {
+
+    private static final DeviceIdSerializer INSTANCE = new DeviceIdSerializer();
+
+    public static final DeviceIdSerializer deviceIdSerializer() {
+        return INSTANCE;
+    }
 
     /**
      * Creates {@link DeviceId} serializer instance.

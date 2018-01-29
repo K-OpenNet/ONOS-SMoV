@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +17,14 @@ package org.onlab.util;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.primitives.UnsignedLongs;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,7 +32,9 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Dictionary;
@@ -45,10 +44,12 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -137,6 +138,19 @@ public abstract class Tools {
         return new ThreadFactoryBuilder()
                 .setThreadFactory(factory)
                 .setPriority(Thread.MIN_PRIORITY)
+                .build();
+    }
+
+    /**
+     * Returns a thread factory that produces threads with MAX_PRIORITY.
+     *
+     * @param factory backing ThreadFactory
+     * @return thread factory
+     */
+    public static ThreadFactory maxPriority(ThreadFactory factory) {
+        return new ThreadFactoryBuilder()
+                .setThreadFactory(factory)
+                .setPriority(Thread.MAX_PRIORITY)
                 .build();
     }
 
@@ -233,6 +247,17 @@ public abstract class Tools {
     }
 
     /**
+     * Returns a string encoding in hex of the given long value with prefix
+     * '0x'.
+     *
+     * @param value long value to encode as hex string
+     * @return hex string
+     */
+    public static String toHexWithPrefix(long value) {
+        return "0x" + Long.toHexString(value);
+    }
+
+    /**
      * Returns the UTF-8 encoded byte[] representation of a String.
      * @param input input string
      * @return UTF-8 encoded byte array
@@ -275,6 +300,84 @@ public abstract class Tools {
     }
 
     /**
+     * Get Integer property from the propertyName
+     * Return null if propertyName is not found.
+     *
+     * @param properties   properties to be looked up
+     * @param propertyName the name of the property to look up
+     * @return value when the propertyName is defined or return null
+     */
+    public static Integer getIntegerProperty(Dictionary<?, ?> properties,
+                                             String propertyName) {
+        Integer value;
+        try {
+            String s = get(properties, propertyName);
+            value = Strings.isNullOrEmpty(s) ? null : Integer.valueOf(s);
+        } catch (NumberFormatException | ClassCastException e) {
+            value = null;
+        }
+        return value;
+    }
+
+    /**
+     * Get Integer property from the propertyName
+     * Return default value if propertyName is not found.
+     *
+     * @param properties   properties to be looked up
+     * @param propertyName the name of the property to look up
+     * @param defaultValue the default value that to be assigned
+     * @return value when the propertyName is defined or return default value
+     */
+    public static int getIntegerProperty(Dictionary<?, ?> properties,
+                                         String propertyName,
+                                         int defaultValue) {
+        try {
+            String s = get(properties, propertyName);
+            return Strings.isNullOrEmpty(s) ? defaultValue : Integer.valueOf(s);
+        } catch (NumberFormatException | ClassCastException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Check property name is defined and set to true.
+     *
+     * @param properties   properties to be looked up
+     * @param propertyName the name of the property to look up
+     * @return value when the propertyName is defined or return null
+     */
+    public static Boolean isPropertyEnabled(Dictionary<?, ?> properties,
+                                             String propertyName) {
+        Boolean value;
+        try {
+            String s = get(properties, propertyName);
+            value = Strings.isNullOrEmpty(s) ? null : Boolean.valueOf(s);
+        } catch (ClassCastException e) {
+            value = null;
+        }
+        return value;
+    }
+
+    /**
+     * Check property name is defined as set to true.
+     *
+     * @param properties   properties to be looked up
+     * @param propertyName the name of the property to look up
+     * @param defaultValue the default value that to be assigned
+     * @return value when the propertyName is defined or return the default value
+     */
+    public static boolean isPropertyEnabled(Dictionary<?, ?> properties,
+                                            String propertyName,
+                                            boolean defaultValue) {
+        try {
+            String s = get(properties, propertyName);
+            return Strings.isNullOrEmpty(s) ? defaultValue : Boolean.valueOf(s);
+        } catch (ClassCastException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
      * Suspends the current thread for a specified number of millis.
      *
      * @param ms number of millis
@@ -285,6 +388,26 @@ public abstract class Tools {
         } catch (InterruptedException e) {
             throw new RuntimeException("Interrupted", e);
         }
+    }
+
+    /**
+     * Get Long property from the propertyName
+     * Return null if propertyName is not found.
+     *
+     * @param properties   properties to be looked up
+     * @param propertyName the name of the property to look up
+     * @return value when the propertyName is defined or return null
+     */
+    public static Long getLongProperty(Dictionary<?, ?> properties,
+                                             String propertyName) {
+        Long value;
+        try {
+            String s = get(properties, propertyName);
+            value = Strings.isNullOrEmpty(s) ? null : Long.valueOf(s);
+        } catch (NumberFormatException | ClassCastException e) {
+            value = null;
+        }
+        return value;
     }
 
     /**
@@ -350,31 +473,6 @@ public abstract class Tools {
             Thread.sleep(ms, nanos);
         } catch (InterruptedException e) {
             throw new RuntimeException("Interrupted", e);
-        }
-    }
-
-    /**
-     * Slurps the contents of a file into a list of strings, one per line.
-     *
-     * @param path file path
-     * @return file contents
-     * @deprecated in Emu release
-     */
-    @Deprecated
-    public static List<String> slurp(File path) {
-        try (
-            BufferedReader br = new BufferedReader(
-                    new InputStreamReader(new FileInputStream(path), StandardCharsets.UTF_8));
-                ) {
-            List<String> lines = new ArrayList<>();
-            String line;
-            while ((line = br.readLine()) != null) {
-                lines.add(line);
-            }
-            return lines;
-
-        } catch (IOException e) {
-            return null;
         }
     }
 
@@ -457,11 +555,11 @@ public abstract class Tools {
         long hoursSince = (long) (deltaMillis / (1000.0 * 60 * 60));
         long daysSince = (long) (deltaMillis / (1000.0 * 60 * 60 * 24));
         if (daysSince > 0) {
-            return String.format("%dd ago", daysSince);
+            return String.format("%dd%dh ago", daysSince, hoursSince - daysSince * 24);
         } else if (hoursSince > 0) {
-            return String.format("%dh ago", hoursSince);
+            return String.format("%dh%dm ago", hoursSince, minsSince - hoursSince * 60);
         } else if (minsSince > 0) {
-            return String.format("%dm ago", minsSince);
+            return String.format("%dm%ds ago", minsSince, secondsSince - minsSince * 60);
         } else if (secondsSince > 0) {
             return String.format("%ds ago", secondsSince);
         } else {
@@ -558,6 +656,49 @@ public abstract class Tools {
     }
 
     /**
+     * Returns a future that's completed using the given {@code orderedExecutor} if the future is not blocked or the
+     * given {@code threadPoolExecutor} if the future is blocked.
+     * <p>
+     * This method allows futures to maintain single-thread semantics via the provided {@code orderedExecutor} while
+     * ensuring user code can block without blocking completion of futures. When the returned future or any of its
+     * descendants is blocked on a {@link CompletableFuture#get()} or {@link CompletableFuture#join()} call, completion
+     * of the returned future will be done using the provided {@code threadPoolExecutor}.
+     *
+     * @param future the future to convert into an asynchronous future
+     * @param orderedExecutor the ordered executor with which to attempt to complete the future
+     * @param threadPoolExecutor the backup executor with which to complete blocked futures
+     * @param <T> future value type
+     * @return a new completable future to be completed using the provided {@code executor} once the provided
+     * {@code future} is complete
+     */
+    public static <T> CompletableFuture<T> orderedFuture(
+            CompletableFuture<T> future,
+            Executor orderedExecutor,
+            Executor threadPoolExecutor) {
+        if (future.isDone()) {
+            return future;
+        }
+
+        BlockingAwareFuture<T> newFuture = new BlockingAwareFuture<>();
+        future.whenComplete((result, error) -> {
+            Runnable completer = () -> {
+                if (future.isCompletedExceptionally()) {
+                    newFuture.completeExceptionally(error);
+                } else {
+                    newFuture.complete(result);
+                }
+            };
+
+            if (newFuture.isBlocked()) {
+                threadPoolExecutor.execute(completer);
+            } else {
+                orderedExecutor.execute(completer);
+            }
+        });
+        return newFuture;
+    }
+
+    /**
      * Returns a new CompletableFuture completed with a list of computed values
      * when all of the given CompletableFuture complete.
      *
@@ -571,6 +712,53 @@ public abstract class Tools {
                                 .map(CompletableFuture::join)
                                 .collect(Collectors.toList())
                 );
+    }
+
+    /**
+     * Returns a new CompletableFuture completed by reducing a list of computed values
+     * when all of the given CompletableFuture complete.
+     *
+     * @param futures the CompletableFutures
+     * @param reducer reducer for computing the result
+     * @param emptyValue zero value to be returned if the input future list is empty
+     * @param <T> value type of CompletableFuture
+     * @return a new CompletableFuture that is completed when all of the given CompletableFutures complete
+     */
+    public static <T> CompletableFuture<T> allOf(List<CompletableFuture<T>> futures,
+                                                 BinaryOperator<T> reducer,
+                                                 T emptyValue) {
+        return Tools.allOf(futures)
+                    .thenApply(resultList -> resultList.stream().reduce(reducer).orElse(emptyValue));
+    }
+
+    /**
+     * Returns a new CompletableFuture completed by with the first positive result from a list of
+     * input CompletableFutures.
+     *
+     * @param futures the input list of CompletableFutures
+     * @param positiveResultMatcher matcher to identify a positive result
+     * @param negativeResult value to complete with if none of the futures complete with a positive result
+     * @param <T> value type of CompletableFuture
+     * @return a new CompletableFuture
+     */
+    public static <T> CompletableFuture<T> firstOf(List<CompletableFuture<T>> futures,
+                                                   Match<T> positiveResultMatcher,
+                                                   T negativeResult) {
+        CompletableFuture<T> responseFuture = new CompletableFuture<>();
+        Tools.allOf(Lists.transform(futures, future -> future.thenAccept(r -> {
+            if (positiveResultMatcher.matches(r)) {
+                responseFuture.complete(r);
+            }
+        }))).whenComplete((r, e) -> {
+            if (!responseFuture.isDone()) {
+                if (e != null) {
+                    responseFuture.completeExceptionally(e);
+                } else {
+                    responseFuture.complete(negativeResult);
+                }
+            }
+        });
+        return responseFuture;
     }
 
     /**
@@ -611,8 +799,8 @@ public abstract class Tools {
      * @param <T> type of enclosed value
      * @return optional as a stream
      */
-    public static <T> Stream<T> stream(Optional<T> optional) {
-        return optional.map(Stream::of).orElse(Stream.empty());
+    public static <T> Stream<T> stream(Optional<? extends T> optional) {
+        return optional.map(x -> Stream.<T>of(x)).orElse(Stream.empty());
     }
 
     // Auxiliary path visitor for recursive directory structure copying.
@@ -640,6 +828,18 @@ public abstract class Tools {
             Files.copy(file, dst.resolve(src.relativize(file)), copyOption);
             return FileVisitResult.CONTINUE;
         }
+    }
+
+    /**
+     * Creates OffsetDateTime instance from epoch milliseconds,
+     * using system default time zone.
+     *
+     * @param epochMillis to convert
+     * @return OffsetDateTime
+     */
+    public static OffsetDateTime defaultOffsetDataTime(long epochMillis) {
+        return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMillis),
+                                        ZoneId.systemDefault());
     }
 
 }

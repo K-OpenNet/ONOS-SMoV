@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
 
     // TODO: change 'force' ref to be 'force.alpha' ref.
     function createDragBehavior(force, selectCb, atDragEnd,
-                                dragEnabled, clickEnabled) {
+                                dragEnabled, clickEnabled, zs) {
         var draggedThreshold = d3.scale.linear()
             .domain([0, 0.1])
             .range([5, 20])
@@ -70,9 +70,11 @@
         }
 
         function dragged(d) {
-            var threshold = draggedThreshold(force.alpha()),
+            var scale = zs ? zs.scale() : 1,
+                threshold = draggedThreshold(force.alpha()) / scale,
                 dx = d.oldX - d.px,
                 dy = d.oldY - d.py;
+
             if (Math.abs(dx) >= threshold || Math.abs(dy) >= threshold) {
                 d.dragged = true;
             }
@@ -80,11 +82,9 @@
         }
 
         drag = d3.behavior.drag()
-            .origin(function(d) { return d; })
-            .on('dragstart', function(d) {
+            .origin(function (d) { return d; })
+            .on('dragstart', function (d) {
                 if (clickEnabled() || dragEnabled()) {
-                    d3.event.sourceEvent.stopPropagation();
-
                     d.oldX = d.x;
                     d.oldY = d.y;
                     d.dragged = false;
@@ -92,7 +92,7 @@
                     d.dragStarted = true;
                 }
             })
-            .on('drag', function(d) {
+            .on('drag', function (d) {
                 if (dragEnabled()) {
                     d.px = d3.event.x;
                     d.py = d3.event.y;
@@ -103,7 +103,9 @@
                     }
                 }
             })
-            .on('dragend', function(d) {
+            .on('dragend', function (d) {
+                d3.event.sourceEvent.stopPropagation();
+
                 if (d.dragStarted) {
                     d.dragStarted = false;
                     if (!dragged(d)) {
@@ -152,29 +154,38 @@
             .attr('in', String);
     }
 
+    // deprecated -- we'll use something else to highlight instances for affinity
     function loadGlowDefs(defs) {
         loadGlow(defs, 0.0, 0.0, 0.7, 'blue-glow');
         loadGlow(defs, 1.0, 1.0, 0.3, 'yellow-glow');
     }
 
     // --- Ordinal scales for 7 values.
+    // TODO: migrate these colors to the theme service.
 
-    //               blue       brown      brick red  sea green  purple     dark teal  lime
-    var lightNorm = ['#3E5780', '#78533B', '#CB4D28', '#018D61', '#8A2979', '#006D73', '#56AF00'],
-        lightMute = ['#A8B8CC', '#CCB3A8', '#FFC2BD', '#96D6BF', '#D19FCE', '#8FCCCA', '#CAEAA4'],
+    // Colors per Mojo-Design's color palette.. (version one)
+    //               blue       red        dk grey    steel      lt blue    lt red     lt grey
+    // var lightNorm = ['#5b99d2', '#d05a55', '#716b6b', '#7e9aa8', '#66cef6', '#db7773', '#aeada8' ],
+    //     lightMute = ['#a8cceb', '#f1a7a7', '#b9b5b5', '#bdcdd5', '#a8e9fd', '#f8c9c9', '#d7d6d4' ],
 
-        darkNorm  = ['#304860', '#664631', '#A8391B', '#00754B', '#77206D', '#005959', '#428700'],
-        darkMute  = ['#304860', '#664631', '#A8391B', '#00754B', '#77206D', '#005959', '#428700'];
+    // Colors per Mojo-Design's color palette.. (version two)
+    //               blue       lt blue    red        green      brown      teal       lime
+    var lightNorm = ['#5b99d2', '#66cef6', '#d05a55', '#0f9d58', '#ba7941', '#3dc0bf', '#56af00'],
+        lightMute = ['#9ebedf', '#abdef5', '#d79a96', '#7cbe99', '#cdab8d', '#96d5d5', '#a0c96d'],
+
+        darkNorm = ['#5b99d2', '#66cef6', '#d05a55', '#0f9d58', '#ba7941', '#3dc0bf', '#56af00'],
+        darkMute = ['#9ebedf', '#abdef5', '#d79a96', '#7cbe99', '#cdab8d', '#96d5d5', '#a0c96d'];
+
 
     var colors= {
         light: {
             norm: d3.scale.ordinal().range(lightNorm),
-            mute: d3.scale.ordinal().range(lightMute)
+            mute: d3.scale.ordinal().range(lightMute),
         },
         dark: {
             norm: d3.scale.ordinal().range(darkNorm),
-            mute: d3.scale.ordinal().range(darkMute)
-        }
+            mute: d3.scale.ordinal().range(darkMute),
+        },
     };
 
     function cat7() {
@@ -215,12 +226,12 @@
                     dom.forEach(function (id, i) {
                         var x = i * 20,
                             y = k * 20,
-                            f = get(id, muted, theme);
+                            f = getColor(id, muted, theme);
                         g.append('circle').attr({
                             cx: x,
                             cy: y,
                             r: 5,
-                            fill: f
+                            fill: f,
                         });
                     });
                     g.append('rect').attr({
@@ -229,13 +240,13 @@
                         width: 32,
                         height: 10,
                         rx: 2,
-                        fill: '#888'
+                        fill: '#888',
                     });
                     g.append('text').text(theme + what)
                         .attr({
                             x: 142,
                             y: k * 20 + 2,
-                            fill: 'white'
+                            fill: 'white',
                         })
                         .style('font-size', '4pt');
                 }
@@ -244,7 +255,7 @@
 
         return {
             testCard: testCard,
-            getColor: getColor
+            getColor: getColor,
         };
     }
 
@@ -268,7 +279,7 @@
     }
 
     function stripPx(s) {
-        return s.replace(/px$/,'');
+        return s.replace(/px$/, '');
     }
 
     function safeId(s) {
@@ -307,7 +318,7 @@
                 rotate: rotate,
                 stripPx: stripPx,
                 safeId: safeId,
-                visible: visible
+                visible: visible,
             };
         }]);
 }());

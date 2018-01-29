@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import org.onosproject.net.config.ConfigApplyDelegate;
 import org.onosproject.segmentrouting.SegmentRoutingManager;
 
 import java.io.InputStream;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.hamcrest.Matchers.is;
@@ -41,11 +40,9 @@ import static org.junit.Assert.*;
  * Tests for class {@link SegmentRoutingAppConfig}.
  */
 public class SegmentRoutingAppConfigTest {
-    private static final ApplicationId APP_ID =
-            new TestApplicationId(SegmentRoutingManager.SR_APP_ID);
-
     private SegmentRoutingAppConfig config;
     private SegmentRoutingAppConfig invalidConfig;
+    private SegmentRoutingAppConfig mplsEcmpConfig;
 
     private static final MacAddress ROUTER_MAC_1 = MacAddress.valueOf("00:00:00:00:00:01");
     private static final MacAddress ROUTER_MAC_2 = MacAddress.valueOf("00:00:00:00:00:02");
@@ -55,6 +52,9 @@ public class SegmentRoutingAppConfigTest {
     private static final ConnectPoint PORT_3 = ConnectPoint.deviceConnectPoint("of:1/3");
     private static final DeviceId VROUTER_ID_1 = DeviceId.deviceId("of:1");
     private static final DeviceId VROUTER_ID_2 = DeviceId.deviceId("of:2");
+    private static final String PROVIDER_1 = "org.onosproject.provider.host";
+    private static final String PROVIDER_2 = "org.onosproject.netcfghost";
+    private static final String PROVIDER_3 = "org.onosproject.anotherprovider";
 
     /**
      * Initialize test related variables.
@@ -64,21 +64,26 @@ public class SegmentRoutingAppConfigTest {
     @Before
     public void setUp() throws Exception {
         InputStream jsonStream = SegmentRoutingAppConfigTest.class
-                .getResourceAsStream("/sr-app-config.json");
+                .getResourceAsStream("/app.json");
         InputStream invalidJsonStream = SegmentRoutingAppConfigTest.class
-                .getResourceAsStream("/sr-app-config-invalid.json");
+                .getResourceAsStream("/app-invalid.json");
+        InputStream mplsEcmpJsonStream = SegmentRoutingAppConfigTest.class
+                .getResourceAsStream("/app-ecmp.json");
 
-        ApplicationId subject = APP_ID;
-        String key = SegmentRoutingManager.SR_APP_ID;
+        String key = SegmentRoutingManager.APP_NAME;
+        ApplicationId subject = new TestApplicationId(key);
         ObjectMapper mapper = new ObjectMapper();
         JsonNode jsonNode = mapper.readTree(jsonStream);
         JsonNode invalidJsonNode = mapper.readTree(invalidJsonStream);
+        JsonNode mplsEcmpJsonNode = mapper.readTree(mplsEcmpJsonStream);
         ConfigApplyDelegate delegate = new MockDelegate();
 
         config = new SegmentRoutingAppConfig();
         config.init(subject, key, jsonNode, mapper, delegate);
         invalidConfig = new SegmentRoutingAppConfig();
         invalidConfig.init(subject, key, invalidJsonNode, mapper, delegate);
+        mplsEcmpConfig = new SegmentRoutingAppConfig();
+        mplsEcmpConfig.init(subject, key, mplsEcmpJsonNode, mapper, delegate);
     }
 
     /**
@@ -90,6 +95,49 @@ public class SegmentRoutingAppConfigTest {
     public void testIsValid() throws Exception {
         assertTrue(config.isValid());
         assertFalse(invalidConfig.isValid());
+        assertTrue(mplsEcmpConfig.isValid());
+    }
+
+    /**
+     * Test MPLS-ECMP default getter. By-default
+     * MPLS-ECMPS is false.
+     */
+    @Test
+    public void testDefaultMplsEcmp() {
+        boolean mplsEcmp = config.mplsEcmp();
+        assertThat(mplsEcmp, is(false));
+    }
+
+    /**
+     * Test MPLS-ECMP getter.
+     */
+    @Test
+    public void testMplsEcmp() {
+        boolean mplsEcmp = mplsEcmpConfig.mplsEcmp();
+        assertThat(mplsEcmp, is(true));
+    }
+
+    /**
+     * Test MPLS-ECMP setter.
+     */
+    @Test
+    public void testSetMplsEcmp() {
+        /*
+         * In the config the value is not set.
+         */
+        boolean mplsEcmp = config.mplsEcmp();
+        assertThat(mplsEcmp, is(false));
+        config.setMplsEcmp(true);
+        mplsEcmp = config.mplsEcmp();
+        assertThat(mplsEcmp, is(true));
+        /*
+         * In the mplsEcmpConfig the value is true,
+         */
+        mplsEcmp = mplsEcmpConfig.mplsEcmp();
+        assertThat(mplsEcmp, is(true));
+        config.setMplsEcmp(false);
+        mplsEcmp = config.mplsEcmp();
+        assertThat(mplsEcmp, is(false));
     }
 
     /**
@@ -120,32 +168,6 @@ public class SegmentRoutingAppConfigTest {
         Set<MacAddress> vRouterMacs = config.vRouterMacs();
         assertThat(vRouterMacs.size(), is(1));
         assertTrue(vRouterMacs.contains(ROUTER_MAC_3));
-    }
-
-    /**
-     * Tests vRouterId getter.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testVRouterId() throws Exception {
-        Optional<DeviceId> vRouterId = config.vRouterId();
-        assertTrue(vRouterId.isPresent());
-        assertThat(vRouterId.get(), is(VROUTER_ID_1));
-    }
-
-    /**
-     * Tests vRouterId setter.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testSetVRouterId() throws Exception {
-        config.setVRouterId(VROUTER_ID_2);
-
-        Optional<DeviceId> vRouterId = config.vRouterId();
-        assertTrue(vRouterId.isPresent());
-        assertThat(vRouterId.get(), is(VROUTER_ID_2));
     }
 
     /**
@@ -180,34 +202,65 @@ public class SegmentRoutingAppConfigTest {
     }
 
     /**
-     * Tests suppressHost getter.
+     * Tests suppressHostByPort getter.
      *
      * @throws Exception
      */
     @Test
-    public void testSuppressHost() throws Exception {
-        Set<ConnectPoint> suppressHost = config.suppressHost();
-        assertNotNull("suppressHost should not be null", suppressHost);
-        assertThat(suppressHost.size(), is(2));
-        assertTrue(suppressHost.contains(PORT_1));
-        assertTrue(suppressHost.contains(PORT_2));
+    public void testSuppressHostByPort() throws Exception {
+        Set<ConnectPoint> suppressHostByPort = config.suppressHostByPort();
+        assertNotNull("suppressHostByPort should not be null", suppressHostByPort);
+        assertThat(suppressHostByPort.size(), is(2));
+        assertTrue(suppressHostByPort.contains(PORT_1));
+        assertTrue(suppressHostByPort.contains(PORT_2));
     }
 
     /**
-     * Tests suppressHost setter.
+     * Tests suppressHostByPort setter.
      *
      * @throws Exception
      */
     @Test
-    public void testSetSuppressHost() throws Exception {
+    public void testSetSuppressHostByPort() throws Exception {
         ImmutableSet.Builder<ConnectPoint> builder = ImmutableSet.builder();
         builder.add(PORT_3);
-        config.setSuppressHost(builder.build());
+        config.setSuppressHostByPort(builder.build());
 
-        Set<ConnectPoint> suppressHost = config.suppressHost();
-        assertNotNull("suppressHost should not be null", suppressHost);
-        assertThat(suppressHost.size(), is(1));
-        assertTrue(suppressHost.contains(PORT_3));
+        Set<ConnectPoint> suppressHostByPort = config.suppressHostByPort();
+        assertNotNull("suppressHostByPort should not be null", suppressHostByPort);
+        assertThat(suppressHostByPort.size(), is(1));
+        assertTrue(suppressHostByPort.contains(PORT_3));
+    }
+
+    /**
+     * Tests suppressHostByProvider getter.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSuppressHostByProvider() throws Exception {
+        Set<String> supprsuppressHostByProvider = config.suppressHostByProvider();
+        assertNotNull("suppressHostByProvider should not be null", supprsuppressHostByProvider);
+        assertThat(supprsuppressHostByProvider.size(), is(2));
+        assertTrue(supprsuppressHostByProvider.contains(PROVIDER_1));
+        assertTrue(supprsuppressHostByProvider.contains(PROVIDER_2));
+    }
+
+    /**
+     * Tests suppressHostByProvider setter.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSetHostLearning() throws Exception {
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        builder.add(PROVIDER_3);
+        config.setSuppressHostByProvider(builder.build());
+
+        Set<String> supprsuppressHostByProvider = config.suppressHostByProvider();
+        assertNotNull("suppressHostByProvider should not be null", supprsuppressHostByProvider);
+        assertThat(supprsuppressHostByProvider.size(), is(1));
+        assertTrue(supprsuppressHostByProvider.contains(PROVIDER_3));
     }
 
     private class MockDelegate implements ConfigApplyDelegate {

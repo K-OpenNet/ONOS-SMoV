@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,9 +57,9 @@ class Compiling implements IntentProcessPhase {
             List<Intent> compiled = processor.compile(data.intent(),
                     //TODO consider passing an optional here in the future
                     stored.map(IntentData::installables).orElse(null));
-            return Optional.of(new Installing(processor, new IntentData(data, compiled), stored));
+            return Optional.of(new Installing(processor, IntentData.compiled(data, compiled), stored));
         } catch (IntentException e) {
-            log.debug("Unable to compile intent {} due to: {}", data.intent(), e);
+            log.warn("Unable to compile intent {} due to:", data.intent(), e);
             if (stored.filter(x -> !x.installables().isEmpty()).isPresent()) {
                 // removing orphaned flows and deallocating resources
                 return Optional.of(new Withdrawing(processor, new IntentData(data, stored.get().installables())));

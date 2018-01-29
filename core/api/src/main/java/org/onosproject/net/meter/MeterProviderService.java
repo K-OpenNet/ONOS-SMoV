@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,5 +45,21 @@ public interface MeterProviderService extends ProviderService<MeterProvider> {
     void pushMeterMetrics(DeviceId deviceId,
                           Collection<Meter> meterEntries);
 
+    /**
+     * Pushes the meter features collected from the device.
+     *
+     * @param deviceId the device Id
+     * @param meterfeatures the meter features
+     */
+    void pushMeterFeatures(DeviceId deviceId,
+                           MeterFeatures meterfeatures);
+
+
+    /**
+     * Delete meter features collected from the device.
+     *
+     * @param deviceId the device id
+     */
+    void deleteMeterFeatures(DeviceId deviceId);
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import static org.onlab.junit.ImmutableClassChecker.assertThatClassIsImmutable;
 
 import org.junit.Test;
 import org.onlab.packet.IpAddress;
-import org.onosproject.core.DefaultGroupId;
+import org.onosproject.core.GroupId;
 import org.onosproject.net.provider.ProviderId;
 
 /**
@@ -46,9 +46,9 @@ public class TunnelEventTest {
                 .valueOf(23423));
         TunnelEndPoint dst = IpTunnelEndPoint.ipTunnelPoint(IpAddress
                 .valueOf(32421));
-        DefaultGroupId groupId = new DefaultGroupId(92034);
+        GroupId groupId = new GroupId(92034);
         TunnelName tunnelName = TunnelName.tunnelName("TunnelName");
-        TunnelId tunnelId = TunnelId.valueOf(41654654);
+        TunnelId tunnelId = TunnelId.valueOf("41654654");
         ProviderId producerName1 = new ProviderId("producer1", "13");
         Tunnel p1 = new DefaultTunnel(producerName1, src, dst, Tunnel.Type.VXLAN,
                                       Tunnel.State.ACTIVE, groupId, tunnelId,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,6 +53,24 @@ public class DemoResource extends BaseResource {
         JsonNode cfg = mapper.readTree(input);
         DemoApi demo = get(DemoApi.class);
         return Response.ok(demo.flowTest(Optional.ofNullable(cfg)).toString()).build();
+    }
+
+    /**
+     * Start the flow objective test.
+     *
+     * @param input JSON describing how to run the flow objective test
+     * @return response code OK
+     * @throws IOException if the JSON processing fails
+     */
+    @POST
+    @Path("flowObjTest")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response flowObjTest(InputStream input) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode cfg = mapper.readTree(input);
+        DemoApi demo = get(DemoApi.class);
+        return Response.ok(demo.flowObjTest(Optional.ofNullable(cfg)).toString()).build();
     }
 
     /**

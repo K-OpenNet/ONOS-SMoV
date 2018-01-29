@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,9 +24,9 @@ import java.util.Set;
  * define PIM Interfaces.  The PIM Application signed up as a Netconfig
  * listener.
  *
- * TODO: Do we need a PIMInterfaceListenerService?  Who sould listen to Interfaces changes?
+ * TODO: Do we need a PIMInterfaceListenerService?  Who should listen to Interfaces changes?
  */
-public interface PIMInterfaceService {
+public interface PimInterfaceService {
 
     /**
      * Returns the PIM interface associated with the given connect point.
@@ -34,12 +34,12 @@ public interface PIMInterfaceService {
      * @param cp the connect point we want to get the PIM interface for
      * @return the PIM interface if it exists, otherwise null
      */
-    PIMInterface getPIMInterface(ConnectPoint cp);
+    PimInterface getPimInterface(ConnectPoint cp);
 
     /**
      * Retrieves the set of all interfaces running PIM.
      *
      * @return set of PIM interfaces
      */
-    Set<PIMInterface> getPimInterfaces();
+    Set<PimInterface> getPimInterfaces();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 package org.onlab.packet.ndp;
 
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.DeserializationException;
 import org.onlab.packet.Deserializer;
-import org.onlab.packet.IPacket;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -121,14 +122,8 @@ public class NeighborDiscoveryOptions extends BasePacket {
 
         @Override
         public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("[");
-            sb.append("type= ");
-            sb.append(type);
-            sb.append("data= ");
-            sb.append(data);
-            sb.append("]");
-            return sb.toString();
+            return MoreObjects.toStringHelper(this).add("type", type).
+                    add("data", data).toString();
         }
     }
 
@@ -193,51 +188,10 @@ public class NeighborDiscoveryOptions extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(byte[] data, int offset, int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-
-        options.clear();
-
-        //
-        // Deserialize all options
-        //
-        while (bb.hasRemaining()) {
-            byte type = bb.get();
-            if (!bb.hasRemaining()) {
-                break;
-            }
-            byte lengthField = bb.get();
-            int dataLength = lengthField * 8;   // The data length field is in
-            // unit of 8 octets
-
-            // Exclude the type and length fields
-            if (dataLength < 2) {
-                break;
-            }
-            dataLength -= 2;
-
-            if (bb.remaining() < dataLength) {
-                break;
-            }
-            byte[] optionData = new byte[dataLength];
-            bb.get(optionData, 0, optionData.length);
-            addOption(type, optionData);
-        }
-
-        return this;
-    }
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-
-        for (Option option : this.options) {
-            result = prime * result + option.type();
-            result = prime * result + Arrays.hashCode(option.data());
-        }
-        return result;
+        return Objects.hashCode(this.options.toArray());
     }
 
     @Override
@@ -247,7 +201,7 @@ public class NeighborDiscoveryOptions extends BasePacket {
         }
         if (obj instanceof NeighborDiscoveryOptions) {
             NeighborDiscoveryOptions other = (NeighborDiscoveryOptions) obj;
-            return this.options.equals(other.options);
+            return Objects.equal(this.options, other.options);
         }
         return false;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,49 +16,126 @@
 package org.onosproject.net.flow;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import org.slf4j.Logger;
+
+import java.util.concurrent.TimeUnit;
 
 public class DefaultFlowEntry extends DefaultFlowRule
     implements StoredFlowEntry {
 
     private static final Logger log = getLogger(DefaultFlowEntry.class);
 
+    private static final long DEFAULT_LAST_SEEN = -1;
+    private static final int DEFAULT_ERR_CODE = -1;
+    private static final int DEFAULT_ERR_TYPE = -1;
+
+    /* Stored in nanoseconds (allows for 292 years) */
     private long life;
+
     private long packets;
     private long bytes;
     private FlowEntryState state;
+    private FlowLiveType liveType;
 
-    private long lastSeen = -1;
+    private long lastSeen = DEFAULT_LAST_SEEN;
 
     private final int errType;
 
     private final int errCode;
 
+    /**
+     * Creates a flow entry of flow table specified with the flow rule, state
+     * and statistic information.
+     *
+     * @param rule the flow rule
+     * @param state the flow state
+     * @param life the duration second of flow
+     * @param lifeTimeUnit life time unit
+     * @param packets the number of packets of this flow
+     * @param bytes the the number of bytes of this flow
+     */
     public DefaultFlowEntry(FlowRule rule, FlowEntryState state,
-            long life, long packets, long bytes) {
+                            long life, TimeUnit lifeTimeUnit, long packets, long bytes) {
         super(rule);
         this.state = state;
-        this.life = life;
+        this.life = lifeTimeUnit.toNanos(life);
+        this.liveType = FlowLiveType.UNKNOWN;
         this.packets = packets;
         this.bytes = bytes;
-        this.errCode = -1;
-        this.errType = -1;
+        this.errCode = DEFAULT_ERR_CODE;
+        this.errType = DEFAULT_ERR_TYPE;
         this.lastSeen = System.currentTimeMillis();
+    }
+
+    /**
+     * Creates a flow entry of flow table specified with the flow rule, state
+     * and statistic information.
+     *
+     * @param rule the flow rule
+     * @param state the flow state
+     * @param life the duration second of flow
+     * @param lifeTimeUnit life time unit
+     * @param liveType the flow live type, i.e., IMMEDIATE, SHORT, MID, LONG
+     * @param packets the number of packets of this flow
+     * @param bytes the the number of bytes of this flow
+     */
+    public DefaultFlowEntry(FlowRule rule, FlowEntryState state,
+                            long life, TimeUnit lifeTimeUnit, FlowLiveType liveType,
+                            long packets, long bytes) {
+        this(rule, state, life, lifeTimeUnit, packets, bytes);
+        this.liveType = liveType;
+    }
+
+    /**
+     * Creates a flow entry of flow table specified with the flow rule, state,
+     * live type and statistic information.
+     *
+     * @param rule the flow rule
+     * @param state the flow state
+     * @param lifeSecs the duration second of flow
+     * @param liveType the flow live type, i.e., IMMEDIATE, SHORT, MID, LONG
+     * @param packets the number of packets of this flow
+     * @param bytes the the number of bytes of this flow
+     */
+    public DefaultFlowEntry(FlowRule rule, FlowEntryState state,
+                            long lifeSecs, FlowLiveType liveType,
+                            long packets, long bytes) {
+        this(rule, state, lifeSecs, SECONDS, packets, bytes);
+        this.liveType = liveType;
+    }
+
+    public DefaultFlowEntry(FlowRule rule, FlowEntryState state,
+                            long lifeSecs, long packets, long bytes) {
+        this(rule, state, lifeSecs, SECONDS, packets, bytes);
     }
 
     public DefaultFlowEntry(FlowRule rule) {
-        super(rule);
-        this.state = FlowEntryState.PENDING_ADD;
-        this.life = 0;
-        this.packets = 0;
-        this.bytes = 0;
-        this.errCode = -1;
-        this.errType = -1;
-        this.lastSeen = System.currentTimeMillis();
+        this(rule, FlowEntryState.PENDING_ADD, 0, 0, 0);
     }
 
+    /**
+     * Creates a flow entry based on specified flow rule and state.
+     *
+     * @param rule to use as base
+     * @param state of the flow entry
+     */
+    public DefaultFlowEntry(FlowRule rule, FlowEntryState state) {
+        this(rule, state, 0, 0, 0);
+    }
+
+
+    /**
+     * Creates a flow entry of flow table specified with the flow rule, state,
+     * live type and statistic information.
+     *
+     * @param rule the flow rule
+     * @param errType the error type
+     * @param errCode the error code
+     */
     public DefaultFlowEntry(FlowRule rule, int errType, int errCode) {
         super(rule);
         this.state = FlowEntryState.FAILED;
@@ -69,7 +146,17 @@ public class DefaultFlowEntry extends DefaultFlowRule
 
     @Override
     public long life() {
-        return life;
+        return life(SECONDS);
+    }
+
+    @Override
+    public long life(TimeUnit timeUnit) {
+        return timeUnit.convert(life, NANOSECONDS);
+    }
+
+    @Override
+    public FlowLiveType liveType() {
+        return liveType;
     }
 
     @Override
@@ -104,7 +191,17 @@ public class DefaultFlowEntry extends DefaultFlowRule
 
     @Override
     public void setLife(long life) {
-        this.life = life;
+        setLife(life, SECONDS);
+    }
+
+    @Override
+    public void setLife(long life, TimeUnit timeUnit) {
+        this.life = timeUnit.toNanos(life);
+    }
+
+    @Override
+    public void setLiveType(FlowLiveType liveType) {
+        this.liveType = liveType;
     }
 
     @Override
@@ -132,6 +229,13 @@ public class DefaultFlowEntry extends DefaultFlowRule
         return toStringHelper(this)
                 .add("rule", super.toString())
                 .add("state", state)
+                .add("life", life)
+                .add("liveType", liveType)
+                .add("packets", packets)
+                .add("bytes", bytes)
+                .add("errCode", errCode)
+                .add("errType", errType)
+                .add("lastSeen", lastSeen)
                 .toString();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,13 +23,15 @@ import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
+import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
-import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.core.ApplicationId;
+import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.group.Group;
 import org.onosproject.net.group.GroupBuckets;
 import org.onosproject.net.group.GroupDescription;
@@ -45,6 +47,7 @@ import org.onosproject.net.group.GroupService;
 import org.onosproject.net.group.GroupStore;
 import org.onosproject.net.group.GroupStore.UpdateType;
 import org.onosproject.net.group.GroupStoreDelegate;
+import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.net.provider.AbstractProviderService;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
@@ -54,9 +57,11 @@ import java.util.Collections;
 import java.util.Dictionary;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.onlab.util.Tools.get;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.GROUP_READ;
+import static org.onosproject.security.AppPermission.Type.GROUP_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
-import static org.onosproject.security.AppPermission.Type.*;
 
 
 
@@ -75,19 +80,33 @@ public class GroupManager
     private final GroupStoreDelegate delegate = new InternalGroupStoreDelegate();
     private final DeviceListener deviceListener = new InternalDeviceListener();
 
+    private final  GroupDriverProvider defaultProvider = new GroupDriverProvider();
+
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected GroupStore store;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected DeviceService deviceService;
 
+    // Reference the DriverService to ensure the service is bound prior to initialization of the GroupDriverProvider
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected DriverService driverService;
+
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected MastershipService mastershipService;
+
+    private static final int DEFAULT_POLL_FREQUENCY = 30;
+    @Property(name = "fallbackGroupPollFrequency", intValue = DEFAULT_POLL_FREQUENCY,
+            label = "Frequency (in seconds) for polling groups via fallback provider")
+    private int fallbackGroupPollFrequency = DEFAULT_POLL_FREQUENCY;
 
     @Property(name = "purgeOnDisconnection", boolValue = false,
             label = "Purge entries associated with a device when the device goes offline")
     private boolean purgeOnDisconnection = false;
-    private final  GroupDriverProvider defaultProvider = new GroupDriverProvider();
+
 
     @Activate
     public void activate(ComponentContext context) {
@@ -101,6 +120,8 @@ public class GroupManager
 
     @Deactivate
     public void deactivate() {
+        defaultProvider.terminate();
+        deviceService.removeListener(deviceListener);
         cfgService.unregisterProperties(getClass(), false);
         store.unsetDelegate(delegate);
         eventDispatcher.removeSink(GroupEvent.class);
@@ -112,7 +133,8 @@ public class GroupManager
         if (context != null) {
             readComponentConfiguration(context);
         }
-        defaultProvider.init(deviceService);
+        defaultProvider.init(deviceService, new InternalGroupProviderService(defaultProvider),
+                mastershipService, fallbackGroupPollFrequency);
     }
 
     @Override
@@ -129,7 +151,7 @@ public class GroupManager
         Dictionary<?, ?> properties = context.getProperties();
         Boolean flag;
 
-        flag = isPropertyEnabled(properties, "purgeOnDisconnection");
+        flag = Tools.isPropertyEnabled(properties, "purgeOnDisconnection");
         if (flag == null) {
             log.info("PurgeOnDisconnection is not configured, " +
                     "using current value of {}", purgeOnDisconnection);
@@ -138,26 +160,12 @@ public class GroupManager
             log.info("Configured. PurgeOnDisconnection is {}",
                     purgeOnDisconnection ? "enabled" : "disabled");
         }
-    }
-
-    /**
-     * Check property name is defined and set to true.
-     *
-     * @param properties   properties to be looked up
-     * @param propertyName the name of the property to look up
-     * @return value when the propertyName is defined or return null
-     */
-    private static Boolean isPropertyEnabled(Dictionary<?, ?> properties,
-            String propertyName) {
-        Boolean value = null;
+        String s = get(properties, "fallbackGroupPollFrequency");
         try {
-            String s = (String) properties.get(propertyName);
-            value = isNullOrEmpty(s) ? null : s.trim().equals("true");
-        } catch (ClassCastException e) {
-            // No propertyName defined.
-            value = null;
+            fallbackGroupPollFrequency = isNullOrEmpty(s) ? DEFAULT_POLL_FREQUENCY : Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            fallbackGroupPollFrequency = DEFAULT_POLL_FREQUENCY;
         }
-        return value;
     }
 
     /**
@@ -240,6 +248,46 @@ public class GroupManager
                                      UpdateType.REMOVE,
                                      buckets,
                                      newCookie);
+    }
+
+    /**
+     * Set buckets for an existing group. The caller can optionally
+     * associate a new cookie during this updation. GROUP_UPDATED or
+     * GROUP_UPDATE_FAILED notifications would be provided along with
+     * cookie depending on the result of the operation on the device.
+     *
+     * This operation overwrites the previous group buckets entirely.
+     *
+     * @param deviceId  device identifier
+     * @param oldCookie cookie to be used to retrieve the existing group
+     * @param buckets   immutable list of group buckets to be set
+     * @param newCookie immutable cookie to be used post update operation
+     * @param appId     Application Id
+     */
+    @Override
+    public void setBucketsForGroup(DeviceId deviceId,
+                                   GroupKey oldCookie,
+                                   GroupBuckets buckets,
+                                   GroupKey newCookie,
+                                   ApplicationId appId) {
+        checkPermission(GROUP_WRITE);
+        store.updateGroupDescription(deviceId,
+                oldCookie,
+                UpdateType.SET,
+                buckets,
+                newCookie);
+    }
+
+    @Override
+    public void purgeGroupEntries(DeviceId deviceId) {
+        checkPermission(GROUP_WRITE);
+        store.purgeGroupEntry(deviceId);
+    }
+
+    @Override
+    public void purgeGroupEntries() {
+        checkPermission(GROUP_WRITE);
+        store.purgeGroupEntries();
     }
 
     /**
@@ -335,9 +383,9 @@ public class GroupManager
                 case GROUP_ADD_FAILED:
                 case GROUP_UPDATE_FAILED:
                 case GROUP_REMOVE_FAILED:
+                case GROUP_BUCKET_FAILOVER:
                     post(event);
                     break;
-
                 default:
                     break;
             }
@@ -364,6 +412,11 @@ public class GroupManager
             checkValidity();
             store.pushGroupMetrics(deviceId, groupEntries);
         }
+
+        @Override
+        public void notifyOfFailovers(Collection<Group> failoverGroups) {
+            store.notifyOfFailovers(failoverGroups);
+        }
     }
 
     private class InternalDeviceListener implements DeviceListener {
@@ -389,4 +442,5 @@ public class GroupManager
             }
         }
     }
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,12 +68,13 @@ public class HostMobility {
 
     private ApplicationId appId;
     private ExecutorService eventHandler;
+    private final HostListener hostListener = new InternalHostListener();
 
     @Activate
     public void activate() {
         appId = coreService.registerApplication("org.onosproject.mobility");
-        eventHandler = newSingleThreadScheduledExecutor(groupedThreads("onos/app-mobility", "event-handler"));
-        hostService.addListener(new InternalHostListener());
+        eventHandler = newSingleThreadScheduledExecutor(groupedThreads("onos/app-mobility", "event-handler", log));
+        hostService.addListener(hostListener);
         log.info("Started with Application ID {}", appId.id());
     }
 
@@ -81,6 +82,7 @@ public class HostMobility {
     public void deactivate() {
         // TODO we never actually add any flow rules
         flowRuleService.removeFlowRulesById(appId);
+        hostService.removeListener(hostListener);
         eventHandler.shutdown();
         log.info("Stopped");
     }

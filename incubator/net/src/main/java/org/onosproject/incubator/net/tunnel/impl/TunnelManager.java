@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.onosproject.net.provider.AbstractListenerProviderRegistry;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.incubator.net.tunnel.DefaultTunnel;
 import org.onosproject.incubator.net.tunnel.Tunnel;
+import org.onosproject.incubator.net.tunnel.Tunnel.State;
 import org.onosproject.incubator.net.tunnel.Tunnel.Type;
 import org.onosproject.incubator.net.tunnel.TunnelAdminService;
 import org.onosproject.incubator.net.tunnel.TunnelDescription;
@@ -42,6 +43,7 @@ import org.onosproject.incubator.net.tunnel.TunnelStoreDelegate;
 import org.onosproject.incubator.net.tunnel.TunnelSubscription;
 import org.onosproject.net.Annotations;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.ElementId;
 import org.onosproject.net.Path;
 import org.onosproject.net.provider.AbstractProviderService;
 import org.onosproject.net.provider.ProviderId;
@@ -65,6 +67,7 @@ public class TunnelManager
         implements TunnelService, TunnelAdminService, TunnelProviderRegistry {
 
     private static final String TUNNNEL_ID_NULL = "Tunnel ID cannot be null";
+    private static final String TUNNNEL_NULL = "Tunnel cannot be null";
 
     private final Logger log = getLogger(getClass());
 
@@ -91,18 +94,20 @@ public class TunnelManager
     @Override
     public void removeTunnel(TunnelId tunnelId) {
         checkNotNull(tunnelId, TUNNNEL_ID_NULL);
-        store.deleteTunnel(tunnelId);
         Tunnel tunnel = store.queryTunnel(tunnelId);
-        if (tunnel.providerId() != null) {
-            TunnelProvider provider = getProvider(tunnel.providerId());
-            if (provider != null) {
-                provider.releaseTunnel(tunnel);
-            }
-        } else {
-            Set<ProviderId> ids = getProviders();
-            for (ProviderId providerId : ids) {
-                TunnelProvider provider = getProvider(providerId);
-                provider.releaseTunnel(tunnel);
+        if (tunnel != null) {
+            store.deleteTunnel(tunnelId);
+            if (tunnel.providerId() != null) {
+                TunnelProvider provider = getProvider(tunnel.providerId());
+                if (provider != null) {
+                    provider.releaseTunnel(tunnel);
+                }
+            } else {
+                Set<ProviderId> ids = getProviders();
+                for (ProviderId providerId : ids) {
+                    TunnelProvider provider = getProvider(providerId);
+                    provider.releaseTunnel(tunnel);
+                }
             }
         }
     }
@@ -125,25 +130,33 @@ public class TunnelManager
     }
 
     @Override
+    public void updateTunnelState(Tunnel tunnel, State state) {
+        Tunnel storedTunnel = store.queryTunnel(tunnel.tunnelId());
+        store.createOrUpdateTunnel(storedTunnel, state);
+    }
+
+    @Override
     public void removeTunnels(TunnelEndPoint src, TunnelEndPoint dst,
                               ProviderId producerName) {
-        store.deleteTunnel(src, dst, producerName);
         Collection<Tunnel> setTunnels = store.queryTunnel(src, dst);
-        for (Tunnel tunnel : setTunnels) {
-            if (producerName != null
-                    && !tunnel.providerId().equals(producerName)) {
-                continue;
-            }
-            if (tunnel.providerId() != null) {
-                TunnelProvider provider = getProvider(tunnel.providerId());
-                if (provider != null) {
-                    provider.releaseTunnel(tunnel);
+        if (!setTunnels.isEmpty()) {
+            store.deleteTunnel(src, dst, producerName);
+            for (Tunnel tunnel : setTunnels) {
+                if (producerName != null
+                        && !tunnel.providerId().equals(producerName)) {
+                    continue;
                 }
-            } else {
-                Set<ProviderId> ids = getProviders();
-                for (ProviderId providerId : ids) {
-                    TunnelProvider provider = getProvider(providerId);
-                    provider.releaseTunnel(tunnel);
+                if (tunnel.providerId() != null) {
+                    TunnelProvider provider = getProvider(tunnel.providerId());
+                    if (provider != null) {
+                        provider.releaseTunnel(tunnel);
+                    }
+                } else {
+                    Set<ProviderId> ids = getProviders();
+                    for (ProviderId providerId : ids) {
+                        TunnelProvider provider = getProvider(providerId);
+                        provider.releaseTunnel(tunnel);
+                    }
                 }
             }
         }
@@ -152,24 +165,26 @@ public class TunnelManager
     @Override
     public void removeTunnels(TunnelEndPoint src, TunnelEndPoint dst, Type type,
                               ProviderId producerName) {
-        store.deleteTunnel(src, dst, type, producerName);
         Collection<Tunnel> setTunnels = store.queryTunnel(src, dst);
-        for (Tunnel tunnel : setTunnels) {
-            if (producerName != null
-                    && !tunnel.providerId().equals(producerName)
-                    || !type.equals(tunnel.type())) {
-                continue;
-            }
-            if (tunnel.providerId() != null) {
-                TunnelProvider provider = getProvider(tunnel.providerId());
-                if (provider != null) {
-                    provider.releaseTunnel(tunnel);
+        if (!setTunnels.isEmpty()) {
+            store.deleteTunnel(src, dst, type, producerName);
+            for (Tunnel tunnel : setTunnels) {
+                if (producerName != null
+                        && !tunnel.providerId().equals(producerName)
+                        || !type.equals(tunnel.type())) {
+                    continue;
                 }
-            } else {
-                Set<ProviderId> ids = getProviders();
-                for (ProviderId providerId : ids) {
-                    TunnelProvider provider = getProvider(providerId);
-                    provider.releaseTunnel(tunnel);
+                if (tunnel.providerId() != null) {
+                    TunnelProvider provider = getProvider(tunnel.providerId());
+                    if (provider != null) {
+                        provider.releaseTunnel(tunnel);
+                    }
+                } else {
+                    Set<ProviderId> ids = getProviders();
+                    for (ProviderId providerId : ids) {
+                        TunnelProvider provider = getProvider(providerId);
+                        provider.releaseTunnel(tunnel);
+                    }
                 }
             }
         }
@@ -194,7 +209,7 @@ public class TunnelManager
                                               Annotations... annotations) {
         Collection<Tunnel> tunnels = store.borrowTunnel(consumerId, src,
                                                            dst, annotations);
-        if (tunnels == null || tunnels.size() == 0) {
+        if (tunnels == null || tunnels.isEmpty()) {
             Tunnel tunnel = new DefaultTunnel(null, src, dst, null, null, null,
                                               null, null, annotations);
             Set<ProviderId> ids = getProviders();
@@ -213,7 +228,7 @@ public class TunnelManager
         Collection<Tunnel> tunnels = store.borrowTunnel(consumerId, src,
                                                            dst, type,
                                                            annotations);
-        if (tunnels == null || tunnels.size() == 0) {
+        if (tunnels == null || tunnels.isEmpty()) {
             Tunnel tunnel = new DefaultTunnel(null, src, dst, type, null, null,
                                               null, null, annotations);
             Set<ProviderId> ids = getProviders();
@@ -223,6 +238,41 @@ public class TunnelManager
             }
         }
         return tunnels;
+    }
+
+    @Override
+    public TunnelId setupTunnel(ApplicationId producerId, ElementId srcElementId, Tunnel tunnel, Path path) {
+        // TODO: producerId to check if really required to consider while setup the tunnel.
+        checkNotNull(tunnel, TUNNNEL_NULL);
+        TunnelId tunnelId = store.createOrUpdateTunnel(tunnel, State.INIT);
+        if (tunnelId != null) {
+            Set<ProviderId> ids = getProviders();
+            Tunnel newT = queryTunnel(tunnelId);
+            for (ProviderId providerId : ids) {
+                TunnelProvider provider = getProvider(providerId);
+                provider.setupTunnel(srcElementId, newT, path);
+            }
+        }
+        return tunnelId;
+    }
+
+    @Override
+    public boolean downTunnel(ApplicationId producerId, TunnelId tunnelId) {
+        // TODO: producerId to check if really required to consider while deleting the tunnel.
+        checkNotNull(tunnelId, TUNNNEL_ID_NULL);
+        Tunnel tunnel = store.queryTunnel(tunnelId);
+        if (tunnel != null) {
+            TunnelId updtTunnelId = store.createOrUpdateTunnel(tunnel, State.INACTIVE);
+            if (updtTunnelId != null) {
+                Set<ProviderId> ids = getProviders();
+                for (ProviderId providerId : ids) {
+                    TunnelProvider provider = getProvider(providerId);
+                    provider.releaseTunnel(tunnel);
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -304,6 +354,22 @@ public class TunnelManager
                                                     tunnel.id(),
                                                     tunnel.tunnelName(),
                                                     tunnel.path(),
+                                                    tunnel.resource(),
+                                                    tunnel.annotations());
+            return store.createOrUpdateTunnel(storedTunnel);
+        }
+
+        @Override
+        public TunnelId tunnelAdded(TunnelDescription tunnel, State state) {
+            Tunnel storedTunnel = new DefaultTunnel(provider().id(),
+                                                    tunnel.src(), tunnel.dst(),
+                                                    tunnel.type(),
+                                                    state,
+                                                    tunnel.groupId(),
+                                                    tunnel.id(),
+                                                    tunnel.tunnelName(),
+                                                    tunnel.path(),
+                                                    tunnel.resource(),
                                                     tunnel.annotations());
             return store.createOrUpdateTunnel(storedTunnel);
         }
@@ -317,8 +383,24 @@ public class TunnelManager
                                                     tunnel.id(),
                                                     tunnel.tunnelName(),
                                                     tunnel.path(),
+                                                    tunnel.resource(),
                                                     tunnel.annotations());
             store.createOrUpdateTunnel(storedTunnel);
+        }
+
+        @Override
+        public void tunnelUpdated(TunnelDescription tunnel, State state) {
+            Tunnel storedTunnel = new DefaultTunnel(provider().id(),
+                                                    tunnel.src(), tunnel.dst(),
+                                                    tunnel.type(),
+                                                    state,
+                                                    tunnel.groupId(),
+                                                    tunnel.id(),
+                                                    tunnel.tunnelName(),
+                                                    tunnel.path(),
+                                                    tunnel.resource(),
+                                                    tunnel.annotations());
+            store.createOrUpdateTunnel(storedTunnel, state);
         }
 
         @Override

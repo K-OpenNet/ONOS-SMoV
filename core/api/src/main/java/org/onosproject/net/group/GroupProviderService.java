@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,12 @@ public interface GroupProviderService extends ProviderService<GroupProvider> {
      * @param deviceId device identifier
      * @param groupEntries collection of group entries as seen in data plane
      */
-    void pushGroupMetrics(DeviceId deviceId,
-                       Collection<Group> groupEntries);
+    void pushGroupMetrics(DeviceId deviceId, Collection<Group> groupEntries);
 
+    /**
+     * Notifies store of group failovers.
+     *
+     * @param failoverGroups failover groups in which a failover has occurred
+     */
+    void notifyOfFailovers(Collection<Group> failoverGroups);
 }

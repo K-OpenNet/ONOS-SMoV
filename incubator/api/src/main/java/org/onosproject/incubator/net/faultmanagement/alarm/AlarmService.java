@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,30 +15,49 @@
  */
 package org.onosproject.incubator.net.faultmanagement.alarm;
 
-import com.google.common.annotations.Beta;
-import java.util.Map;
-
-import java.util.Set;
+import org.onosproject.event.ListenerService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service for interacting with the alarm handling of devices. Unless stated otherwise, getter methods
  * return active AND recently-cleared alarms.
  */
-@Beta
-public interface AlarmService {
+public interface AlarmService extends ListenerService<AlarmEvent, AlarmListener> {
 
     /**
      * Update book-keeping (ie administrative) fields for the alarm matching the specified identifier.
      *
-     * @param id alarm identifier
+     * @param id             alarm identifier
      * @param isAcknowledged new acknowledged state
-     * @param assignedUser new assigned user, null clear
+     * @param assignedUser   new assigned user, null clear
      * @return updated alarm (including any recent device-derived changes)
-     *
+     * @deprecated 1.10.0 Kingfisher
      */
+    @Deprecated
     Alarm updateBookkeepingFields(AlarmId id, boolean isAcknowledged, String assignedUser);
+
+    /**
+     * Update book-keeping (ie administrative) fields for the alarm matching the specified identifier.
+     *
+     * @param id             alarm identifier
+     * @param clear          ture if the alarm has to be cleared
+     * @param isAcknowledged new acknowledged state
+     * @param assignedUser   new assigned user, null clear
+     * @return updated alarm (including any recent device-derived changes)
+     */
+    Alarm updateBookkeepingFields(AlarmId id, boolean clear, boolean isAcknowledged, String assignedUser);
+
+    /**
+     * Remove an alarm from ONOS.
+     *
+     * @param id alarm
+     */
+    void remove(AlarmId id);
 
     /**
      * Returns summary of alarms on a given device.
@@ -95,10 +114,22 @@ public interface AlarmService {
     Set<Alarm> getAlarms(DeviceId deviceId);
 
     /**
+     * Returns all of the ACTIVE alarms for a specific device. Recently cleared alarms excluded.
+     *
+     * @param deviceId the device to use when searching alarms.
+     * @return set of alarms; empty set if no alarms
+     */
+    default Set<Alarm> getActiveAlarms(DeviceId deviceId) {
+        return getActiveAlarms().stream()
+                .filter(a -> deviceId.equals(a.deviceId()))
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * Returns the alarm for a given device and source.
      *
      * @param deviceId the device
-     * @param source the source within the device
+     * @param source   the source within the device
      * @return set of alarms; empty set if no alarms
      */
     Set<Alarm> getAlarms(DeviceId deviceId, AlarmEntityId source);
@@ -116,7 +147,7 @@ public interface AlarmService {
      * Returns the alarm affecting a given flow.
      *
      * @param deviceId the device
-     * @param flowId the flow
+     * @param flowId   the flow
      * @return set of alarms; empty set if no alarms
      */
     Set<Alarm> getAlarmsForFlow(DeviceId deviceId, long flowId);

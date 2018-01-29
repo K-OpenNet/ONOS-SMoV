@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,6 @@
  */
 package org.onosproject.bgp.controller.impl;
 
-import java.util.Iterator;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.TreeMap;
-
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpAddress;
 import org.onosproject.bgp.controller.BgpCfg;
@@ -32,6 +27,13 @@ import org.onosproject.bgp.controller.impl.BgpControllerImpl.BgpPeerManagerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+
 /**
  * Provides BGP configuration of this BGP speaker.
  */
@@ -42,7 +44,7 @@ public class BgpConfig implements BgpCfg {
     private static final short DEFAULT_HOLD_TIMER = 120;
     private static final short DEFAULT_CONN_RETRY_TIME = 120;
     private static final short DEFAULT_CONN_RETRY_COUNT = 5;
-
+    private List<BgpConnectPeerImpl> peerList = new ArrayList();
     private State state = State.INIT;
     private int localAs;
     private int maxSession;
@@ -57,6 +59,8 @@ public class BgpConfig implements BgpCfg {
     private BgpConnectPeer connectPeer;
     private BgpPeerManagerImpl peerManager;
     private BgpController bgpController;
+    private boolean rpdCapability;
+    private boolean evpnCapability;
 
     /*
      * Constructor to initialize the values.
@@ -129,6 +133,26 @@ public class BgpConfig implements BgpCfg {
     }
 
     @Override
+    public boolean flowSpecRpdCapability() {
+        return this.rpdCapability;
+    }
+
+    @Override
+    public void setFlowSpecRpdCapability(boolean rpdCapability) {
+        this.rpdCapability = rpdCapability;
+    }
+
+    @Override
+    public boolean getEvpnCapability() {
+        return this.evpnCapability;
+    }
+
+    @Override
+    public void setEvpnCapability(boolean evpnCapability) {
+        this.evpnCapability = evpnCapability;
+    }
+
+    @Override
     public String getRouterId() {
         if (this.routerId != null) {
             return this.routerId.toString();
@@ -178,10 +202,10 @@ public class BgpConfig implements BgpCfg {
             }
 
             this.bgpPeerTree.put(routerid, lspeer);
-            log.debug("added successfully");
+            log.debug("Added successfully");
             return true;
         } else {
-            log.debug("already exists");
+            log.debug("Already exists");
             return false;
         }
     }
@@ -194,9 +218,11 @@ public class BgpConfig implements BgpCfg {
             lspeer.setSelfInnitConnection(true);
 
             if (lspeer.connectPeer() == null) {
-                connectPeer = new BgpConnectPeerImpl(bgpController, routerid, Controller.getBgpPortNum());
+                connectPeer = new BgpConnectPeerImpl(bgpController, routerid, Controller.BGP_PORT_NUM);
                 lspeer.setConnectPeer(connectPeer);
                 connectPeer.connectPeer();
+                peerList.add((BgpConnectPeerImpl) connectPeer);
+
             }
             return true;
         }

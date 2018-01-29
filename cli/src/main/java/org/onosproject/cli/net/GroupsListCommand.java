@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,28 @@
  */
 package org.onosproject.cli.net;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.apache.karaf.shell.commands.Option;
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.cli.Comparators;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.group.Group;
 import org.onosproject.net.group.Group.GroupState;
 import org.onosproject.net.group.GroupBucket;
+import org.onosproject.net.group.GroupDescription;
 import org.onosproject.net.group.GroupService;
+import org.onosproject.utils.Comparators;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import static com.google.common.collect.Lists.newArrayList;
 
@@ -49,9 +50,9 @@ public class GroupsListCommand extends AbstractShellCommand {
     public static final String ANY = "any";
 
     private static final String FORMAT =
-            "   id=0x%s, state=%s, type=%s, bytes=%s, packets=%s, appId=%s";
+            "   id=0x%s, state=%s, type=%s, bytes=%s, packets=%s, appId=%s, referenceCount=%s";
     private static final String BUCKET_FORMAT =
-            "   id=0x%s, bucket=%s, bytes=%s, packets=%s, actions=%s";
+            "       id=0x%s, bucket=%s, bytes=%s, packets=%s, actions=%s";
 
     @Argument(index = 1, name = "uri", description = "Device ID",
             required = false, multiValued = false)
@@ -65,6 +66,12 @@ public class GroupsListCommand extends AbstractShellCommand {
             description = "Print group count only",
             required = false, multiValued = false)
     private boolean countOnly = false;
+
+    @Option(name = "-t", aliases = "--type",
+            description = "Print groups with specified type",
+            required = false, multiValued = false)
+    private String type = null;
+
 
     private JsonNode json(Map<Device, List<Group>> sortedGroups) {
         ArrayNode result = mapper().createArrayNode();
@@ -82,14 +89,12 @@ public class GroupsListCommand extends AbstractShellCommand {
         GroupService groupService = get(GroupService.class);
         SortedMap<Device, List<Group>> sortedGroups =
                 getSortedGroups(deviceService, groupService);
-
         if (outputJson()) {
             print("%s", json(sortedGroups));
         } else {
             sortedGroups.forEach((device, groups) -> printGroups(device.id(), groups));
         }
     }
-
     /**
      * Returns the list of devices sorted using the device ID URIs.
      *
@@ -104,11 +109,16 @@ public class GroupsListCommand extends AbstractShellCommand {
                 new TreeMap<>(Comparators.ELEMENT_COMPARATOR);
         List<Group> groups;
         GroupState s = null;
-        if (state != null && !state.equals("any")) {
+        if (state != null && !"any".equals(state)) {
             s = GroupState.valueOf(state.toUpperCase());
         }
-        Iterable<Device> devices = (uri == null) ? deviceService.getDevices() :
-                Collections.singletonList(deviceService.getDevice(DeviceId.deviceId(uri)));
+        Iterable<Device> devices = deviceService.getDevices();
+        if (uri != null) {
+            Device dev = deviceService.getDevice(DeviceId.deviceId(uri));
+            if (dev != null) {
+                devices = Collections.singletonList(dev);
+            }
+        }
         for (Device d : devices) {
             if (s == null) {
                 groups = newArrayList(groupService.getGroups(d.id()));
@@ -123,6 +133,13 @@ public class GroupsListCommand extends AbstractShellCommand {
             groups.sort(Comparators.GROUP_COMPARATOR);
             sortedGroups.put(d, groups);
         }
+        if (type != null && !"any".equals(type))  {
+            for (Device device : sortedGroups.keySet()) {
+                sortedGroups.put(device, sortedGroups.get(device).stream()
+                        .filter(group -> GroupDescription.Type.valueOf(type.toUpperCase()).equals(group.type()))
+                        .collect(Collectors.toList()));
+            }
+        }
         return sortedGroups;
     }
 
@@ -135,7 +152,7 @@ public class GroupsListCommand extends AbstractShellCommand {
 
         for (Group group : groups) {
             print(FORMAT, Integer.toHexString(group.id().id()), group.state(), group.type(),
-                  group.bytes(), group.packets(), group.appId().name());
+                  group.bytes(), group.packets(), group.appId().name(), group.referenceCount());
             int i = 0;
             for (GroupBucket bucket:group.buckets().buckets()) {
                 print(BUCKET_FORMAT, Integer.toHexString(group.id().id()), ++i,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,24 +21,28 @@ import com.google.common.collect.Iterables;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.junit.TestTools;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.MplsLabel;
 import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.common.event.impl.TestEventDispatcher;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.DefaultApplicationId;
-import org.onosproject.core.DefaultGroupId;
 import org.onosproject.core.GroupId;
+import org.onosproject.mastership.MastershipServiceAdapter;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DefaultDevice;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.MastershipRole;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.net.driver.AbstractHandlerBehaviour;
 import org.onosproject.net.driver.DefaultDriver;
+import org.onosproject.net.driver.DriverRegistry;
 import org.onosproject.net.driver.impl.DriverManager;
+import org.onosproject.net.driver.impl.DriverRegistryManager;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.group.DefaultGroup;
@@ -66,6 +70,7 @@ import org.onosproject.store.trivial.SimpleGroupStore;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -88,7 +93,7 @@ public class GroupManagerTest {
     private static final Device FOO_DEV =
             new DefaultDevice(FOO_PID, FOO_DID, Device.Type.SWITCH, "", "", "", "", null, ANNOTATIONS);
 
-    private GroupManager mgr;
+    private static GroupManager mgr;
     private GroupService groupService;
     private GroupProviderRegistry providerRegistry;
     private TestGroupListener internalListener = new TestGroupListener();
@@ -107,17 +112,19 @@ public class GroupManagerTest {
         mgr.deviceService = new TestDeviceService();
         mgr.cfgService = new ComponentConfigAdapter();
         mgr.store = new SimpleGroupStore();
+        mgr.mastershipService = new TestMastershipService();
         injectEventDispatcher(mgr, new TestEventDispatcher());
         providerRegistry = mgr;
 
         mgr.activate(null);
         mgr.addListener(listener);
 
-        driverService = new TestDriverManager();
-        driverService.addDriver(new DefaultDriver("foo", ImmutableList.of(), "", "", "",
-                                                  ImmutableMap.of(GroupProgrammable.class,
-                                                                  TestGroupProgrammable.class),
-                                                  ImmutableMap.of()));
+        DriverRegistryManager driverRegistry = new DriverRegistryManager();
+        driverService = new TestDriverManager(driverRegistry);
+        driverRegistry.addDriver(new DefaultDriver("foo", ImmutableList.of(), "", "", "",
+                                                   ImmutableMap.of(GroupProgrammable.class,
+                                                                   TestGroupProgrammable.class),
+                                                   ImmutableMap.of()));
 
         internalProvider = new TestGroupProvider(PID);
         provider = internalProvider;
@@ -185,6 +192,21 @@ public class GroupManagerTest {
 
         // Test audit with confirmed groups
         testAuditWithConfirmedGroups(DID);
+    }
+
+    /**
+     * Tests group Purge Operation.
+     */
+    @Test
+    public void testPurgeGroups() {
+        //Test Group creation before AUDIT process
+        testGroupCreationBeforeAudit(DID);
+        programmableTestCleanUp();
+        testAuditWithExtraneousMissingGroups(DID);
+        // Test group add bucket operations
+        testAddBuckets(DID);
+        // Test group Purge operations
+        testPurgeGroupEntry(DID);
     }
 
     /**
@@ -285,6 +307,27 @@ public class GroupManagerTest {
         testRemoveGroup(FOO_DID);
     }
 
+    @Test
+    public void fallbackPoll() {
+        // Test Group creation before AUDIT process
+        testGroupCreationBeforeAudit(FOO_DID);
+        programmableTestCleanUp();
+
+        // Test audit with extraneous and missing groups
+        testAuditWithExtraneousMissingGroups(FOO_DID);
+
+        // Test audit with confirmed groups
+        Group createdGroup = testAuditWithConfirmedGroups(FOO_DID);
+        GroupDriverProvider fallback = (GroupDriverProvider) mgr.defaultProvider();
+
+        fallback.init(mgr.deviceService, fallback.groupProviderService, mgr.mastershipService, 1);
+
+        TestTools.assertAfter(2000, () -> {
+            Group e = mgr.getGroups(FOO_DID).iterator().next();
+            assertEquals("incorrect group", createdGroup, e);
+        });
+    }
+
     private void programmableTestCleanUp() {
         groupOperations.clear();
         lastDeviceIdProgrammable = null;
@@ -329,11 +372,11 @@ public class GroupManagerTest {
                 PortNumber.portNumber(32)};
         PortNumber[] ports2 = {PortNumber.portNumber(41),
                 PortNumber.portNumber(42)};
-        GroupId gId1 = new DefaultGroupId(1);
+        GroupId gId1 = new GroupId(1);
         Group group1 = createSouthboundGroupEntry(gId1,
                                                   Arrays.asList(ports1),
                                                   0, deviceId);
-        GroupId gId2 = new DefaultGroupId(2);
+        GroupId gId2 = new GroupId(2);
         // Non zero reference count will make the group manager to queue
         // the extraneous groups until reference count is zero.
         Group group2 = createSouthboundGroupEntry(gId2,
@@ -346,8 +389,8 @@ public class GroupManagerTest {
         GroupKey key = new DefaultGroupKey("group1BeforeAudit".getBytes());
         Group createdGroup = groupService.getGroup(deviceId, key);
         int createdGroupId = createdGroup.id().id();
-        assertNotEquals(gId1.id(), createdGroupId);
-        assertNotEquals(gId2.id(), createdGroupId);
+        assertNotEquals(gId1.id().intValue(), createdGroupId);
+        assertNotEquals(gId2.id().intValue(), createdGroupId);
 
         List<GroupOperation> expectedGroupOps = Arrays.asList(
                 GroupOperation.createDeleteGroupOperation(gId1,
@@ -369,11 +412,11 @@ public class GroupManagerTest {
                 PortNumber.portNumber(32)};
         PortNumber[] ports2 = {PortNumber.portNumber(41),
                 PortNumber.portNumber(42)};
-        GroupId gId1 = new DefaultGroupId(1);
+        GroupId gId1 = new GroupId(1);
         Group group1 = createSouthboundGroupEntry(gId1,
                                                   Arrays.asList(ports1),
                                                   0, deviceId);
-        GroupId gId2 = new DefaultGroupId(2);
+        GroupId gId2 = new GroupId(2);
         Group group2 = createSouthboundGroupEntry(gId2,
                                                   Arrays.asList(ports2),
                                                   0, deviceId);
@@ -397,7 +440,7 @@ public class GroupManagerTest {
     }
 
     // Test AUDIT with confirmed groups
-    private void testAuditWithConfirmedGroups(DeviceId deviceId) {
+    private Group testAuditWithConfirmedGroups(DeviceId deviceId) {
         GroupKey key = new DefaultGroupKey("group1BeforeAudit".getBytes());
         Group createdGroup = groupService.getGroup(deviceId, key);
         createdGroup = new DefaultGroup(createdGroup.id(),
@@ -407,6 +450,7 @@ public class GroupManagerTest {
         List<Group> groupEntries = Collections.singletonList(createdGroup);
         providerService.pushGroupMetrics(deviceId, groupEntries);
         internalListener.validateEvent(Collections.singletonList(GroupEvent.Type.GROUP_ADDED));
+        return createdGroup;
     }
 
     // Test group add bucket operations
@@ -507,6 +551,13 @@ public class GroupManagerTest {
         internalListener.validateEvent(Collections.singletonList(GroupEvent.Type.GROUP_UPDATED));
     }
 
+    // Test purge group entry operations
+    private void testPurgeGroupEntry(DeviceId deviceId) {
+        assertEquals(1, Iterables.size(groupService.getGroups(deviceId, appId)));
+        groupService.purgeGroupEntries(deviceId);
+        assertEquals(0, Iterables.size(groupService.getGroups(deviceId, appId)));
+    }
+
     // Test group remove operations
     private void testRemoveGroup(DeviceId deviceId) {
         GroupKey currKey = new DefaultGroupKey("group1RemoveBuckets".getBytes());
@@ -579,11 +630,11 @@ public class GroupManagerTest {
         groupService.addGroup(newGroupDesc);
 
         // Test initial group audit process
-        GroupId gId1 = new DefaultGroupId(1);
+        GroupId gId1 = new GroupId(1);
         Group group1 = createSouthboundGroupEntry(gId1,
                                                   Arrays.asList(ports1),
                                                   0, deviceId);
-        GroupId gId2 = new DefaultGroupId(2);
+        GroupId gId2 = new GroupId(2);
         // Non zero reference count will make the group manager to queue
         // the extraneous groups until reference count is zero.
         Group group2 = createSouthboundGroupEntry(gId2,
@@ -625,7 +676,7 @@ public class GroupManagerTest {
         internalListener.validateEvent(Collections.singletonList(GroupEvent.Type.GROUP_REMOVE_FAILED));
     }
 
-    private Group createSouthboundGroupEntry(GroupId gId,
+    private static Group createSouthboundGroupEntry(GroupId gId,
                                              List<PortNumber> ports,
                                              long referenceCount, DeviceId deviceId) {
         List<PortNumber> outPorts = new ArrayList<>();
@@ -725,8 +776,16 @@ public class GroupManagerTest {
         }
     }
 
+    private class TestMastershipService extends MastershipServiceAdapter {
+        @Override
+        public MastershipRole getLocalRole(DeviceId deviceId) {
+            return MastershipRole.MASTER;
+        }
+    }
+
     private class TestDriverManager extends DriverManager {
-        TestDriverManager() {
+        TestDriverManager(DriverRegistry registry) {
+            this.registry = registry;
             this.deviceService = mgr.deviceService;
             activate();
         }
@@ -741,6 +800,11 @@ public class GroupManagerTest {
             lastDeviceIdProgrammable = deviceId;
             groupOperations.addAll(groupOps.operations());
         }
+
+        @Override
+        public Collection<Group> getGroups() {
+            return ImmutableList.of(mgr.getGroups(FOO_DID).iterator().next());
+        }
     }
 
     public void validate(DeviceId expectedDeviceId,
@@ -751,12 +815,10 @@ public class GroupManagerTest {
         }
 
         assertEquals(lastDeviceIdProgrammable, expectedDeviceId);
-        assertTrue((this.groupOperations.containsAll(expectedGroupOps) &&
-                expectedGroupOps.containsAll(groupOperations)));
+        assertTrue(groupOperations.containsAll(expectedGroupOps) &&
+                           expectedGroupOps.containsAll(groupOperations));
 
         groupOperations.clear();
         lastDeviceIdProgrammable = null;
     }
 }
-
-

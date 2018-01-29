@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
     'use strict';
 
     // injected refs
-    var $log, fs, flash, tps, tts;
+    var flash;
 
     // api to topoForce
     var api;
@@ -33,52 +33,59 @@
      link()     // get ref to D3 selection of links
      */
 
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#tfltr#' + x + '#';
+    };
+
     var smax = 'suppressedmax';
 
     // which "layer" a particular item "belongs to"
     var layerLookup = {
             host: {
                 endstation: 'pkt', // default, if host event does not define type
-                router:     'pkt',
-                bgpSpeaker: 'pkt'
+                router: 'pkt',
+                bgpSpeaker: 'pkt',
             },
             device: {
                 switch: 'pkt',
+                router: 'pkt',
                 roadm: 'opt',
-                otn: 'opt'
+                otn: 'opt',
             },
             link: {
                 hostLink: 'pkt',
                 direct: 'pkt',
                 indirect: '',
                 tunnel: '',
-                optical: 'opt'
-            }
+                optical: 'opt',
+            },
         },
         // order of layer cycling in button
         dispatch = [
             {
                 type: 'all',
                 action: function () { suppressLayers(false); },
-                msg: 'All Layers Shown'
             },
             {
                 type: 'pkt',
                 action: function () { showLayer('pkt'); },
-                msg: 'Packet Layer Shown'
             },
             {
                 type: 'opt',
                 action: function () { showLayer('opt'); },
-                msg: 'Optical Layer Shown'
-            }
+            },
         ],
-        layer = 0;
+        layer = 0,
+        layerType,
+        lionKey;
 
     function clickAction() {
         layer = (layer + 1) % dispatch.length;
         dispatch[layer].action();
-        flash.flash(dispatch[layer].msg);
+        layerType = dispatch[layer].type;
+        lionKey = 'fl_layer_' + layerType;
+        flash.flash(topoLion(lionKey));
     }
 
     function selected() {
@@ -118,22 +125,18 @@
         unsuppressLayer(which);
     }
 
+    // invoked after the localization bundle has been received from the server
+    function setLionBundle(bundle) {
+        topoLion = bundle;
+    }
+
     // === -----------------------------------------------------
     // === MODULE DEFINITION ===
 
     angular.module('ovTopo')
-        .factory('TopoFilterService',
-        ['$log', 'FnService',
-            'FlashService',
-            'TopoPanelService',
-            'TopoTrafficService',
-
-            function (_$log_, _fs_, _flash_, _tps_, _tts_) {
-                $log = _$log_;
-                fs = _fs_;
+        .factory('TopoFilterService', ['FlashService',
+            function (_flash_) {
                 flash = _flash_;
-                tps = _tps_;
-                tts = _tts_;
 
                 function initFilter(_api_) {
                     api = _api_;
@@ -144,7 +147,9 @@
 
                     clickAction: clickAction,
                     selected: selected,
-                    inLayer: inLayer
+                    inLayer: inLayer,
+                    setLionBundle: setLionBundle,
                 };
-            }]);
+            },
+        ]);
 }());

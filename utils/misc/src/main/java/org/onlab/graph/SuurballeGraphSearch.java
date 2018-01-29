@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 package org.onlab.graph;
+
+import com.google.common.collect.Sets;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -32,67 +34,93 @@ import java.util.stream.Collectors;
 public class SuurballeGraphSearch<V extends Vertex, E extends Edge<V>> extends DijkstraGraphSearch<V, E> {
 
     @Override
-    public Result<V, E> search(Graph<V, E> graph, V src, V dst,
-                               EdgeWeight<V, E> weight, int maxPaths) {
+    protected Result<V, E> internalSearch(Graph<V, E> graph, V src, V dst,
+                               EdgeWeigher<V, E> weigher, int maxPaths) {
+        // FIXME: This method needs to be refactored as it is difficult to follow and debug.
 
-        if (weight == null) {
-            weight = edge -> 1;
-        }
+        // FIXME: There is a defect here triggered by 3+ edges between the same vertices,
+        // which makes an attempt to produce looping paths. Protection against
+        // this was added to AbstractGraphPathSearch, but the root issue remains here.
 
-        List<DisjointPathPair<V, E>> dpps = new ArrayList<>();
+        // FIXME: There is a defect here where not all paths are truly disjoint.
+        // This class needs to filter its own results to make sure that the
+        // paths are indeed disjoint. Temporary fix for this is provided, but
+        // the issue needs to be addressed through refactoring.
 
-        final EdgeWeight weightf = weight;
-        DefaultResult firstDijkstraS = (DefaultResult) super.search(graph, src, dst, weight, ALL_PATHS);
-        DefaultResult firstDijkstra = (DefaultResult) super.search(graph, src, null, weight, ALL_PATHS);
+        EdgeWeigher weightf = weigher;
+        DefaultResult firstDijkstraS = (DefaultResult) super.internalSearch(
+                graph, src, dst, weigher, ALL_PATHS);
+        DefaultResult firstDijkstra = (DefaultResult) super.internalSearch(
+                graph, src, null, weigher, ALL_PATHS);
 
         //choose an arbitrary shortest path to run Suurballe on
         Path<V, E> shortPath = null;
-        if (firstDijkstraS.paths().size() == 0) {
+        if (firstDijkstraS.paths().isEmpty()) {
             return firstDijkstraS;
         }
+
+        DisjointPathResult result = new DisjointPathResult(firstDijkstra, src, dst, maxPaths);
+
         for (Path p: firstDijkstraS.paths()) {
             shortPath = p;
             //transforms the graph so tree edges have 0 weight
-            EdgeWeight<V, Edge<V>> modified = edge -> {
-                if (classE().isInstance(edge)) {
-                    return weightf.weight((E) (edge)) + firstDijkstra.cost(edge.src())
-                            - firstDijkstra.cost(edge.dst());
+            EdgeWeigher<V, E> modified = new EdgeWeigher<V, E>() {
+                @Override
+                public Weight weight(E edge) {
+                    return edge instanceof ReverseEdge ?
+                            weightf.getInitialWeight() :
+                            weightf.weight(edge).merge(firstDijkstra.cost(edge.src()))
+                                    .subtract(firstDijkstra.cost(edge.dst()));
                 }
-                return 0;
+
+                @Override
+                public Weight getInitialWeight() {
+                    return weightf.getInitialWeight();
+                }
+
+                @Override
+                public Weight getNonViableWeight() {
+                    return weightf.getNonViableWeight();
+                }
             };
-            EdgeWeight<V, E> modified2 = edge ->
-                    weightf.weight(edge) + firstDijkstra.cost(edge.src()) - firstDijkstra.cost(edge.dst());
+
+            EdgeWeigher<V, E> modified2 = new EdgeWeigher<V, E>() {
+                @Override
+                public Weight weight(E edge) {
+                    return weightf.weight(edge).merge(firstDijkstra.cost(edge.src()))
+                            .subtract(firstDijkstra.cost(edge.dst()));
+                }
+
+                @Override
+                public Weight getInitialWeight() {
+                    return weightf.getInitialWeight();
+                }
+
+                @Override
+                public Weight getNonViableWeight() {
+                    return weightf.getNonViableWeight();
+                }
+            };
 
             //create a residual graph g' by removing all src vertices and reversing 0 length path edges
-            MutableGraph<V, Edge<V>> gt = mutableCopy(graph);
+            MutableGraph<V, E> gt = mutableCopy(graph);
 
-            Map<Edge<V>, E> revToEdge = new HashMap<>();
+            Map<E, E> revToEdge = new HashMap<>();
             graph.getEdgesTo(src).forEach(gt::removeEdge);
             for (E edge: shortPath.edges()) {
                 gt.removeEdge(edge);
-                Edge<V> reverse = new Edge<V>() {
-                    final Edge<V> orig = edge;
-                    public V src() {
-                        return orig.dst();
-                    }
-                    public V dst() {
-                        return orig.src();
-                    }
-                    public String toString() {
-                        return "ReversedEdge " + "src=" + src() + " dst=" + dst();
-                    }
-                };
-                revToEdge.put(reverse, edge);
-                gt.addEdge(reverse);
+                Edge<V> reverse = new ReverseEdge<V>(edge);
+                revToEdge.put((E) reverse, edge);
+                gt.addEdge((E) reverse);
             }
 
             //rerun dijkstra on the temporary graph to get a second path
-            Result<V, Edge<V>> secondDijkstra;
-            secondDijkstra = new DijkstraGraphSearch<V, Edge<V>>().search(gt, src, dst, modified, ALL_PATHS);
+            Result<V, E> secondDijkstra = new DijkstraGraphSearch<V, E>()
+                    .search(gt, src, dst, modified, ALL_PATHS);
 
-            Path<V, Edge<V>> residualShortPath = null;
-            if (secondDijkstra.paths().size() == 0) {
-                dpps.add(new DisjointPathPair<V, E>(shortPath, null));
+            Path<V, E> residualShortPath = null;
+            if (secondDijkstra.paths().isEmpty()) {
+                result.dpps.add(new DisjointPathPair<>(shortPath, null));
                 continue;
             }
 
@@ -109,85 +137,125 @@ public class SuurballeGraphSearch<V extends Vertex, E extends Edge<V>> extends D
 
                 if (residualShortPath != null) {
                     for (Edge<V> edge: residualShortPath.edges()) {
-                        if (classE().isInstance(edge)) {
-                            roundTrip.addEdge((E) edge);
-                        } else {
+                        if (edge instanceof ReverseEdge) {
                             roundTrip.removeEdge(revToEdge.get(edge));
+                        } else {
+                            roundTrip.addEdge((E) edge);
                         }
                     }
                 }
                 //Actually build the final result
-                DefaultResult lastSearch = (DefaultResult) super.search(roundTrip, src, dst, weight, ALL_PATHS);
-                Path<V, E> path1 = lastSearch.paths().iterator().next();
-                path1.edges().forEach(roundTrip::removeEdge);
+                DefaultResult lastSearch = (DefaultResult)
+                        super.internalSearch(roundTrip, src, dst, weigher, ALL_PATHS);
+                Path<V, E> primary = lastSearch.paths().iterator().next();
+                primary.edges().forEach(roundTrip::removeEdge);
 
-                Set<Path<V, E>> bckpaths = super.search(roundTrip, src, dst, weight, ALL_PATHS).paths();
-                Path<V, E> backup = null;
-                if (bckpaths.size() != 0) {
-                    backup = bckpaths.iterator().next();
-                }
+                Set<Path<V, E>> backups = super.internalSearch(roundTrip, src, dst,
+                        weigher, ALL_PATHS).paths();
 
-                dpps.add(new DisjointPathPair<>(path1, backup));
-            }
-        }
-
-        for (int i = dpps.size() - 1; i > 0; i--) {
-            if (dpps.get(i).size() <= 1) {
-                dpps.remove(i);
-            }
-        }
-
-        return new Result<V, E>() {
-            final DefaultResult search = firstDijkstra;
-
-            public V src() {
-                return src;
-            }
-            public V dst() {
-                return dst;
-            }
-            public Set<Path<V, E>> paths() {
-                Set<Path<V, E>> pathsD = new HashSet<>();
-                int paths = 0;
-                for (DisjointPathPair<V, E> path: dpps) {
-                    pathsD.add((Path<V, E>) path);
-                    paths++;
-                    if (paths == maxPaths) {
+                // Find first backup path that does not share any nodes with the primary
+                for (Path<V, E> backup : backups) {
+                    if (isDisjoint(primary, backup)) {
+                        result.dpps.add(new DisjointPathPair<>(primary, backup));
                         break;
                     }
                 }
-                return pathsD;
             }
-            public Map<V, Double> costs() {
-                return search.costs();
+        }
+
+        for (int i = result.dpps.size() - 1; i > 0; i--) {
+            if (result.dpps.get(i).size() <= 1) {
+                result.dpps.remove(i);
             }
-            public Map<V, Set<E>> parents() {
-                return search.parents();
-            }
-        };
+        }
+
+        result.buildPaths();
+        return result;
     }
 
-    private Class<?> clazzV;
-
-    public Class<?> classV() {
-        return clazzV;
+    private boolean isDisjoint(Path<V, E> a, Path<V, E> b) {
+        return Sets.intersection(vertices(a), vertices(b)).isEmpty();
     }
 
-    private Class<?> clazzE;
-
-    public Class<?> classE() {
-        return clazzE;
+    private Set<V> vertices(Path<V, E> p) {
+        Set<V> set = new HashSet<>();
+        p.edges().forEach(e -> set.add(e.src()));
+        set.remove(p.src());
+        return set;
     }
+
     /**
      * Creates a mutable copy of an immutable graph.
      *
      * @param graph   immutable graph
      * @return mutable copy
      */
-    public MutableGraph mutableCopy(Graph<V, E> graph) {
-        clazzV = graph.getVertexes().iterator().next().getClass();
-        clazzE = graph.getEdges().iterator().next().getClass();
-        return new MutableAdjacencyListsGraph<V, E>(graph.getVertexes(), graph.getEdges());
+    private MutableGraph<V, E> mutableCopy(Graph<V, E> graph) {
+        return new MutableAdjacencyListsGraph<>(graph.getVertexes(), graph.getEdges());
+    }
+
+    private static final class ReverseEdge<V extends Vertex> extends AbstractEdge<V> {
+        private ReverseEdge(Edge<V> edge) {
+            super(edge.dst(), edge.src());
+        }
+
+        @Override
+        public String toString() {
+            return "ReversedEdge " + "src=" + src() + " dst=" + dst();
+        }
+    }
+
+    // Auxiliary result for disjoint path search
+    private final class DisjointPathResult implements AbstractGraphPathSearch.Result<V, E> {
+
+        private final Result<V, E> searchResult;
+        private final V src, dst;
+        private final int maxPaths;
+        private final List<DisjointPathPair<V, E>> dpps = new ArrayList<>();
+        private final Set<Path<V, E>> disjointPaths = new HashSet<>();
+
+        private DisjointPathResult(Result<V, E> searchResult, V src, V dst, int maxPaths) {
+            this.searchResult = searchResult;
+            this.src = src;
+            this.dst = dst;
+            this.maxPaths = maxPaths;
+        }
+
+        @Override
+        public V src() {
+            return src;
+        }
+
+        @Override
+        public V dst() {
+            return dst;
+        }
+
+        @Override
+        public Set<Path<V, E>> paths() {
+            return disjointPaths;
+        }
+
+        private void buildPaths() {
+            int paths = 0;
+            for (DisjointPathPair<V, E> path: dpps) {
+                disjointPaths.add(path);
+                paths++;
+                if (paths == maxPaths) {
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public Map<V, Set<E>> parents() {
+            return searchResult.parents();
+        }
+
+        @Override
+        public Map<V, Weight> costs() {
+            return searchResult.costs();
+        }
     }
 }
 

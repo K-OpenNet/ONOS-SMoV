@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,11 +60,11 @@ public class InterfaceIpAddress {
      * @param subnetAddress the IP subnet address
      */
     public InterfaceIpAddress(IpAddress ipAddress, IpPrefix subnetAddress) {
-        this.ipAddress = checkNotNull(ipAddress);
-        this.subnetAddress = checkNotNull(subnetAddress);
-        // TODO: Recompute the default broadcast address from the subnet
-        // address
-        this.broadcastAddress = null;
+        checkArgument(checkNotNull(ipAddress).version() == checkNotNull(subnetAddress).version(),
+            "IP and subnet version mismatch");
+        this.ipAddress = ipAddress;
+        this.subnetAddress = subnetAddress;
+        this.broadcastAddress = computeBroadcastAddress(ipAddress, subnetAddress);
         this.peerAddress = null;
     }
 
@@ -78,8 +78,10 @@ public class InterfaceIpAddress {
      */
     public InterfaceIpAddress(IpAddress ipAddress, IpPrefix subnetAddress,
                               IpAddress broadcastAddress) {
-        this.ipAddress = checkNotNull(ipAddress);
-        this.subnetAddress = checkNotNull(subnetAddress);
+        checkArgument(checkNotNull(ipAddress).version() == checkNotNull(subnetAddress).version(),
+            "IP and subnet version mismatch");
+        this.ipAddress = ipAddress;
+        this.subnetAddress = subnetAddress;
         this.broadcastAddress = broadcastAddress;
         this.peerAddress = null;
     }
@@ -97,8 +99,10 @@ public class InterfaceIpAddress {
     public InterfaceIpAddress(IpAddress ipAddress, IpPrefix subnetAddress,
                               IpAddress broadcastAddress,
                               IpAddress peerAddress) {
-        this.ipAddress = checkNotNull(ipAddress);
-        this.subnetAddress = checkNotNull(subnetAddress);
+        checkArgument(checkNotNull(ipAddress).version() == checkNotNull(subnetAddress).version(),
+            "IP and subnet version mismatch");
+        this.ipAddress = ipAddress;
+        this.subnetAddress = subnetAddress;
         this.broadcastAddress = broadcastAddress;
         this.peerAddress = peerAddress;
     }
@@ -157,6 +161,23 @@ public class InterfaceIpAddress {
         return new InterfaceIpAddress(addr, subnet);
     }
 
+    /**
+     * Compute the IP broadcast address.
+     *
+     * @param ipAddress base IP address
+     * @param subnetAddress subnet specification
+     * @return the IP broadcast address
+     */
+    public static IpAddress computeBroadcastAddress(IpAddress ipAddress, IpPrefix subnetAddress) {
+        if (ipAddress.isIp6()) {
+            return null;
+        } else {
+            IpAddress maskedIP = IpAddress.makeMaskedAddress(ipAddress, subnetAddress.prefixLength());
+            int ipB = maskedIP.getIp4Address().toInt() | ((1 << (32 - subnetAddress.prefixLength())) - 1);
+            return IpAddress.valueOf(ipB);
+        }
+    }
+
     @Override
     public boolean equals(Object other) {
         if (other == this) {
@@ -182,11 +203,6 @@ public class InterfaceIpAddress {
 
     @Override
     public String toString() {
-        /*return toStringHelper(this).add("ipAddress", ipAddress)
-            .add("subnetAddress", subnetAddress)
-            .add("broadcastAddress", broadcastAddress)
-            .add("peerAddress", peerAddress)
-            .omitNullValues().toString();*/
         return ipAddress.toString() + "/" + subnetAddress.prefixLength();
     }
 }

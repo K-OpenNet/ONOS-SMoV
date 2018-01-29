@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,11 @@ import static com.google.common.base.Preconditions.checkArgument;
  * {@link Partition} identifier.
  */
 public class PartitionId extends Identifier<Integer> implements Comparable<PartitionId> {
+
+    /**
+     * The {@code PartitionId} for the shared coordination partition.
+     */
+    public static final PartitionId SHARED = PartitionId.from(0);
 
     /**
      * Creates a partition identifier from an integer.

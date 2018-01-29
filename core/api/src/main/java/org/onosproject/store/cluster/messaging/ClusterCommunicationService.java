@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,8 +49,8 @@ public interface ClusterCommunicationService {
      * @param <M> message type
      */
     <M> void broadcast(M message,
-                       MessageSubject subject,
-                       Function<M, byte[]> encoder);
+            MessageSubject subject,
+            Function<M, byte[]> encoder);
 
     /**
      * Broadcasts a message to all controller nodes including self.
@@ -61,8 +61,8 @@ public interface ClusterCommunicationService {
      * @param <M> message type
      */
     <M> void broadcastIncludeSelf(M message,
-                                  MessageSubject subject,
-                                  Function<M, byte[]> encoder);
+            MessageSubject subject,
+            Function<M, byte[]> encoder);
 
     /**
      * Sends a message to the specified controller node.
@@ -75,9 +75,9 @@ public interface ClusterCommunicationService {
      * @return future that is completed when the message is sent
      */
     <M> CompletableFuture<Void> unicast(M message,
-                        MessageSubject subject,
-                        Function<M, byte[]> encoder,
-                        NodeId toNodeId);
+            MessageSubject subject,
+            Function<M, byte[]> encoder,
+            NodeId toNodeId);
 
     /**
      * Multicasts a message to a set of controller nodes.
@@ -89,9 +89,9 @@ public interface ClusterCommunicationService {
      * @param <M> message type
      */
     <M> void multicast(M message,
-                       MessageSubject subject,
-                       Function<M, byte[]> encoder,
-                       Set<NodeId> nodeIds);
+            MessageSubject subject,
+            Function<M, byte[]> encoder,
+            Set<NodeId> nodeIds);
 
     /**
      * Sends a message and expects a reply.
@@ -106,10 +106,10 @@ public interface ClusterCommunicationService {
      * @return reply future
      */
     <M, R> CompletableFuture<R> sendAndReceive(M message,
-                                               MessageSubject subject,
-                                               Function<M, byte[]> encoder,
-                                               Function<byte[], R> decoder,
-                                               NodeId toNodeId);
+            MessageSubject subject,
+            Function<M, byte[]> encoder,
+            Function<byte[], R> decoder,
+            NodeId toNodeId);
 
     /**
      * Adds a new subscriber for the specified message subject.
@@ -123,10 +123,10 @@ public interface ClusterCommunicationService {
      * @param <R> reply message type
      */
     <M, R> void addSubscriber(MessageSubject subject,
-                              Function<byte[], M> decoder,
-                              Function<M, R> handler,
-                              Function<R, byte[]> encoder,
-                              Executor executor);
+            Function<byte[], M> decoder,
+            Function<M, R> handler,
+            Function<R, byte[]> encoder,
+            Executor executor);
 
     /**
      * Adds a new subscriber for the specified message subject.
@@ -139,9 +139,9 @@ public interface ClusterCommunicationService {
      * @param <R> reply message type
      */
     <M, R> void addSubscriber(MessageSubject subject,
-                              Function<byte[], M> decoder,
-                              Function<M, CompletableFuture<R>> handler,
-                              Function<R, byte[]> encoder);
+            Function<byte[], M> decoder,
+            Function<M, CompletableFuture<R>> handler,
+            Function<R, byte[]> encoder);
 
     /**
      * Adds a new subscriber for the specified message subject.
@@ -153,9 +153,9 @@ public interface ClusterCommunicationService {
      * @param <M> incoming message type
      */
     <M> void addSubscriber(MessageSubject subject,
-                           Function<byte[], M> decoder,
-                           Consumer<M> handler,
-                           Executor executor);
+            Function<byte[], M> decoder,
+            Consumer<M> handler,
+            Executor executor);
 
     /**
      * Removes a subscriber for the specified message subject.

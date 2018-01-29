@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,30 @@
  */
 package org.onosproject.net.intent;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.collect.Sets;
 import org.junit.Test;
 import org.onosproject.net.ConnectPoint;
-import org.onosproject.net.IndexedLambda;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.Link;
 import org.onosproject.net.NetTestTools;
+import org.onosproject.net.ResourceGroup;
 import org.onosproject.net.flow.TrafficSelector;
-import org.onosproject.net.intent.constraint.LambdaConstraint;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.testing.EqualsTester;
+import org.onosproject.net.intent.constraint.LatencyConstraint;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.startsWith;
 import static org.onlab.junit.ImmutableClassChecker.assertThatClassIsImmutable;
 import static org.onosproject.net.NetTestTools.APP_ID;
 import static org.onosproject.net.NetTestTools.link;
@@ -49,6 +52,9 @@ public class LinkCollectionIntentTest extends IntentTest {
     final ConnectPoint egress = NetTestTools.connectPoint("egress", 3);
     final TrafficSelector selector = new IntentTestsMocks.MockSelector();
     final IntentTestsMocks.MockTreatment treatment = new IntentTestsMocks.MockTreatment();
+    final FilteredConnectPoint filteredIngress = new FilteredConnectPoint(ingress);
+    final FilteredConnectPoint filteredEgress = new FilteredConnectPoint(egress);
+    final ResourceGroup resourceGroup = ResourceGroup.of(0L);
 
     /**
      * Checks that the LinkCollectionIntent class is immutable.
@@ -74,6 +80,7 @@ public class LinkCollectionIntentTest extends IntentTest {
                         .links(links1)
                         .ingressPoints(ImmutableSet.of(ingress))
                         .egressPoints(ImmutableSet.of(egress))
+                        .resourceGroup(resourceGroup)
                         .build();
 
         final HashSet<Link> links2 = new HashSet<>();
@@ -86,6 +93,7 @@ public class LinkCollectionIntentTest extends IntentTest {
                         .links(links2)
                         .ingressPoints(ImmutableSet.of(ingress))
                         .egressPoints(ImmutableSet.of(egress))
+                        .resourceGroup(resourceGroup)
                         .build();
 
         new EqualsTester()
@@ -109,6 +117,7 @@ public class LinkCollectionIntentTest extends IntentTest {
                         .links(links1)
                         .ingressPoints(ImmutableSet.of(ingress))
                         .egressPoints(ImmutableSet.of(egress))
+                        .resourceGroup(resourceGroup)
                         .build();
 
         final Set<Link> createdLinks = collectionIntent.links();
@@ -118,6 +127,7 @@ public class LinkCollectionIntentTest extends IntentTest {
         assertThat(collectionIntent.selector(), is(selector));
         assertThat(collectionIntent.ingressPoints(), is(ImmutableSet.of(ingress)));
         assertThat(collectionIntent.egressPoints(), is(ImmutableSet.of(egress)));
+        assertThat(collectionIntent.resourceGroup(), is(resourceGroup));
         assertThat(collectionIntent.resources(), hasSize(1));
         final List<Constraint> createdConstraints = collectionIntent.constraints();
         assertThat(createdConstraints, hasSize(0));
@@ -132,7 +142,7 @@ public class LinkCollectionIntentTest extends IntentTest {
         final LinkedList<Constraint> constraints = new LinkedList<>();
 
         links1.add(link("src", 1, "dst", 2));
-        constraints.add(new LambdaConstraint(new IndexedLambda(23)));
+        constraints.add(new LatencyConstraint(Duration.ofMillis(100)));
         final LinkCollectionIntent collectionIntent =
                 LinkCollectionIntent.builder()
                         .appId(APP_ID)
@@ -155,7 +165,7 @@ public class LinkCollectionIntentTest extends IntentTest {
 
         final List<Constraint> createdConstraints = collectionIntent.constraints();
         assertThat(createdConstraints, hasSize(1));
-        assertThat(createdConstraints.get(0).toString(), startsWith("LambdaConstraint"));
+        assertThat(createdConstraints.get(0), instanceOf(LatencyConstraint.class));
     }
 
     /**
@@ -177,6 +187,39 @@ public class LinkCollectionIntentTest extends IntentTest {
 
         final List<Constraint> createdConstraints = collectionIntent.constraints();
         assertThat(createdConstraints, hasSize(0));
+    }
+
+    /**
+     * Test filtered connection point for LinkCollection intent.
+     */
+    @Test
+    public void testFilteredConnectedPoint() {
+        LinkCollectionIntent intent = createFilteredOne();
+        Set<Link> links = Sets.newHashSet();
+        links.add(link("A", 1, "B", 1));
+        links.add(link("A", 2, "C", 1));
+
+        assertThat(intent.appId(), is(APP_ID));
+        assertThat(intent.treatment(), is(treatment));
+        assertThat(intent.links(), is(links));
+        assertThat(intent.applyTreatmentOnEgress(), is(false));
+        assertThat(intent.filteredIngressPoints(), is(ImmutableSet.of(filteredIngress)));
+        assertThat(intent.filteredEgressPoints(), is(ImmutableSet.of(filteredEgress)));
+
+        intent = createAnotherFiltered();
+        links = Sets.newHashSet();
+        links.add(link("A", 1, "B", 1));
+        links.add(link("A", 2, "C", 1));
+        links.add(link("B", 2, "D", 1));
+        links.add(link("B", 3, "E", 1));
+
+        assertThat(intent.appId(), is(APP_ID));
+        assertThat(intent.treatment(), is(treatment));
+        assertThat(intent.links(), is(links));
+        assertThat(intent.applyTreatmentOnEgress(), is(true));
+        assertThat(intent.filteredIngressPoints(), is(ImmutableSet.of(filteredIngress)));
+        assertThat(intent.filteredEgressPoints(), is(ImmutableSet.of(filteredEgress)));
+
     }
 
     @Override
@@ -204,6 +247,35 @@ public class LinkCollectionIntentTest extends IntentTest {
                 .links(links2)
                 .ingressPoints(ImmutableSet.of(ingress))
                 .egressPoints(ImmutableSet.of(egress))
+                .build();
+    }
+
+    protected LinkCollectionIntent createFilteredOne() {
+        Set<Link> links = Sets.newHashSet();
+        links.add(link("A", 1, "B", 1));
+        links.add(link("A", 2, "C", 1));
+        return LinkCollectionIntent.builder()
+                .appId(APP_ID)
+                .treatment(treatment)
+                .links(links)
+                .filteredIngressPoints(ImmutableSet.of(filteredIngress))
+                .filteredEgressPoints(ImmutableSet.of(filteredEgress))
+                .build();
+    }
+
+    protected LinkCollectionIntent createAnotherFiltered() {
+        Set<Link> links = Sets.newHashSet();
+        links.add(link("A", 1, "B", 1));
+        links.add(link("A", 2, "C", 1));
+        links.add(link("B", 2, "D", 1));
+        links.add(link("B", 3, "E", 1));
+        return LinkCollectionIntent.builder()
+                .appId(APP_ID)
+                .treatment(treatment)
+                .links(links)
+                .applyTreatmentOnEgress(true)
+                .filteredIngressPoints(ImmutableSet.of(filteredIngress))
+                .filteredEgressPoints(ImmutableSet.of(filteredEgress))
                 .build();
     }
 }

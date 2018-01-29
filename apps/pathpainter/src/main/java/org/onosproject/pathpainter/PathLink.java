@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.onosproject.ui.topo.LinkHighlight.Flavor;
 import java.util.Set;
 
 /**
- * Bi-directional link capable of different hilights.
+ * Bi-directional link capable of different highlights.
  */
 public class PathLink extends BiLink {
 

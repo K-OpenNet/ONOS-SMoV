@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,26 +27,7 @@ public final class JsonUtils {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // non-instantiable
-    private JsonUtils() { }
-
-    /**
-     * Wraps a message payload into an event structure for the given event
-     * type and sequence ID. Generally, the sequence ID should be a copy of
-     * the ID from the client request event.
-     *
-     * @param type    event type
-     * @param sid     sequence ID
-     * @param payload event payload
-     * @return the object node representation
-     */
-    public static ObjectNode envelope(String type, long sid, ObjectNode payload) {
-        ObjectNode event = MAPPER.createObjectNode();
-        event.put("event", type);
-        if (sid > 0) {
-            event.put("sid", sid);
-        }
-        event.set("payload", payload);
-        return event;
+    private JsonUtils() {
     }
 
     /**
@@ -75,17 +56,6 @@ public final class JsonUtils {
     }
 
     /**
-     * Returns the sequence identifier from the specified event, or 0 (zero)
-     * if the "sid" property does not exist.
-     *
-     * @param event message event
-     * @return extracted sequence identifier
-     */
-    public static long sid(ObjectNode event) {
-        return number(event, "sid");
-    }
-
-    /**
      * Returns the payload from the specified event.
      *
      * @param event message event
@@ -98,7 +68,7 @@ public final class JsonUtils {
     /**
      * Returns the specified node property as a number.
      *
-     * @param node message event
+     * @param node object node
      * @param name property name
      * @return property as number
      */
@@ -109,7 +79,7 @@ public final class JsonUtils {
     /**
      * Returns the specified node property as a string.
      *
-     * @param node message event
+     * @param node object node
      * @param name property name
      * @return property as a string
      */
@@ -140,4 +110,14 @@ public final class JsonUtils {
         return (ObjectNode) node.path(name);
     }
 
+    /**
+     * Returns the specified node property as a boolean.
+     *
+     * @param node object node
+     * @param name property name
+     * @return property as a boolean
+     */
+    public static boolean bool(ObjectNode node, String name) {
+        return node.path(name).asBoolean();
+    }
 }

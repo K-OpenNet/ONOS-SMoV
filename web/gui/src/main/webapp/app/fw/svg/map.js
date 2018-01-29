@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,23 +35,31 @@
     'use strict';
 
     // injected references
-    var $log, $q, fs, gds;
+    var $log, $q, gds;
 
     // NOTE: This method assumes the datafile has exactly the map data
     //       that you want to load; for example id="*continental_us"
     //       mapping to ~/data/map/continental_us.topojson contains
     //       exactly the paths for the continental US.
 
-    function loadMapInto(mapLayer, id, opts) {
-        var promise = gds.fetchTopoData(id),
+    function loadMapInto(mapLayer, mapPath, id, opts) {
+        var promise = gds.fetchTopoData(mapPath),
             deferredProjection = $q.defer();
 
         if (!promise) {
-            $log.warn('Failed to load map: ' + id);
+            $log.warn('Failed to load map: ' + mapPath);
             return false;
         }
 
         promise.then(function () {
+
+            // NOTE: This finds the topo object within the topojson file
+            var topoObjects = promise.topodata.objects;
+
+                if (topoObjects.hasOwnProperty(id)) {
+                    opts.objectTag = id;
+                }
+
             var gen = gds.createPathGenerator(promise.topodata, opts);
 
             deferredProjection.resolve(gen.settings.projection);
@@ -79,7 +87,7 @@
     //     });
 
     function loadMapRegionInto(mapLayer, opts) {
-        var promise = gds.fetchTopoData("*countries"),
+        var promise = gds.fetchTopoData('*countries'),
             deferredProjection = $q.defer();
 
         if (!promise) {
@@ -97,7 +105,7 @@
                 country = features.filter(opts.countryFilter),
                 countryFeature = {
                     type: 'FeatureCollection',
-                    features: country
+                    features: country,
                 },
                 path = d3.geo.path().projection(proj);
 
@@ -118,35 +126,35 @@
 
     function reshade(sh) {
         var p = sh && sh.palette,
-            svg, paths, stroke, fill, bg;
+            paths, stroke, fill, bg,
+            svg = d3.select('#ov-topo').select('svg');
         if (sh) {
             stroke = p.outline;
             fill = sh.flip ? p.sea : p.land;
             bg = sh.flip ? p.land : p.sea;
 
-            svg = d3.select('#ov-topo').select('svg');
             paths = d3.select('#topo-map').selectAll('path');
-
             svg.style('background-color', bg);
             paths.attr({
                 stroke: stroke,
-                fill: fill
+                fill: fill,
             });
+        } else {
+            svg.style('background-color', null);
         }
     }
 
     angular.module('onosSvg')
-        .factory('MapService', ['$log', '$q', 'FnService', 'GeoDataService',
-        function (_$log_, _$q_, _fs_, _gds_) {
+        .factory('MapService', ['$log', '$q', 'GeoDataService',
+        function (_$log_, _$q_, _gds_) {
             $log = _$log_;
             $q = _$q_;
-            fs = _fs_;
             gds = _gds_;
 
             return {
                 loadMapRegionInto: loadMapRegionInto,
                 loadMapInto: loadMapInto,
-                reshade: reshade
+                reshade: reshade,
             };
         }]);
 

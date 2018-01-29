@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,6 +61,7 @@ public class AddHostToHostIntentCommand extends ConnectivityIntentCommand {
                 .treatment(treatment)
                 .constraints(constraints)
                 .priority(priority())
+                .resourceGroup(resourceGroup())
                 .build();
         service.submit(intent);
         print("Host to Host intent submitted:\n%s", intent.toString());

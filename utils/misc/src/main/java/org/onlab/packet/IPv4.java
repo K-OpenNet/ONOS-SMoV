@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-/**
- *
- */
 package org.onlab.packet;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
+
+import com.google.common.collect.ImmutableMap;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static org.onlab.packet.PacketUtils.*;
@@ -31,22 +29,21 @@ import static org.onlab.packet.PacketUtils.*;
 /**
  * Implements IPv4 packet format.
  */
-public class IPv4 extends BasePacket {
+public class IPv4 extends IP {
     public static final byte PROTOCOL_ICMP = 0x1;
     public static final byte PROTOCOL_IGMP = 0x2;
     public static final byte PROTOCOL_TCP = 0x6;
     public static final byte PROTOCOL_UDP = 0x11;
     public static final byte PROTOCOL_PIM = 0x67;
     public static final Map<Byte, Deserializer<? extends IPacket>> PROTOCOL_DESERIALIZER_MAP =
-            new HashMap<>();
+            ImmutableMap.<Byte, Deserializer<? extends IPacket>>builder()
+                .put(IPv4.PROTOCOL_ICMP, ICMP.deserializer())
+                .put(IPv4.PROTOCOL_IGMP, IGMP.deserializer())
+                .put(IPv4.PROTOCOL_TCP, TCP.deserializer())
+                .put(IPv4.PROTOCOL_UDP, UDP.deserializer())
+                .put(IPv4.PROTOCOL_PIM, PIM.deserializer())
+                .build();
 
-    static {
-        IPv4.PROTOCOL_DESERIALIZER_MAP.put(IPv4.PROTOCOL_ICMP, ICMP.deserializer());
-        IPv4.PROTOCOL_DESERIALIZER_MAP.put(IPv4.PROTOCOL_IGMP, IGMP.deserializer());
-        IPv4.PROTOCOL_DESERIALIZER_MAP.put(IPv4.PROTOCOL_TCP, TCP.deserializer());
-        IPv4.PROTOCOL_DESERIALIZER_MAP.put(IPv4.PROTOCOL_UDP, UDP.deserializer());
-        IPv4.PROTOCOL_DESERIALIZER_MAP.put(IPv4.PROTOCOL_PIM, PIM.deserializer());
-    }
 
     private static final byte DSCP_MASK = 0x3f;
     private static final byte DSCP_OFFSET = 2;
@@ -79,18 +76,12 @@ public class IPv4 extends BasePacket {
         this.isTruncated = false;
     }
 
-    /**
-     * @return the version
-     */
+    @Override
     public byte getVersion() {
         return this.version;
     }
 
-    /**
-     * @param version
-     *            the version to set
-     * @return this
-     */
+    @Override
     public IPv4 setVersion(final byte version) {
         this.version = version;
         return this;
@@ -421,55 +412,6 @@ s     */
         return data;
     }
 
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        short sscratch;
-
-        this.version = bb.get();
-        this.headerLength = (byte) (this.version & 0xf);
-        this.version = (byte) (this.version >> 4 & 0xf);
-        this.diffServ = bb.get();
-        this.totalLength = bb.getShort();
-        this.identification = bb.getShort();
-        sscratch = bb.getShort();
-        this.flags = (byte) (sscratch >> 13 & 0x7);
-        this.fragmentOffset = (short) (sscratch & 0x1fff);
-        this.ttl = bb.get();
-        this.protocol = bb.get();
-        this.checksum = bb.getShort();
-        this.sourceAddress = bb.getInt();
-        this.destinationAddress = bb.getInt();
-
-        if (this.headerLength > 5) {
-            final int optionsLength = (this.headerLength - 5) * 4;
-            this.options = new byte[optionsLength];
-            bb.get(this.options);
-        }
-
-        if (this.totalLength != length) {
-            this.isTruncated = true;
-        } else {
-            this.isTruncated = false;
-        }
-
-        Deserializer<? extends IPacket> deserializer;
-        if (IPv4.PROTOCOL_DESERIALIZER_MAP.containsKey(this.protocol)) {
-            deserializer = IPv4.PROTOCOL_DESERIALIZER_MAP.get(this.protocol);
-        } else {
-            deserializer = Data.deserializer();
-        }
-        try {
-            this.payload = deserializer.deserialize(data, bb.position(),
-                                                    bb.limit() - bb.position());
-            this.payload.setParent(this);
-        } catch (DeserializationException e) {
-            return this;
-        }
-
-        return this;
-    }
 
     /**
      * Accepts an IPv4 address of the form xxx.xxx.xxx.xxx, ie 192.168.0.1 and
@@ -520,7 +462,7 @@ s     */
      * @return string form of ip address
      */
     public static String fromIPv4Address(final int ipAddress) {
-        final StringBuffer sb = new StringBuffer();
+        final StringBuilder sb = new StringBuilder();
         int result = 0;
         for (int i = 0; i < 4; ++i) {
             result = ipAddress >> (3 - i) * 8 & 0xff;
@@ -546,7 +488,7 @@ s     */
         if (ipAddresses == null) {
             return "null";
         }
-        final StringBuffer sb = new StringBuffer();
+        final StringBuilder sb = new StringBuilder();
         sb.append("[");
         for (final Integer ip : ipAddresses) {
             sb.append(IPv4.fromIPv4Address(ip));
@@ -718,8 +660,12 @@ s     */
             } else {
                 deserializer = Data.deserializer();
             }
-            ipv4.payload = deserializer.deserialize(data, bb.position(),
-                                                    bb.limit() - bb.position());
+
+            int remainingLength = bb.limit() - bb.position();
+            int payloadLength = ipv4.totalLength - ipv4.headerLength * 4;
+            int bytesToRead = (payloadLength <= remainingLength) ?
+                    payloadLength : remainingLength;
+            ipv4.payload = deserializer.deserialize(data, bb.position(), bytesToRead);
             ipv4.payload.setParent(ipv4);
 
             if (ipv4.totalLength != length) {

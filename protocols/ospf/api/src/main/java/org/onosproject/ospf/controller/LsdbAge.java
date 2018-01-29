@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ public interface LsdbAge {
     /**
      * Gets LSA from bin, this method is used while processing ls refresh and max age on LSA.
      *
-     * @param binKey key to retreive the LSA from bin
+     * @param binKey key to retrieve the LSA from bin
      * @return lsaBin bin instance
      */
     public LsaBin getLsaBin(Integer binKey);
@@ -98,4 +98,11 @@ public interface LsdbAge {
      * @param lsaWrapper wrapper instance
      */
     public void removeLsaFromBin(LsaWrapper lsaWrapper);
+
+    /**
+     * Gets the age counter roll over.
+     *
+     * @return the age counter roll over
+     */
+    public int getAgeCounterRollOver();
 }

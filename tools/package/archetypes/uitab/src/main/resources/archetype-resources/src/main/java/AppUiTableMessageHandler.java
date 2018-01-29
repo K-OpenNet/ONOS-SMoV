@@ -2,7 +2,7 @@
 #set( $symbol_dollar = '$' )
 #set( $symbol_escape = '\' )
 /*
- * Copyright ${year} Open Networking Laboratory
+ * Copyright ${year}-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,7 +121,7 @@ public class AppUiTableMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String id = string(payload, ID, "(none)");
 
             // SomeService ss = get(SomeService.class);
@@ -147,7 +147,7 @@ public class AppUiTableMessageHandler extends UiMessageHandler {
                 data.put(COMMENT, "Some arbitrary comment");
             }
 
-            sendMessage(SAMPLE_TABLE_DETAIL_RESP, 0, rootNode);
+            sendMessage(SAMPLE_TABLE_DETAIL_RESP, rootNode);
         }
     }
 

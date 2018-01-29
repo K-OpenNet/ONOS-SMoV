@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,6 @@
  */
 
 /**
- * Proxy Arp  application that handles arp resolution for you.
+ * Application that handles ARP and NDP resolution on a single L2 broadcast domain.
  */
 package org.onosproject.proxyarp;

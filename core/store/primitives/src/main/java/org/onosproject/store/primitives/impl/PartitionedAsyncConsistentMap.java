@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,30 +18,31 @@ package org.onosproject.store.primitives.impl;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.onlab.util.Match;
 import org.onlab.util.Tools;
 import org.onosproject.cluster.PartitionId;
 import org.onosproject.store.primitives.MapUpdate;
 import org.onosproject.store.primitives.TransactionId;
 import org.onosproject.store.service.AsyncConsistentMap;
 import org.onosproject.store.service.MapEventListener;
-import org.onosproject.store.service.MapTransaction;
+import org.onosproject.store.service.TransactionLog;
+import org.onosproject.store.service.Version;
 import org.onosproject.store.service.Versioned;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 /**
  * {@link AsyncConsistentMap} that has its entries partitioned horizontally across
@@ -71,12 +72,9 @@ public class PartitionedAsyncConsistentMap<K, V> implements AsyncConsistentMap<K
 
     @Override
     public CompletableFuture<Integer> size() {
-        AtomicInteger totalSize = new AtomicInteger(0);
-        return CompletableFuture.allOf(getMaps()
-                                      .stream()
-                                      .map(map -> map.size().thenAccept(totalSize::addAndGet))
-                                      .toArray(CompletableFuture[]::new))
-                                .thenApply(v -> totalSize.get());
+        return Tools.allOf(getMaps().stream().map(m -> m.size()).collect(Collectors.toList()),
+                            Math::addExact,
+                            0);
     }
 
     @Override
@@ -91,16 +89,19 @@ public class PartitionedAsyncConsistentMap<K, V> implements AsyncConsistentMap<K
 
     @Override
     public CompletableFuture<Boolean> containsValue(V value) {
-        AtomicBoolean contains = new AtomicBoolean(false);
-        return CompletableFuture.allOf(getMaps().stream()
-                                                .map(map -> map.containsValue(value)
-                                                               .thenAccept(v -> contains.set(contains.get() || v)))
-                                                .toArray(CompletableFuture[]::new))
-                                .thenApply(v -> contains.get());
+        return Tools.firstOf(getMaps().stream().map(m -> m.containsValue(value)).collect(Collectors.toList()),
+                            Match.ifValue(true),
+                            false);
     }
+
     @Override
     public CompletableFuture<Versioned<V>> get(K key) {
         return getMap(key).get(key);
+    }
+
+    @Override
+    public CompletableFuture<Versioned<V>> getOrDefault(K key, V defaultValue) {
+        return getMap(key).getOrDefault(key, defaultValue);
     }
 
     @Override
@@ -134,29 +135,23 @@ public class PartitionedAsyncConsistentMap<K, V> implements AsyncConsistentMap<K
 
     @Override
     public CompletableFuture<Set<K>> keySet() {
-        Set<K> allKeys = Sets.newConcurrentHashSet();
-        return CompletableFuture.allOf(getMaps().stream()
-                                                .map(map -> map.keySet().thenAccept(allKeys::addAll))
-                                                .toArray(CompletableFuture[]::new))
-                                .thenApply(v -> allKeys);
+        return Tools.allOf(getMaps().stream().map(m -> m.keySet()).collect(Collectors.toList()),
+                    (s1, s2) -> ImmutableSet.<K>builder().addAll(s1).addAll(s2).build(),
+                    ImmutableSet.of());
     }
 
     @Override
     public CompletableFuture<Collection<Versioned<V>>> values() {
-        List<Versioned<V>> allValues = Lists.newCopyOnWriteArrayList();
-        return CompletableFuture.allOf(getMaps().stream()
-                                                .map(map -> map.values().thenAccept(allValues::addAll))
-                                                .toArray(CompletableFuture[]::new))
-                                .thenApply(v -> allValues);
+        return Tools.allOf(getMaps().stream().map(m -> m.values()).collect(Collectors.toList()),
+                    (c1, c2) -> ImmutableList.<Versioned<V>>builder().addAll(c1).addAll(c2).build(),
+                    ImmutableList.of());
     }
 
     @Override
     public CompletableFuture<Set<Entry<K, Versioned<V>>>> entrySet() {
-        Set<Entry<K, Versioned<V>>> allEntries = Sets.newConcurrentHashSet();
-        return CompletableFuture.allOf(getMaps().stream()
-                                                .map(map -> map.entrySet().thenAccept(allEntries::addAll))
-                                                .toArray(CompletableFuture[]::new))
-                                .thenApply(v -> allEntries);
+        return Tools.allOf(getMaps().stream().map(m -> m.entrySet()).collect(Collectors.toList()),
+                (s1, s2) -> ImmutableSet.<Entry<K, Versioned<V>>>builder().addAll(s1).addAll(s2).build(),
+                ImmutableSet.of());
     }
 
     @Override
@@ -190,9 +185,9 @@ public class PartitionedAsyncConsistentMap<K, V> implements AsyncConsistentMap<K
     }
 
     @Override
-    public CompletableFuture<Void> addListener(MapEventListener<K, V> listener) {
+    public CompletableFuture<Void> addListener(MapEventListener<K, V> listener, Executor executor) {
         return CompletableFuture.allOf(getMaps().stream()
-                                                .map(map -> map.addListener(listener))
+                                                .map(map -> map.addListener(listener, executor))
                                                 .toArray(CompletableFuture[]::new));
     }
 
@@ -204,36 +199,43 @@ public class PartitionedAsyncConsistentMap<K, V> implements AsyncConsistentMap<K
     }
 
     @Override
-    public CompletableFuture<Boolean> prepare(MapTransaction<K, V> transaction) {
+    public CompletableFuture<Version> begin(TransactionId transactionId) {
+        throw new UnsupportedOperationException();
+    }
 
-        Map<AsyncConsistentMap<K, V>, List<MapUpdate<K, V>>> updatesGroupedByMap = Maps.newIdentityHashMap();
-        transaction.updates().forEach(update -> {
-            AsyncConsistentMap<K, V> map = getMap(update.key());
-            updatesGroupedByMap.computeIfAbsent(map, k -> Lists.newLinkedList()).add(update);
-        });
-        Map<AsyncConsistentMap<K, V>, MapTransaction<K, V>> transactionsByMap =
-                Maps.transformValues(updatesGroupedByMap,
-                                     list -> new MapTransaction<>(transaction.transactionId(), list));
+    @Override
+    public CompletableFuture<Boolean> prepare(TransactionLog<MapUpdate<K, V>> transactionLog) {
+        throw new UnsupportedOperationException();
+    }
 
-        return Tools.allOf(transactionsByMap.entrySet()
-                         .stream()
-                         .map(e -> e.getKey().prepare(e.getValue()))
-                         .collect(Collectors.toList()))
-                    .thenApply(list -> list.stream().reduce(Boolean::logicalAnd).orElse(true));
+    @Override
+    public CompletableFuture<Boolean> prepareAndCommit(TransactionLog<MapUpdate<K, V>> transactionLog) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public CompletableFuture<Void> commit(TransactionId transactionId) {
-        return CompletableFuture.allOf(getMaps().stream()
-                                                .map(e -> e.commit(transactionId))
-                                                .toArray(CompletableFuture[]::new));
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public CompletableFuture<Void> rollback(TransactionId transactionId) {
-        return CompletableFuture.allOf(getMaps().stream()
-                .map(e -> e.rollback(transactionId))
-                .toArray(CompletableFuture[]::new));
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addStatusChangeListener(Consumer<Status> listener) {
+        partitions.values().forEach(map -> map.addStatusChangeListener(listener));
+    }
+
+    @Override
+    public void removeStatusChangeListener(Consumer<Status> listener) {
+        partitions.values().forEach(map -> map.removeStatusChangeListener(listener));
+    }
+
+    @Override
+    public Collection<Consumer<Status>> statusChangeListeners() {
+        throw new UnsupportedOperationException();
     }
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +20,53 @@
 (function () {
     'use strict';
 
-    var $log, fs;
+    // injected refs
+    var $log, ps;
 
+    // configuration
     var themes = ['light', 'dark'],
-        themeStr = themes.join(' '),
-        thidx,
-        listeners = {},
-        nextListenerId = 1;
+        themeStr = themes.join(' ');
+
+    // internal state
+    var listeners = [],
+        thidx;
+
+    // TODO: fine tune these colors
+    var spriteColors = {
+        gray1: {
+            fill: {
+                light: '#eeeeee',
+                dark: '#222222',
+            },
+            stroke: {
+                light: '#cccccc',
+                dark: '#333333',
+            },
+        },
+        gold1: {
+            fill: {
+                light: '#eeddaa',
+                dark: '#544714',
+            },
+            stroke: {
+                light: '#ffddaa',
+                dark: '#645724',
+            },
+        },
+        blue1: {
+            fill: {
+                light: '#a2b9ee',
+                dark: '#273059',
+            },
+            stroke: {
+                light: '#92a9de',
+                dark: '#273a63',
+            },
+        },
+    };
 
     function init() {
-        thidx = 0;
+        thidx = ps.getPrefs('theme', { idx: 0 }).idx;
         updateBodyClass();
     }
 
@@ -41,17 +78,24 @@
         var idx = themes.indexOf(t);
         if (idx > -1 && idx !== thidx) {
             thidx = idx;
-            updateBodyClass();
-            themeEvent('set');
+            ps.setPrefs('theme', { idx: thidx });
+            applyTheme();
         }
     }
 
     function toggleTheme() {
         var i = thidx + 1;
         thidx = (i===themes.length) ? 0 : i;
-        updateBodyClass();
-        themeEvent('toggle');
+        ps.setPrefs('theme', { idx: thidx });
+        applyTheme('toggle');
         return getTheme();
+    }
+
+    function applyTheme(evt) {
+        thidx = ps.getPrefs('theme', { idx: thidx }).idx;
+        $log.info('Applying theme:', thidx);
+        updateBodyClass();
+        themeEvent(evt || 'set');
     }
 
     function updateBodyClass() {
@@ -62,46 +106,39 @@
 
     function themeEvent(w) {
         var t = getTheme(),
-            m = 'Theme-Change-('+w+'): ' + t;
+            m = 'Theme-Change-(' + w + '): ' + t;
         $log.debug(m);
-        angular.forEach(listeners, function(value) {
-            value.cb(
-                {
-                    event: 'themeChange',
-                    value: t
-                }
-            );
+
+        listeners.forEach(function (lsnr) {
+            lsnr({ event: 'themeChange', value: t });
         });
     }
 
-    function addListener(callback) {
-        var id = nextListenerId++,
-            cb = fs.isF(callback),
-            o = { id: id, cb: cb };
-
-        if (cb) {
-            listeners[id] = o;
-        } else {
-            $log.error('ThemeService.addListener(): callback not a function');
-            o.error = 'No callback defined';
-        }
-        return o;
+    function addListener(lsnr) {
+        listeners.push(lsnr);
     }
 
     function removeListener(lsnr) {
-        var id = lsnr && lsnr.id,
-            o = listeners[id];
-        if (o) {
-            delete listeners[id];
-        }
+        listeners = listeners.filter(function (obj) { return obj !== lsnr; });
+    }
+
+    // color = logical color name
+    // what  = fill or stroke
+    function spriteColor(color, what) {
+        var c = color || 'none',
+            w = what || 'stroke',
+            t = getTheme();
+
+        return c === 'none' ? c : spriteColors[c][w][t];
     }
 
     angular.module('onosUtil')
-        .factory('ThemeService', ['$log', 'FnService',
-        function (_$log_, _fs_) {
+        .factory('ThemeService', ['$log', 'PrefsService',
+        function (_$log_, _ps_) {
             $log = _$log_;
-            fs = _fs_;
-            thidx = 0;
+            ps = _ps_;
+
+            ps.addListener(applyTheme);
 
             return {
                 init: init,
@@ -114,7 +151,8 @@
                 },
                 toggleTheme: toggleTheme,
                 addListener: addListener,
-                removeListener: removeListener
+                removeListener: removeListener,
+                spriteColor: spriteColor,
             };
     }]);
 

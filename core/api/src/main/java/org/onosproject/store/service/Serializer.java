@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,13 +44,37 @@ public interface Serializer {
     <T> T decode(byte[] bytes);
 
     /**
+     * Copies the specified object.
+     * @param object object to copy.
+     * @param <T> object type
+     * @return copied object
+     */
+    <T> T copy(T object);
+
+    /**
      * Creates a new Serializer instance from a KryoNamespace.
      *
      * @param kryo kryo namespace
      * @return Serializer instance
      */
     static Serializer using(KryoNamespace kryo) {
-        return using(Arrays.asList(kryo));
+        return new Serializer() {
+
+            @Override
+            public <T> byte[] encode(T object) {
+                return kryo.serialize(object);
+            }
+
+            @Override
+            public <T> T decode(byte[] bytes) {
+                return kryo.deserialize(bytes);
+            }
+
+            @Override
+            public <T> T copy(T object) {
+                return kryo.run(k -> k.copy(object));
+            }
+        };
     }
 
     /**
@@ -75,7 +99,6 @@ public interface Serializer {
         KryoNamespace.Builder builder = new KryoNamespace.Builder();
         namespaces.forEach(builder::register);
         Lists.newArrayList(classes).forEach(builder::register);
-        builder.register(MapEvent.class, MapEvent.Type.class, Versioned.class);
         KryoNamespace namespace = builder.build();
         return new Serializer() {
             @Override
@@ -86,6 +109,11 @@ public interface Serializer {
             @Override
             public <T> T decode(byte[] bytes) {
                 return namespace.deserialize(bytes);
+            }
+
+            @Override
+            public <T> T copy(T object) {
+                return namespace.run(kryo -> kryo.copy(object));
             }
         };
     }

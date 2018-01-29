@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,68 +23,5 @@ package org.onosproject.store.service;
  * It is expected that services and applications will leverage the primitives indirectly provided by
  * this service for their distributed state management and coordination.
  */
-public interface StorageService {
-
-    /**
-     * Creates a new EventuallyConsistentMapBuilder.
-     *
-     * @param <K> key type
-     * @param <V> value type
-     * @return builder for an eventually consistent map
-     */
-    <K, V> EventuallyConsistentMapBuilder<K, V> eventuallyConsistentMapBuilder();
-
-    /**
-     * Creates a new ConsistentMapBuilder.
-     *
-     * @param <K> key type
-     * @param <V> value type
-     * @return builder for a consistent map
-     */
-    <K, V> ConsistentMapBuilder<K, V> consistentMapBuilder();
-
-    /**
-     * Creates a new DistributedSetBuilder.
-     *
-     * @param <E> set element type
-     * @return builder for an distributed set
-     */
-    <E> DistributedSetBuilder<E> setBuilder();
-
-    /**
-     * Creates a new DistributedQueueBuilder.
-     *
-     * @param <E> queue entry type
-     * @return builder for an distributed queue
-     */
-    <E> DistributedQueueBuilder<E> queueBuilder();
-
-    /**
-     * Creates a new AtomicCounterBuilder.
-     *
-     * @return atomic counter builder
-     */
-    AtomicCounterBuilder atomicCounterBuilder();
-
-    /**
-     * Creates a new AtomicValueBuilder.
-     *
-     * @param <V> atomic value type
-     * @return atomic value builder
-     */
-    <V> AtomicValueBuilder<V> atomicValueBuilder();
-
-    /**
-     * Creates a new LeaderElectorBuilder.
-     *
-     * @return leader elector builder
-     */
-    LeaderElectorBuilder leaderElectorBuilder();
-
-    /**
-     * Creates a new transaction context builder.
-     *
-     * @return a builder for a transaction context.
-     */
-    TransactionContextBuilder transactionContextBuilder();
+public interface StorageService extends PrimitiveService {
 }

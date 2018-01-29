@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,19 +28,29 @@ import org.onosproject.net.flowobjective.FlowObjectiveStore;
 import org.onosproject.net.flowobjective.FlowObjectiveStoreDelegate;
 import org.onosproject.net.flowobjective.ObjectiveEvent;
 import org.onosproject.store.AbstractStore;
-import org.onosproject.store.service.AtomicCounter;
+import org.onosproject.store.service.AtomicIdGenerator;
 import org.onosproject.store.service.ConsistentMap;
+import org.onosproject.store.service.MapEvent;
+import org.onosproject.store.service.MapEventListener;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.Versioned;
 import org.slf4j.Logger;
 
+import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Manages the inventory of created next groups.
  */
-@Component(immediate = true, enabled = true)
+@Component(immediate = true)
 @Service
 public class DistributedFlowObjectiveStore
         extends AbstractStore<ObjectiveEvent, FlowObjectiveStoreDelegate>
@@ -53,37 +63,41 @@ public class DistributedFlowObjectiveStore
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
 
-    private AtomicCounter nextIds;
+    private AtomicIdGenerator nextIds;
+    private MapEventListener<Integer, byte[]> mapListener = new NextGroupListener();
+    // event queue to separate map-listener threads from event-handler threads (tpool)
+    private BlockingQueue<ObjectiveEvent> eventQ;
+    private ExecutorService tpool;
 
     @Activate
     public void activate() {
+        tpool = Executors.newFixedThreadPool(4, groupedThreads("onos/flobj-notifier", "%d", log));
+        eventQ = new LinkedBlockingQueue<ObjectiveEvent>();
+        tpool.execute(new FlowObjectiveNotifier());
         nextGroups = storageService.<Integer, byte[]>consistentMapBuilder()
-                .withName("flowobjective-groups")
+                .withName("onos-flowobjective-groups")
                 .withSerializer(Serializer.using(
                         new KryoNamespace.Builder()
                                 .register(byte[].class)
                                 .register(Versioned.class)
-                                .build()))
+                                .build("DistributedFlowObjectiveStore")))
                 .build();
-
-        nextIds = storageService.atomicCounterBuilder()
-                .withName("next-objective-counter")
-                .build()
-                .asAtomicCounter();
-
+        nextGroups.addListener(mapListener);
+        nextIds = storageService.getAtomicIdGenerator("next-objective-id-generator");
         log.info("Started");
     }
 
 
     @Deactivate
     public void deactivate() {
+        nextGroups.removeListener(mapListener);
+        tpool.shutdown();
         log.info("Stopped");
     }
 
     @Override
     public void putNextGroup(Integer nextId, NextGroup group) {
         nextGroups.put(nextId, group.data());
-        notifyDelegate(new ObjectiveEvent(ObjectiveEvent.Type.ADD, nextId));
     }
 
     @Override
@@ -99,14 +113,58 @@ public class DistributedFlowObjectiveStore
     public NextGroup removeNextGroup(Integer nextId) {
         Versioned<byte[]> versionGroup = nextGroups.remove(nextId);
         if (versionGroup != null) {
-            notifyDelegate(new ObjectiveEvent(ObjectiveEvent.Type.REMOVE, nextId));
             return new DefaultNextGroup(versionGroup.value());
         }
         return null;
     }
 
     @Override
-    public int allocateNextId() {
-        return (int) nextIds.incrementAndGet();
+    public Map<Integer, NextGroup> getAllGroups() {
+        Map<Integer, NextGroup> nextGroupMappings = new HashMap<>();
+        for (int key : nextGroups.keySet()) {
+            NextGroup nextGroup = getNextGroup(key);
+            if (nextGroup != null) {
+                nextGroupMappings.put(key, nextGroup);
+            }
+        }
+        return nextGroupMappings;
     }
+
+    @Override
+    public int allocateNextId() {
+        return (int) nextIds.nextId();
+    }
+
+    private class FlowObjectiveNotifier implements Runnable {
+        @Override
+        public void run() {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    notifyDelegate(eventQ.take());
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private class NextGroupListener implements MapEventListener<Integer, byte[]> {
+        @Override
+        public void event(MapEvent<Integer, byte[]> event) {
+            switch (event.type()) {
+            case INSERT:
+                eventQ.add(new ObjectiveEvent(ObjectiveEvent.Type.ADD, event.key()));
+                break;
+            case REMOVE:
+                eventQ.add(new ObjectiveEvent(ObjectiveEvent.Type.REMOVE, event.key()));
+                break;
+            case UPDATE:
+                // TODO Introduce UPDATE ObjectiveEvent when the map is being updated
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
 }

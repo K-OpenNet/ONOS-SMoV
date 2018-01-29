@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,5 +33,5 @@ public interface ConfigGetter extends HandlerBehaviour {
      * @param type the type of configuration to get (i.e. running).
      * @return string representation of the configuration or an error string.
      */
-    public String getConfiguration(String type);
+    String getConfiguration(String type);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package org.onosproject.net.flow;
 
+import com.google.common.annotations.Beta;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip6Address;
 import org.onlab.packet.IpPrefix;
@@ -26,6 +27,7 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.ExtensionSelector;
+import org.onosproject.net.flow.criteria.PiCriterion;
 
 import java.util.Set;
 
@@ -211,12 +213,30 @@ public interface TrafficSelector {
         Builder matchTcpSrc(TpPort tcpPort);
 
         /**
+         * Matches a TCP source port number with mask.
+         *
+         * @param tcpPort a TCP source port number
+         * @param mask a mask for a TCP source port number
+         * @return a selection builder
+         */
+        Builder matchTcpSrcMasked(TpPort tcpPort, TpPort mask);
+
+        /**
          * Matches a TCP destination port number.
          *
          * @param tcpPort a TCP destination port number
          * @return a selection builder
          */
         Builder matchTcpDst(TpPort tcpPort);
+
+        /**
+         * Matches a TCP destination port number with mask.
+         *
+         * @param tcpPort a TCP destination port number
+         * @param mask a mask for a TCP destination port number
+         * @return a selection builder
+         */
+        Builder matchTcpDstMasked(TpPort tcpPort, TpPort mask);
 
         /**
          * Matches an UDP source port number.
@@ -227,12 +247,30 @@ public interface TrafficSelector {
         Builder matchUdpSrc(TpPort udpPort);
 
         /**
+         * Matches a UDP source port number with mask.
+         *
+         * @param udpPort a UDP source port number
+         * @param mask a mask for a UDP source port number
+         * @return a selection builder
+         */
+        Builder matchUdpSrcMasked(TpPort udpPort, TpPort mask);
+
+        /**
          * Matches an UDP destination port number.
          *
          * @param udpPort an UDP destination port number
          * @return a selection builder
          */
         Builder matchUdpDst(TpPort udpPort);
+
+        /**
+         * Matches a UDP destination port number with mask.
+         *
+         * @param udpPort a UDP destination port number
+         * @param mask a mask for a UDP destination port number
+         * @return a selection builder
+         */
+        Builder matchUdpDstMasked(TpPort udpPort, TpPort mask);
 
         /**
          * Matches a SCTP source port number.
@@ -243,12 +281,30 @@ public interface TrafficSelector {
         Builder matchSctpSrc(TpPort sctpPort);
 
         /**
+         * Matches a SCTP source port number with mask.
+         *
+         * @param sctpPort a SCTP source port number
+         * @param mask a mask for a SCTP source port number
+         * @return a selection builder
+         */
+        Builder matchSctpSrcMasked(TpPort sctpPort, TpPort mask);
+
+        /**
          * Matches a SCTP destination port number.
          *
          * @param sctpPort a SCTP destination port number
          * @return a selection builder
          */
         Builder matchSctpDst(TpPort sctpPort);
+
+        /**
+         * Matches a SCTP destination port number with mask.
+         *
+         * @param sctpPort a SCTP destination port number
+         * @param mask a mask for a SCTP destination port number
+         * @return a selection builder
+         */
+        Builder matchSctpDstMasked(TpPort sctpPort, TpPort mask);
 
         /**
          * Matches an ICMP type.
@@ -401,6 +457,15 @@ public interface TrafficSelector {
          * @return a selection builder
          */
         Builder matchArpOp(int arpOp);
+
+        /**
+         * Matches protocol independent fields.
+         *
+         * @param piCriterion protocol-independent criterion
+         * @return a selection builder
+         */
+        @Beta
+        Builder matchPi(PiCriterion piCriterion);
 
         /**
          * Uses an extension selector.

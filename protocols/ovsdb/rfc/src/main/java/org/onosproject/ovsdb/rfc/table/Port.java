@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -238,7 +238,7 @@ public class Port extends AbstractOvsdbTableService {
      * attributes.
      * @param qos the column data which column name is "qos"
      */
-    public void setQos(Set<Uuid> qos) {
+    public void setQos(Uuid qos) {
         ColumnDescription columndesc = new ColumnDescription(
                                                              PortColumn.QOS
                                                                      .columnName(),

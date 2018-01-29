@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -18,53 +18,35 @@
           description="ONOS distributed primitives setup">
     <group name="Distributed-Primitives">
 
-        <!--<import file="${ONOS_SCENARIOS}/setup.xml"/>
-        <dependency name="Setup" requires="Prerequisites"/>-->
+        <import file="${ONOS_SCENARIOS}/dist-setup.xml"/>
+        <dependency name="Distributed-Primitives-Setup"/>
 
-        <step name="Distributed-App"
-              requires="Setup"
-              exec="onos ${OCI} app activate org.onosproject.distributedprimitives"/>
+        <group name="Distributed-Primitives-Internal" requires="Distributed-Primitives-Setup">
 
-        <step name="Test-Counter-Increment"
-              requires="Distributed-App"
-              exec="onos-execute-expect ${OCI} counter-test-increment fooCounter 5 --expect updated"/>
+            <import file="${ONOS_SCENARIOS}/dist-map.xml"/>
+            <dependency name="Distributed-Primitive-Map"/>
 
-        <step name="Test-Add"
-              requires="Distributed-App"
-              exec="onos-execute-expect ${OCI} set-test-add fooSet foo --expect added"/>
+            <import file="${ONOS_SCENARIOS}/dist-ec-map.xml"/>
+            <dependency name="Distributed-Primitive-Ec-Map"/>
 
-        <step name="Test-Get"
-              requires="Test-Add"
-              exec="onos-execute-expect ${OCI} set-test-get fooSet foo --expect contains"/>
+            <import file="${ONOS_SCENARIOS}/dist-value.xml"/>
+            <dependency name="Distributed-Primitive-Value"/>
 
-        <step name="Test-Remove"
-              requires="Test-Get"
-              exec="onos-execute-expect ${OCI} set-test-remove fooSet foo --expect removed"/>
+            <import file="${ONOS_SCENARIOS}/dist-counter.xml"/>
+            <dependency name="Distributed-Primitive-Counter"/>
 
-        <step name="Test-Add-Multiple"
-              requires="Test-Remove"
-              exec="onos-execute-expect ${OCI} set-test-add fooSet foo foo2 foo3 --expect added"/>
+            <import file="${ONOS_SCENARIOS}/dist-leader.xml"/>
+            <dependency name="Distributed-Primitive-Leader"/>
 
-        <step name="Test-Get-Multiple"
-              requires="Test-Add-Multiple"
-              exec="onos-execute-expect ${OCI} set-test-get fooSet foo foo2 foo3 --expect contains"/>
+            <import file="${ONOS_SCENARIOS}/dist-work-queue.xml"/>
+            <dependency name="Distributed-Primitive-WorkQueue"/>
 
-        <step name="Test-Remove-Multiple"
-              requires="Test-Get-Multiple"
-              exec="onos-execute-expect ${OCI} set-test-remove fooSet foo foo2 foo3 --expect removed"/>
+        </group>
 
-        <step name="Test-Map-Put"
-              requires="Distributed-App"
-              exec="onos-execute-expect ${OCI} transactional-map-test-put 1 foo --expect Created"/>
+        <import file="${ONOS_SCENARIOS}/dist-teardown.xml"/>
+        <dependency name="Distributed-Primitives-Teardown" requires="Distributed-Primitives-Internal"/>
 
-        <step name="Test-Map-Get"
-              requires="Test-Map-Put"
-              exec="onos-execute-expect ${OCI} transactional-map-test-get Key1 --expect Key-value"/>
-
-        <!--Check with check logs-->
-        <step name="Check-Distributed-Exceptions"
-              exec="onos-check-logs ${OCI}"
-              requires="Test-Map-Get"/>
     </group>
+
 </scenario>
 

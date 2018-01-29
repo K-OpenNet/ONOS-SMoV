@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ package org.onosproject.net.flow.criteria;
  */
 public interface Criterion {
 
-    static final String SEPARATOR = ":";
+    String SEPARATOR = ":";
 
     /**
      * Types of fields to which the selection criterion may apply.
@@ -90,20 +90,38 @@ public interface Criterion {
         /** TCP source port. */
         TCP_SRC,
 
+        /** TCP source port with masking. */
+        TCP_SRC_MASKED,
+
         /** TCP destination port. */
         TCP_DST,
+
+        /** TCP destination port with masking. */
+        TCP_DST_MASKED,
 
         /** UDP source port. */
         UDP_SRC,
 
+        /** UDP source port with masking. */
+        UDP_SRC_MASKED,
+
         /** UDP destination port. */
         UDP_DST,
+
+        /** UDP destination port with masking. */
+        UDP_DST_MASKED,
 
         /** SCTP source port. */
         SCTP_SRC,
 
+        /** SCTP source port with masking. */
+        SCTP_SRC_MASKED,
+
         /** SCTP destination port. */
         SCTP_DST,
+
+        /** SCTP destination port with masking. */
+        SCTP_DST_MASKED,
 
         /** ICMP type. */
         ICMPV4_TYPE,
@@ -198,6 +216,9 @@ public interface Criterion {
 
         /** ODU (Optical channel Data Unit) signal type. */
         ODU_SIGTYPE,
+
+        /** Protocol-independent. */
+        PROTOCOL_INDEPENDENT,
 
         /** Extension criterion. */
         EXTENSION,

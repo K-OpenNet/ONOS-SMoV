@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import org.onosproject.rest.AbstractInjectionResource;
 import org.onosproject.ui.UiExtension;
 import org.onosproject.ui.UiExtensionService;
 import org.onosproject.ui.UiView;
+import org.onosproject.ui.lion.LionBundle;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -53,6 +54,8 @@ public class MainNavResource extends AbstractInjectionResource {
             "<div class=\"nav-hdr\">%s</div>%n";
     private static final String NAV_FORMAT =
             "<a ng-click=\"navCtrl.hideNav()\" href=\"#/%s\">%s %s</a>%n";
+    private static final String ICON_FORMAT =
+            "<div icon icon-id=\"%s\"></div>";
 
     private static final String BLANK_GLYPH = "unknown";
 
@@ -79,6 +82,7 @@ public class MainNavResource extends AbstractInjectionResource {
     // Produces an input stream of nav item injections from all extensions.
     private InputStream includeNavItems(UiExtensionService service) {
         List<UiExtension> extensions = service.getExtensions();
+        LionBundle navLion = service.getNavLionBundle();
         StringBuilder sb = new StringBuilder("\n");
 
         for (UiView.Category cat : UiView.Category.values()) {
@@ -88,7 +92,7 @@ public class MainNavResource extends AbstractInjectionResource {
 
             List<UiView> catViews = getViewsForCat(extensions, cat);
             if (!catViews.isEmpty()) {
-                addCatHeader(sb, cat);
+                addCatHeader(sb, cat, navLion);
                 addCatItems(sb, catViews);
             }
         }
@@ -107,8 +111,10 @@ public class MainNavResource extends AbstractInjectionResource {
         return views;
     }
 
-    private void addCatHeader(StringBuilder sb, UiView.Category cat) {
-        sb.append(String.format(HDR_FORMAT, cat.label()));
+    private void addCatHeader(StringBuilder sb, UiView.Category cat,
+                              LionBundle navLion) {
+        String key = "cat_" + cat.name().toLowerCase();
+        sb.append(String.format(HDR_FORMAT, navLion.getValue(key)));
     }
 
     private void addCatItems(StringBuilder sb, List<UiView> catViews) {
@@ -119,6 +125,6 @@ public class MainNavResource extends AbstractInjectionResource {
 
     private String icon(UiView view) {
         String gid = view.iconId() == null ? BLANK_GLYPH : view.iconId();
-        return "<div icon icon-id=\"" + gid + "\"></div>";
+        return String.format(ICON_FORMAT, gid);
     }
 }

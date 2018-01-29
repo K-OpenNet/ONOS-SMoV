@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,11 @@ public final class Ip4Address extends IpAddress {
     public static final IpAddress.Version VERSION = IpAddress.Version.INET;
     public static final int BYTE_LENGTH = IpAddress.INET_BYTE_LENGTH;
     public static final int BIT_LENGTH = IpAddress.INET_BIT_LENGTH;
+
+    /**
+     * All-zero unspecified IPv4 address.
+     */
+    public static final Ip4Address ZERO = Ip4Address.valueOf("0.0.0.0");
 
     /**
      * Constructor for given IP address version and address octets.

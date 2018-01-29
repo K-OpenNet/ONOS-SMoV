@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,4 @@ public final class GossipDeviceStoreMessageSubjects {
     // to be used with 3-way anti-entropy process
     public static final MessageSubject DEVICE_REQUEST = new MessageSubject("peer-device-request");
 
-    // Network elements injected (not discovered) by ConfigProvider
-    public static final MessageSubject DEVICE_INJECTED = new MessageSubject("peer-device-injected");
-    public static final MessageSubject PORT_INJECTED = new MessageSubject("peer-port-injected");
 }

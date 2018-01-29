@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import org.onlab.packet.Ethernet;
 import org.onlab.packet.ICMP;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.IpAddress;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
@@ -74,7 +74,7 @@ public class IcmpHandler {
             return;
         }
 
-        for (InterfaceIpAddress interfaceIpAddress: targetInterface.ipAddresses()) {
+        for (InterfaceIpAddress interfaceIpAddress: targetInterface.ipAddressesList()) {
             if (interfaceIpAddress.ipAddress().equals(destIpAddress)) {
                 ipMatches = true;
                 break;

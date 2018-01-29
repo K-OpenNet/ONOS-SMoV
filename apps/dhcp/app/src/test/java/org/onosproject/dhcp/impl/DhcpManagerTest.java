@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,19 +20,20 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.packet.DHCP;
-import org.onlab.packet.DHCPOption;
-import org.onlab.packet.DHCPPacketType;
+import org.onlab.packet.dhcp.DhcpOption;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.UDP;
+import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.core.CoreServiceAdapter;
 import org.onosproject.dhcp.DhcpStore;
 import org.onosproject.dhcp.IpAssignment;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostId;
+import org.onosproject.net.HostLocation;
 import org.onosproject.net.config.NetworkConfigRegistryAdapter;
 import org.onosproject.net.host.HostDescription;
 import org.onosproject.net.host.HostProvider;
@@ -93,6 +94,7 @@ public class DhcpManagerTest {
         hostProviderService = new TestHostProviderService(new TestHostProvider());
         dhcpXManager.hostProviderService = hostProviderService;
         dhcpXManager.hostProviderRegistry = new TestHostRegistry();
+        dhcpXManager.componentConfigService = new TestComponentConfig();
         dhcpXManager.activate();
     }
 
@@ -106,7 +108,7 @@ public class DhcpManagerTest {
      */
     @Test
     public void testDiscover() {
-        Ethernet reply = constructDhcpPacket(DHCPPacketType.DHCPDISCOVER);
+        Ethernet reply = constructDhcpPacket(DHCP.MsgType.DHCPDISCOVER);
         sendPacket(reply);
     }
 
@@ -115,7 +117,7 @@ public class DhcpManagerTest {
      */
     @Test
     public void testRequest() {
-        Ethernet reply = constructDhcpPacket(DHCPPacketType.DHCPREQUEST);
+        Ethernet reply = constructDhcpPacket(DHCP.MsgType.DHCPREQUEST);
         sendPacket(reply);
     }
 
@@ -138,7 +140,7 @@ public class DhcpManagerTest {
      * @param packetType DHCP Message Type
      * @return Ethernet packet
      */
-    private Ethernet constructDhcpPacket(DHCPPacketType packetType) {
+    private Ethernet constructDhcpPacket(DHCP.MsgType packetType) {
 
         // Ethernet Frame.
         Ethernet ethReply = new Ethernet();
@@ -171,8 +173,8 @@ public class DhcpManagerTest {
         dhcpReply.setHardwareAddressLength((byte) 6);
 
         // DHCP Options.
-        DHCPOption option = new DHCPOption();
-        List<DHCPOption> optionList = new ArrayList<>();
+        DhcpOption option = new DhcpOption();
+        List<DhcpOption> optionList = new ArrayList<>();
 
         // DHCP Message Type.
         option.setCode(DHCP.DHCPOptionCode.OptionCode_MessageType.getValue());
@@ -182,7 +184,7 @@ public class DhcpManagerTest {
         optionList.add(option);
 
         // DHCP Requested IP.
-        option = new DHCPOption();
+        option = new DhcpOption();
         option.setCode(DHCP.DHCPOptionCode.OptionCode_RequestedIP.getValue());
         option.setLength((byte) 4);
         optionData = Ip4Address.valueOf(EXPECTED_IP).toOctets();
@@ -190,7 +192,7 @@ public class DhcpManagerTest {
         optionList.add(option);
 
         // End Option.
-        option = new DHCPOption();
+        option = new DhcpOption();
         option.setCode(DHCP.DHCPOptionCode.OptionCode_END.getValue());
         option.setLength((byte) 1);
         optionList.add(option);
@@ -228,8 +230,7 @@ public class DhcpManagerTest {
             return Ip4Address.valueOf(EXPECTED_IP);
         }
 
-        public boolean assignIP(HostId hostId, Ip4Address ipAddr, int leaseTime, boolean fromOpenStack,
-                                List<Ip4Address> addressList) {
+        public boolean assignIP(HostId hostId, IpAssignment ipAssignment) {
             return true;
         }
 
@@ -256,8 +257,7 @@ public class DhcpManagerTest {
             return map;
         }
 
-        public boolean assignStaticIP(MacAddress macID, Ip4Address ipAddr, boolean fromOpenStack,
-                                      List<Ip4Address> addressList) {
+        public boolean assignStaticIP(MacAddress macID, IpAssignment ipAssignment) {
             return true;
         }
 
@@ -327,6 +327,13 @@ public class DhcpManagerTest {
     }
 
     /**
+     * Mocks the ComponentConfigRegistry.
+     */
+    private class TestComponentConfig extends ComponentConfigAdapter {
+
+    }
+
+    /**
      * Mocks the HostProviderService.
      */
     private class TestHostProviderService extends AbstractProviderService<HostProvider>
@@ -350,6 +357,10 @@ public class DhcpManagerTest {
 
         }
 
+        @Override
+        public void removeLocationFromHost(HostId hostId, HostLocation location) {
+
+        }
     }
 
     /**

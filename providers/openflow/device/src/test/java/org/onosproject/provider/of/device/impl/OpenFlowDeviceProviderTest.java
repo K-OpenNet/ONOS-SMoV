@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,16 +34,19 @@ import org.onosproject.net.device.DeviceProviderRegistry;
 import org.onosproject.net.device.DeviceProviderService;
 import org.onosproject.net.device.PortDescription;
 import org.onosproject.net.device.PortStatistics;
+import org.onosproject.net.driver.DriverServiceAdapter;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.openflow.controller.Dpid;
 import org.onosproject.openflow.controller.OpenFlowController;
 import org.onosproject.openflow.controller.OpenFlowEventListener;
+import org.onosproject.openflow.controller.OpenFlowMessageListener;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.OpenFlowSwitchListener;
 import org.onosproject.openflow.controller.PacketListener;
 import org.onosproject.openflow.controller.RoleState;
 import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMeterFeatures;
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.protocol.OFPortReason;
 import org.projectfloodlight.openflow.protocol.OFPortStatus;
@@ -57,6 +60,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.Assert.*;
 import static org.onosproject.net.Device.Type.SWITCH;
@@ -88,6 +92,7 @@ public class OpenFlowDeviceProviderTest {
         provider.providerRegistry = registry;
         provider.controller = controller;
         provider.cfgService = new ComponentConfigAdapter();
+        provider.driverService = new DriverServiceAdapter();
         controller.switchMap.put(DPID1, SW1);
         provider.activate(null);
         assertNotNull("provider should be registered", registry.provider);
@@ -234,7 +239,6 @@ public class OpenFlowDeviceProviderTest {
             public void updatePortStatistics(DeviceId deviceId, Collection<PortStatistics> portStatistics) {
 
             }
-
         }
     }
 
@@ -275,10 +279,6 @@ public class OpenFlowDeviceProviderTest {
         }
 
         @Override
-        public void monitorAllEvents(boolean monitor) {
-        }
-
-        @Override
         public void addListener(OpenFlowSwitchListener listener) {
             this.listener = listener;
         }
@@ -286,6 +286,16 @@ public class OpenFlowDeviceProviderTest {
         @Override
         public void removeListener(OpenFlowSwitchListener listener) {
             this.listener = null;
+        }
+
+        @Override
+        public void addMessageListener(OpenFlowMessageListener listener) {
+
+        }
+
+        @Override
+        public void removeMessageListener(OpenFlowMessageListener listener) {
+
         }
 
         @Override
@@ -306,6 +316,11 @@ public class OpenFlowDeviceProviderTest {
 
         @Override
         public void write(Dpid dpid, OFMessage msg) {
+        }
+
+        @Override
+        public CompletableFuture<OFMessage> writeResponse(Dpid dpid, OFMessage msg) {
+            return null;
         }
 
         @Override
@@ -351,6 +366,11 @@ public class OpenFlowDeviceProviderTest {
         @Override
         public List<OFPortDesc> getPorts() {
             return PLIST;
+        }
+
+        @Override
+        public OFMeterFeatures getMeterFeatures() {
+            return null;
         }
 
         @Override
@@ -414,14 +434,6 @@ public class OpenFlowDeviceProviderTest {
         @Override
         public String channelId() {
             return "1.2.3.4:1";
-        }
-
-        @Override
-        public void addEventListener(OpenFlowEventListener listener) {
-        }
-
-        @Override
-        public void removeEventListener(OpenFlowEventListener listener) {
         }
 
     }

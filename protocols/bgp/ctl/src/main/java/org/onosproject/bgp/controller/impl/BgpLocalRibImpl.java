@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -14,11 +14,14 @@
 package org.onosproject.bgp.controller.impl;
 
 import com.google.common.base.MoreObjects;
+
 import org.onosproject.bgp.controller.BgpController;
 import org.onosproject.bgp.controller.BgpId;
+import org.onosproject.bgp.controller.BgpLinkListener;
 import org.onosproject.bgp.controller.BgpLocalRib;
 import org.onosproject.bgp.controller.BgpNodeListener;
 import org.onosproject.bgp.controller.BgpSessionInfo;
+import org.onosproject.bgpio.exceptions.BgpParseException;
 import org.onosproject.bgpio.protocol.BgpLSNlri;
 import org.onosproject.bgpio.protocol.linkstate.BgpLinkLSIdentifier;
 import org.onosproject.bgpio.protocol.linkstate.BgpLinkLsNlriVer4;
@@ -66,6 +69,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return node tree
      */
+    @Override
     public Map<BgpNodeLSIdentifier, PathAttrNlriDetailsLocalRib> nodeTree() {
         return nodeTree;
     }
@@ -75,6 +79,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return link tree
      */
+    @Override
     public Map<BgpLinkLSIdentifier, PathAttrNlriDetailsLocalRib> linkTree() {
         return linkTree;
     }
@@ -84,6 +89,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return prefix tree
      */
+    @Override
     public Map<BgpPrefixLSIdentifier, PathAttrNlriDetailsLocalRib> prefixTree() {
         return prefixTree;
     }
@@ -93,6 +99,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return vpn node NLRI tree
      */
+    @Override
     public Map<RouteDistinguisher, Map<BgpNodeLSIdentifier, PathAttrNlriDetailsLocalRib>> vpnNodeTree() {
         return vpnNodeTree;
     }
@@ -102,6 +109,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return vpn link NLRI Tree
      */
+    @Override
     public Map<RouteDistinguisher, Map<BgpLinkLSIdentifier, PathAttrNlriDetailsLocalRib>> vpnLinkTree() {
         return vpnLinkTree;
     }
@@ -111,12 +119,13 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @return vpn prefix NLRI Tree
      */
+    @Override
     public Map<RouteDistinguisher, Map<BgpPrefixLSIdentifier, PathAttrNlriDetailsLocalRib>> vpnPrefixTree() {
         return vpnPrefixTree;
     }
 
     @Override
-    public void add(BgpSessionInfo sessionInfo, BgpLSNlri nlri, PathAttrNlriDetails details) {
+    public void add(BgpSessionInfo sessionInfo, BgpLSNlri nlri, PathAttrNlriDetails details) throws BgpParseException {
         int decisionResult;
 
         log.debug("Add to local RIB {}", details.toString());
@@ -132,14 +141,17 @@ public class BgpLocalRibImpl implements BgpLocalRib {
                 BgpSelectionAlgo selectionAlgo = new BgpSelectionAlgo();
                 // Compare local RIB entry with the current attribute
                 decisionResult = selectionAlgo.compare(nodeTree.get(nodeLsIdentifier), detailsLocRib);
-                if (decisionResult < 0) {
+                if (decisionResult <= 0) {
+                    for (BgpNodeListener l : bgpController.listener()) {
+                        l.addNode((BgpNodeLSNlriVer4) nlri, details);
+                    }
                     nodeTree.replace(nodeLsIdentifier, detailsLocRib);
                     log.debug("Local RIB update node: {}", detailsLocRib.toString());
                 }
             } else {
                 nodeTree.put(nodeLsIdentifier, detailsLocRib);
                 for (BgpNodeListener l : bgpController.listener()) {
-                    l.addNode((BgpNodeLSNlriVer4) nlri);
+                    l.addNode((BgpNodeLSNlriVer4) nlri, details);
                 }
                 log.debug("Local RIB ad node: {}", detailsLocRib.toString());
             }
@@ -149,12 +161,18 @@ public class BgpLocalRibImpl implements BgpLocalRib {
                 BgpSelectionAlgo selectionAlgo = new BgpSelectionAlgo();
                 // Compare local RIB entry with the current attribute
                 decisionResult = selectionAlgo.compare(linkTree.get(linkLsIdentifier), detailsLocRib);
-                if (decisionResult < 0) {
+                if (decisionResult <= 0) {
                     linkTree.replace(linkLsIdentifier, detailsLocRib);
+                    for (BgpLinkListener l : bgpController.linkListener()) {
+                        l.addLink((BgpLinkLsNlriVer4) nlri, details);
+                    }
                     log.debug("Local RIB update link: {}", detailsLocRib.toString());
                 }
             } else {
                 linkTree.put(linkLsIdentifier, detailsLocRib);
+                for (BgpLinkListener l : bgpController.linkListener()) {
+                    l.addLink((BgpLinkLsNlriVer4) nlri, details);
+                }
                 log.debug("Local RIB add link: {}", detailsLocRib.toString());
             }
         } else if (nlri instanceof BgpPrefixIPv4LSNlriVer4) {
@@ -163,7 +181,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
                 BgpSelectionAlgo selectionAlgo = new BgpSelectionAlgo();
                 // Compare local RIB entry with the current attribute
                 decisionResult = selectionAlgo.compare(prefixTree.get(prefixIdentifier), detailsLocRib);
-                if (decisionResult < 0) {
+                if (decisionResult <= 0) {
                     prefixTree.replace(prefixIdentifier, detailsLocRib);
                     log.debug("Local RIB update prefix: {}", detailsLocRib.toString());
                 }
@@ -175,7 +193,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
     }
 
     @Override
-    public void delete(BgpLSNlri nlri) {
+    public void delete(BgpLSNlri nlri) throws BgpParseException {
         log.debug("Delete from local RIB.");
 
         // Update local RIB
@@ -186,8 +204,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      * Update local RIB based on selection algorithm.
      *
      * @param nlri NLRI to update
+     * @throws BgpParseException while updating to local RIB
      */
-    public void decisionProcess(BgpLSNlri nlri) {
+    public void decisionProcess(BgpLSNlri nlri) throws BgpParseException {
         checkNotNull(nlri);
         if (nlri instanceof BgpNodeLSNlriVer4) {
             selectionProcessNode(nlri, false);
@@ -203,8 +222,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @param nlri NLRI to update
      * @param routeDistinguisher VPN id to update
+     * @throws BgpParseException BGP parse exception
      */
-    public void decisionProcess(BgpLSNlri nlri, RouteDistinguisher routeDistinguisher) {
+    public void decisionProcess(BgpLSNlri nlri, RouteDistinguisher routeDistinguisher) throws BgpParseException {
         checkNotNull(nlri);
         if (nlri instanceof BgpNodeLSNlriVer4) {
             if (vpnNodeTree.containsKey(routeDistinguisher)) {
@@ -235,8 +255,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @param nlri NLRI to update
      * @param isVpnRib true if VPN  local RIB, otherwise false
+     * @throws BgpParseException throws BGP parse exception
      */
-    public void selectionProcessNode(BgpLSNlri nlri, boolean isVpnRib) {
+    public void selectionProcessNode(BgpLSNlri nlri, boolean isVpnRib) throws BgpParseException {
         BgpPeerImpl peer;
         BgpSessionInfo sessionInfo;
         int decisionResult;
@@ -298,8 +319,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @param nlri NLRI to update
      * @param isVpnRib true if VPN local RIB, otherwise false
+     * @throws BgpParseException BGP parse exception
      */
-    public void selectionProcessLink(BgpLSNlri nlri, boolean isVpnRib) {
+    public void selectionProcessLink(BgpLSNlri nlri, boolean isVpnRib) throws BgpParseException {
         BgpPeerImpl peer;
         BgpSessionInfo sessionInfo;
         int decisionResult;
@@ -309,6 +331,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
 
         if (linkTree.containsKey(linkLsIdentifier)) {
             log.debug("Local RIB remove link: {}", linkLsIdentifier.toString());
+            for (BgpLinkListener l : bgpController.linkListener()) {
+                l.deleteLink((BgpLinkLsNlriVer4) nlri);
+            }
             linkTree.remove(linkLsIdentifier);
         }
 
@@ -361,8 +386,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      *
      * @param nlri NLRI to update
      * @param isVpnRib true if VPN local RIB, otherwise false
+     * @throws BgpParseException BGP parse exception
      */
-    public void selectionProcessPrefix(BgpLSNlri nlri, boolean isVpnRib) {
+    public void selectionProcessPrefix(BgpLSNlri nlri, boolean isVpnRib) throws BgpParseException {
         BgpPeerImpl peer;
         BgpSessionInfo sessionInfo;
         int decisionResult;
@@ -401,7 +427,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
                 decisionResult = selectionAlgo.compare(prefixTree.get(prefixIdentifier), detailsLocRib);
                 if (decisionResult < 0) {
                     prefixTree.replace(prefixIdentifier, detailsLocRib);
-                    log.debug("local RIB prefix updated: {}", detailsLocRib.toString());
+                    log.debug("Local RIB prefix updated: {}", detailsLocRib.toString());
                 }
             } else {
                     if (!isVpnRib) {
@@ -419,7 +445,7 @@ public class BgpLocalRibImpl implements BgpLocalRib {
 
     @Override
     public void add(BgpSessionInfo sessionInfo, BgpLSNlri nlri, PathAttrNlriDetails details,
-                    RouteDistinguisher routeDistinguisher) {
+                    RouteDistinguisher routeDistinguisher) throws BgpParseException {
         add(sessionInfo, nlri, details);
         if (nlri instanceof BgpNodeLSNlriVer4) {
             if (!vpnNodeTree.containsKey(routeDistinguisher)) {
@@ -437,17 +463,18 @@ public class BgpLocalRibImpl implements BgpLocalRib {
     }
 
     @Override
-    public void delete(BgpLSNlri nlri, RouteDistinguisher routeDistinguisher) {
+    public void delete(BgpLSNlri nlri, RouteDistinguisher routeDistinguisher) throws BgpParseException {
         // Update local RIB
         decisionProcess(nlri, routeDistinguisher);
     }
 
     /**
-     * Update local RIB node based on avaliable peer adjacency RIB.
+     * Update local RIB node based on available peer adjacency RIB.
      *
      * @param o adjacency-in/VPN adjacency-in
+     * @throws BgpParseException BGP parse exception
      */
-    public void localRibUpdateNode(Object o) {
+    public void localRibUpdateNode(Object o) throws BgpParseException {
 
         if (o instanceof AdjRibIn) {
             AdjRibIn adjRib = (AdjRibIn) o;
@@ -484,11 +511,12 @@ public class BgpLocalRibImpl implements BgpLocalRib {
     }
 
     /**
-     * Update localRIB link based on avaliable peer adjacency RIB.
+     * Update localRIB link based on available peer adjacency RIB.
      *
      * @param o adjacency-in/VPN adjacency-in
+     * @throws BgpParseException BGP parse exceptions
      */
-    public void localRibUpdateLink(Object o) {
+    public void localRibUpdateLink(Object o) throws BgpParseException {
 
         if (o instanceof AdjRibIn) {
             AdjRibIn adjRib = (AdjRibIn) o;
@@ -525,11 +553,12 @@ public class BgpLocalRibImpl implements BgpLocalRib {
     }
 
     /**
-     * Update localRIB prefix based on avaliable peer adjacency RIB.
+     * Update localRIB prefix based on available peer adjacency RIB.
      *
      * @param o instance of adjacency-in/VPN adjacency-in
+     * @throws BgpParseException BGP parse exception
      */
-    public void localRibUpdatePrefix(Object o) {
+    public void localRibUpdatePrefix(Object o) throws BgpParseException {
 
         if (o instanceof AdjRibIn) {
             AdjRibIn adjRib = (AdjRibIn) o;
@@ -572,8 +601,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      * Update localRIB.
      *
      * @param adjRibIn adjacency RIB-in
+     * @throws BgpParseException BGP parse exception
      */
-    public void localRibUpdate(AdjRibIn adjRibIn) {
+    public void localRibUpdate(AdjRibIn adjRibIn) throws BgpParseException {
         log.debug("Update local RIB.");
 
         localRibUpdateNode(adjRibIn);
@@ -585,8 +615,9 @@ public class BgpLocalRibImpl implements BgpLocalRib {
      * Update localRIB.
      *
      * @param vpnAdjRibIn VPN adjacency RIB-in
+     * @throws BgpParseException BGP parse exception
      */
-    public void localRibUpdate(VpnAdjRibIn vpnAdjRibIn) {
+    public void localRibUpdate(VpnAdjRibIn vpnAdjRibIn) throws BgpParseException {
         log.debug("Update VPN local RIB.");
 
         localRibUpdateNode(vpnAdjRibIn);

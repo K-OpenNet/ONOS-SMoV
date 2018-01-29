@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,38 +19,30 @@ import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpAddress;
+import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
+import org.onosproject.net.neighbour.NeighbourMessageContext;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.Host;
-import org.onosproject.net.PortNumber;
-import org.onosproject.net.flow.DefaultTrafficTreatment;
-import org.onosproject.net.flow.TrafficTreatment;
-import org.onosproject.net.packet.DefaultOutboundPacket;
-import org.onosproject.net.packet.InboundPacket;
-import org.onosproject.net.HostId;
-import org.onosproject.net.packet.OutboundPacket;
+import org.onosproject.net.host.HostService;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
+import org.onosproject.segmentrouting.config.SegmentRoutingAppConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.onosproject.net.neighbour.NeighbourMessageType.REQUEST;
 
 /**
  * Handler of ARP packets that responses or forwards ARP packets that
  * are sent to the controller.
  */
-public class ArpHandler {
+public class ArpHandler extends SegmentRoutingNeighbourHandler {
 
     private static Logger log = LoggerFactory.getLogger(ArpHandler.class);
-
-    private SegmentRoutingManager srManager;
-    private DeviceConfiguration config;
 
     /**
      * Creates an ArpHandler object.
@@ -58,8 +50,7 @@ public class ArpHandler {
      * @param srManager SegmentRoutingManager object
      */
     public ArpHandler(SegmentRoutingManager srManager) {
-        this.srManager = srManager;
-        this.config = checkNotNull(srManager.deviceConfiguration);
+        super(srManager);
     }
 
     /**
@@ -80,86 +71,109 @@ public class ArpHandler {
      * packet in.
      * We can deal with both cases.
      *
-     * @param pkt incoming packet
+     * @param pkt incoming ARP packet and context information
+     * @param hostService the host service
      */
-    public void processPacketIn(InboundPacket pkt) {
+    public void processPacketIn(NeighbourMessageContext pkt, HostService hostService) {
 
-        Ethernet ethernet = pkt.parsed();
-        ARP arp = (ARP) ethernet.getPayload();
+        SegmentRoutingAppConfig appConfig = srManager.cfgService
+                .getConfig(srManager.appId, SegmentRoutingAppConfig.class);
+        if (appConfig != null && appConfig.suppressSubnet().contains(pkt.inPort())) {
+            // Ignore ARP packets come from suppressed ports
+            pkt.drop();
+            return;
+        }
 
-        ConnectPoint connectPoint = pkt.receivedFrom();
-        PortNumber inPort = connectPoint.port();
-        DeviceId deviceId = connectPoint.deviceId();
-        byte[] senderMacAddressByte = arp.getSenderHardwareAddress();
-        Ip4Address hostIpAddress = Ip4Address.valueOf(arp.getSenderProtocolAddress());
-        if (arp.getOpCode() == ARP.OP_REQUEST) {
-            handleArpRequest(deviceId, connectPoint, ethernet);
+        if (!validateArpSpa(pkt)) {
+            log.debug("Ignore ARP packet discovered on {} with unexpected src protocol address {}.",
+                    pkt.inPort(), pkt.sender().getIp4Address());
+            pkt.drop();
+            return;
+        }
+
+        if (pkt.type() == REQUEST) {
+            handleArpRequest(pkt, hostService);
         } else {
-            handleArpReply(deviceId, connectPoint, ethernet);
+            handleArpReply(pkt, hostService);
         }
     }
 
-    private void handleArpRequest(DeviceId deviceId, ConnectPoint inPort, Ethernet payload) {
-        ARP arpRequest = (ARP) payload.getPayload();
-        VlanId vlanId = VlanId.vlanId(payload.getVlanID());
-        HostId targetHostId = HostId.hostId(MacAddress.valueOf(
-                                            arpRequest.getTargetHardwareAddress()),
-                                            vlanId);
-
+    private void handleArpRequest(NeighbourMessageContext pkt, HostService hostService) {
         // ARP request for router. Send ARP reply.
-        if (isArpForRouter(deviceId, arpRequest)) {
-            Ip4Address targetAddress = Ip4Address.valueOf(arpRequest.getTargetProtocolAddress());
-            sendArpResponse(arpRequest, config.getRouterMacForAGatewayIp(targetAddress), vlanId);
+        if (isArpForRouter(pkt)) {
+            MacAddress targetMac = config.getRouterMacForAGatewayIp(pkt.target().getIp4Address());
+            sendResponse(pkt, targetMac, hostService);
         } else {
-            Host targetHost = srManager.hostService.getHost(targetHostId);
+            // NOTE: Ignore ARP packets except those target for the router
+            //       We will reconsider enabling this when we have host learning support
+            /*
+            Set<Host> hosts = hostService.getHostsByIp(pkt.target());
+            if (hosts.size() > 1) {
+                log.warn("More than one host with the same ip {}", pkt.target());
+            }
+            Host targetHost = hosts.stream().findFirst().orElse(null);
             // ARP request for known hosts. Send proxy ARP reply on behalf of the target.
             if (targetHost != null) {
-                removeVlanAndForward(payload, targetHost.location());
+                pkt.forward(targetHost.location());
             // ARP request for unknown host in the subnet. Flood in the subnet.
             } else {
-                removeVlanAndFlood(payload, inPort);
+                flood(pkt);
             }
+            */
         }
     }
 
-    private void handleArpReply(DeviceId deviceId, ConnectPoint inPort, Ethernet payload) {
-        ARP arpReply = (ARP) payload.getPayload();
-        VlanId vlanId = VlanId.vlanId(payload.getVlanID());
-        HostId targetHostId = HostId.hostId(MacAddress.valueOf(
-                                            arpReply.getTargetHardwareAddress()),
-                                            vlanId);
-
+    private void handleArpReply(NeighbourMessageContext pkt, HostService hostService) {
         // ARP reply for router. Process all pending IP packets.
-        if (isArpForRouter(deviceId, arpReply)) {
-            Ip4Address hostIpAddress = Ip4Address.valueOf(arpReply.getSenderProtocolAddress());
-            srManager.ipHandler.forwardPackets(deviceId, hostIpAddress);
+        if (isArpForRouter(pkt)) {
+            Ip4Address hostIpAddress = pkt.sender().getIp4Address();
+            srManager.ipHandler.forwardPackets(pkt.inPort().deviceId(), hostIpAddress);
         } else {
-            Host targetHost = srManager.hostService.getHost(targetHostId);
+            // NOTE: Ignore ARP packets except those target for the router
+            //       We will reconsider enabling this when we have host learning support
+            /*
+            HostId targetHostId = HostId.hostId(pkt.dstMac(), pkt.vlan());
+            Host targetHost = hostService.getHost(targetHostId);
             // ARP reply for known hosts. Forward to the host.
             if (targetHost != null) {
-                removeVlanAndForward(payload, targetHost.location());
+                pkt.forward(targetHost.location());
             // ARP reply for unknown host, Flood in the subnet.
             } else {
                 // Don't flood to non-edge ports
-                if (vlanId.equals(
-                        VlanId.vlanId(SegmentRoutingManager.ASSIGNED_VLAN_NO_SUBNET))) {
+                if (pkt.vlan().equals(SegmentRoutingManager.INTERNAL_VLAN)) {
                     return;
                 }
-                removeVlanAndFlood(payload, inPort);
+                flood(pkt);
             }
+            */
         }
     }
 
+    /**
+     * Check if the source protocol address of an ARP packet belongs to the same
+     * subnet configured on the port it is seen.
+     *
+     * @param pkt ARP packet and context information
+     * @return true if the source protocol address belongs to the configured subnet
+     */
+    private boolean validateArpSpa(NeighbourMessageContext pkt) {
+        Ip4Address spa = pkt.sender().getIp4Address();
+        Set<IpPrefix> subnet = config.getPortSubnets(pkt.inPort().deviceId(), pkt.inPort().port())
+                .stream()
+                .filter(ipPrefix -> ipPrefix.isIp4() && ipPrefix.contains(spa))
+                .collect(Collectors.toSet());
+        return !subnet.isEmpty();
+    }
 
-    private boolean isArpForRouter(DeviceId deviceId, ARP arpMsg) {
-        Ip4Address targetProtocolAddress = Ip4Address.valueOf(
-                                               arpMsg.getTargetProtocolAddress());
-        Set<Ip4Address> gatewayIpAddresses = null;
+
+    private boolean isArpForRouter(NeighbourMessageContext pkt) {
+        Ip4Address targetProtocolAddress = pkt.target().getIp4Address();
+        Set<IpAddress> gatewayIpAddresses = null;
         try {
-            if (targetProtocolAddress.equals(config.getRouterIp(deviceId))) {
+            if (targetProtocolAddress.equals(config.getRouterIpv4(pkt.inPort().deviceId()))) {
                 return true;
             }
-            gatewayIpAddresses = config.getPortIPs(deviceId);
+            gatewayIpAddresses = config.getPortIPs(pkt.inPort().deviceId());
         } catch (DeviceConfigNotFoundException e) {
             log.warn(e.getMessage() + " Aborting check for router IP in processing arp");
         }
@@ -178,116 +192,25 @@ public class ArpHandler {
      * @param inPort in-port
      */
     public void sendArpRequest(DeviceId deviceId, IpAddress targetAddress, ConnectPoint inPort) {
-        byte[] senderMacAddress;
-        byte[] senderIpAddress;
-
-        try {
-            senderMacAddress = config.getDeviceMac(deviceId).toBytes();
-            senderIpAddress = config.getRouterIp(deviceId).toOctets();
-        } catch (DeviceConfigNotFoundException e) {
-            log.warn(e.getMessage() + " Aborting sendArpRequest.");
+        byte[] senderMacAddress = new byte[MacAddress.MAC_ADDRESS_LENGTH];
+        byte[] senderIpAddress = new byte[Ip4Address.BYTE_LENGTH];
+        /*
+         * Retrieves device info.
+         */
+        if (!getSenderInfo(senderMacAddress, senderIpAddress, deviceId, targetAddress)) {
+            log.warn("Aborting sendArpRequest, we cannot get all the information needed");
             return;
         }
-
-        ARP arpRequest = new ARP();
-        arpRequest.setHardwareType(ARP.HW_TYPE_ETHERNET)
-                  .setProtocolType(ARP.PROTO_TYPE_IP)
-                  .setHardwareAddressLength(
-                        (byte) Ethernet.DATALAYER_ADDRESS_LENGTH)
-                  .setProtocolAddressLength((byte) Ip4Address.BYTE_LENGTH)
-                  .setOpCode(ARP.OP_REQUEST)
-                  .setSenderHardwareAddress(senderMacAddress)
-                  .setTargetHardwareAddress(MacAddress.ZERO.toBytes())
-                  .setSenderProtocolAddress(senderIpAddress)
-                  .setTargetProtocolAddress(targetAddress.toOctets());
-
-        Ethernet eth = new Ethernet();
-        eth.setDestinationMACAddress(MacAddress.BROADCAST.toBytes())
-                .setSourceMACAddress(senderMacAddress)
-                .setEtherType(Ethernet.TYPE_ARP).setPayload(arpRequest);
-
-        removeVlanAndFlood(eth, inPort);
-    }
-
-    private void sendArpResponse(ARP arpRequest, MacAddress targetMac, VlanId vlanId) {
-        ARP arpReply = new ARP();
-        arpReply.setHardwareType(ARP.HW_TYPE_ETHERNET)
-                .setProtocolType(ARP.PROTO_TYPE_IP)
-                .setHardwareAddressLength(
-                        (byte) Ethernet.DATALAYER_ADDRESS_LENGTH)
-                .setProtocolAddressLength((byte) Ip4Address.BYTE_LENGTH)
-                .setOpCode(ARP.OP_REPLY)
-                .setSenderHardwareAddress(targetMac.toBytes())
-                .setSenderProtocolAddress(arpRequest.getTargetProtocolAddress())
-                .setTargetHardwareAddress(arpRequest.getSenderHardwareAddress())
-                .setTargetProtocolAddress(arpRequest.getSenderProtocolAddress());
-
-        Ethernet eth = new Ethernet();
-        eth.setDestinationMACAddress(arpRequest.getSenderHardwareAddress())
-                .setSourceMACAddress(targetMac.toBytes())
-                .setEtherType(Ethernet.TYPE_ARP).setPayload(arpReply);
-
-        MacAddress hostMac = MacAddress.valueOf(arpReply.getTargetHardwareAddress());
-        HostId dstId = HostId.hostId(hostMac, vlanId);
-        Host dst = srManager.hostService.getHost(dstId);
-        if (dst == null) {
-            log.warn("Cannot send ARP response to host {}", dstId);
-            return;
-        }
-
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder().
-                setOutput(dst.location().port()).build();
-        OutboundPacket packet = new DefaultOutboundPacket(dst.location().deviceId(),
-                treatment, ByteBuffer.wrap(eth.serialize()));
-
-        srManager.packetService.emit(packet);
-    }
-
-    /**
-     * Remove VLAN tag and flood to all ports in the same subnet.
-     *
-     * @param packet packet to be flooded
-     * @param inPort where the packet comes from
-     */
-    private void removeVlanAndFlood(Ethernet packet, ConnectPoint inPort) {
-        Ip4Address targetProtocolAddress = Ip4Address.valueOf(
-                ((ARP) packet.getPayload()).getTargetProtocolAddress()
+        /*
+         * Creates the request.
+         */
+        Ethernet arpRequest = ARP.buildArpRequest(
+                senderMacAddress,
+                senderIpAddress,
+                targetAddress.toOctets(),
+                VlanId.NO_VID
         );
-
-        srManager.deviceConfiguration.getSubnetPortsMap(inPort.deviceId()).forEach((subnet, ports) -> {
-            if (subnet.contains(targetProtocolAddress)) {
-                ports.stream()
-                        .filter(port -> port != inPort.port())
-                        .forEach(port -> {
-                            removeVlanAndForward(packet, new ConnectPoint(inPort.deviceId(), port));
-                        });
-            }
-        });
+        flood(arpRequest, inPort, targetAddress);
     }
 
-    /**
-     * Remove VLAN tag and packet out to given port.
-     *
-     * Note: In current implementation, we expect all communication with
-     * end hosts within a subnet to be untagged.
-     * <p>
-     * For those pipelines that internally assigns a VLAN, the VLAN tag will be
-     * removed before egress.
-     * <p>
-     * For those pipelines that do not assign internal VLAN, the packet remains
-     * untagged.
-     *
-     * @param packet packet to be forwarded
-     * @param outPort where the packet should be forwarded
-     */
-    private void removeVlanAndForward(Ethernet packet, ConnectPoint outPort) {
-        packet.setEtherType(Ethernet.TYPE_ARP);
-        packet.setVlanID(Ethernet.VLAN_UNTAGGED);
-        ByteBuffer buf = ByteBuffer.wrap(packet.serialize());
-
-        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder();
-        tbuilder.setOutput(outPort.port());
-        srManager.packetService.emit(new DefaultOutboundPacket(outPort.deviceId(),
-                                                               tbuilder.build(), buf));
-    }
 }

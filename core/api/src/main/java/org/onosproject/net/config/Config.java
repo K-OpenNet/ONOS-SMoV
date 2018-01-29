@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,17 +21,19 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.annotations.Beta;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
+import org.onlab.packet.TpPort;
 import org.onosproject.net.ConnectPoint;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -50,6 +52,7 @@ public abstract class Config<S> {
 
     private static final String TRUE_LITERAL = "true";
     private static final String FALSE_LITERAL = "false";
+    private static final String EMPTY_STRING = "";
 
     protected S subject;
     protected String key;
@@ -86,7 +89,7 @@ public abstract class Config<S> {
      * @param delegate delegate context, or null for detached configs.
      */
     public final void init(S subject, String key, JsonNode node, ObjectMapper mapper,
-                     ConfigApplyDelegate delegate) {
+                           ConfigApplyDelegate delegate) {
         this.subject = checkNotNull(subject, "Subject cannot be null");
         this.key = key;
         this.node = checkNotNull(node, "Node cannot be null");
@@ -102,7 +105,7 @@ public abstract class Config<S> {
      * Default implementation returns true.
      * Subclasses are expected to override this with their own validation.
      * Implementations are free to throw a RuntimeException if data is invalid.
-     * * </p>
+     * </p>
      *
      * @return true if the data is valid; false otherwise
      * @throws RuntimeException if configuration is invalid or completely foobar
@@ -113,11 +116,13 @@ public abstract class Config<S> {
         //      isString(path)
         //      isBoolean(path)
         //      isNumber(path, [min, max])
+        //      isIntegralNumber(path, [min, max])
         //      isDecimal(path, [min, max])
         //      isMacAddress(path)
         //      isIpAddress(path)
         //      isIpPrefix(path)
         //      isConnectPoint(path)
+        //      isTpPort(path)
         return true;
     }
 
@@ -152,8 +157,9 @@ public abstract class Config<S> {
 
     /**
      * Applies any configuration changes made via this configuration.
-     *
+     * <p>
      * Not effective for detached configs.
+     * </p>
      */
     public void apply() {
         checkState(delegate != null, "Cannot apply detached config");
@@ -203,7 +209,7 @@ public abstract class Config<S> {
     /**
      * Clears the specified property.
      *
-     * @param name  property name
+     * @param name property name
      * @return self
      */
     protected Config<S> clear(String name) {
@@ -318,7 +324,12 @@ public abstract class Config<S> {
      * @return property value or default value
      */
     protected <E extends Enum<E>> E get(String name, E defaultValue, Class<E> enumClass) {
-        return Enum.valueOf(enumClass, object.path(name).asText(defaultValue.toString()));
+        if (defaultValue != null) {
+            return Enum.valueOf(enumClass, object.path(name).asText(defaultValue.toString()));
+        }
+
+        JsonNode node = object.get(name);
+        return node == null ? null : Enum.valueOf(enumClass, node.asText());
     }
 
     /**
@@ -349,17 +360,34 @@ public abstract class Config<S> {
     protected <T> List<T> getList(String name, Function<String, T> function) {
         List<T> list = Lists.newArrayList();
         ArrayNode arrayNode = (ArrayNode) object.path(name);
-        arrayNode.forEach(i -> list.add(function.apply(i.asText())));
+        arrayNode.forEach(i -> list.add(function.apply(asString(i))));
         return list;
+    }
+
+    /**
+     * Converts JSON node to a String.
+     * <p>
+     * If the {@code node} was a text node, text is returned as-is,
+     * all other node type will be converted to String by toString().
+     *
+     * @param node JSON node to convert
+     * @return String representation
+     */
+    private static String asString(JsonNode node) {
+        if (node.isTextual()) {
+            return node.asText();
+        } else {
+            return node.toString();
+        }
     }
 
     /**
      * Gets the specified array property as a list of items.
      *
-     * @param name     property name
-     * @param function mapper from string to item
+     * @param name         property name
+     * @param function     mapper from string to item
      * @param defaultValue default value if property not set
-     * @param <T>      type of item
+     * @param <T>          type of item
      * @return list of items
      */
     protected <T> List<T> getList(String name, Function<String, T> function, List<T> defaultValue) {
@@ -369,8 +397,27 @@ public abstract class Config<S> {
             return defaultValue;
         }
         ArrayNode arrayNode = (ArrayNode) jsonNode;
-        arrayNode.forEach(i -> list.add(function.apply(i.asText())));
+        arrayNode.forEach(i -> list.add(function.apply(asString(i))));
         return list;
+    }
+
+    /**
+     * Sets the specified property as an array of items in a given collection
+     * transformed into a String with supplied {@code function}.
+     *
+     * @param name       propertyName
+     * @param function   to transform item to a String
+     * @param value list of items
+     * @param <T>        type of items
+     * @return self
+     */
+    protected <T> Config<S> setList(String name,
+                                    Function<? super T, String> function,
+                                    List<T> value) {
+        Collection<String> mapped = value.stream()
+                            .map(function)
+                            .collect(Collectors.toList());
+        return setOrClear(name, mapped);
     }
 
     /**
@@ -394,10 +441,51 @@ public abstract class Config<S> {
     }
 
     /**
+     * Indicates whether the specified field is of a valid length.
+     *
+     * @param field the field to validate
+     * @param maxLength the maximum allowed length of the field
+     * @return true if the field lenth is less than the required length
+     */
+    protected boolean isValidLength(String field, int maxLength) {
+        if (object.path(field).asText(EMPTY_STRING).length() > maxLength) {
+            throw new InvalidFieldException(field, "exceeds maximum length " + maxLength);
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if this config contains a field with the given name.
+     *
+     * @param name the field name
+     * @return true if field is present, false otherwise
+     */
+    protected boolean hasField(String name) {
+        return hasField(object, name);
+    }
+
+    /**
+     * Returns true if the given node contains a field with the given name.
+     *
+     * @param node the node to examine
+     * @param name the name to look for
+     * @return true if the node has a field with the given name, false otherwise
+     */
+    protected boolean hasField(ObjectNode node, String name) {
+        Iterator<String> fnames = node.fieldNames();
+        while (fnames.hasNext()) {
+            if (fnames.next().equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Indicates whether only the specified fields are present in the backing JSON.
      *
      * @param allowedFields allowed field names
-     * @return true if all allowedFields are present; false otherwise
+     * @return true if only allowedFields are present; false otherwise
      */
     protected boolean hasOnlyFields(String... allowedFields) {
         return hasOnlyFields(object, allowedFields);
@@ -407,13 +495,46 @@ public abstract class Config<S> {
      * Indicates whether only the specified fields are present in a particular
      * JSON object.
      *
-     * @param node node whose fields to check
+     * @param node          node whose fields to check
      * @param allowedFields allowed field names
-     * @return true if all allowedFields are present; false otherwise
+     * @return true if only allowedFields are present; false otherwise
      */
     protected boolean hasOnlyFields(ObjectNode node, String... allowedFields) {
         Set<String> fields = ImmutableSet.copyOf(allowedFields);
-        return !Iterators.any(node.fieldNames(), f -> !fields.contains(f));
+        node.fieldNames().forEachRemaining(f -> {
+            if (!fields.contains(f)) {
+                throw new InvalidFieldException(f, "Field is not allowed");
+            }
+        });
+        return true;
+    }
+
+    /**
+     * Indicates whether all specified fields are present in the backing JSON.
+     *
+     * @param mandatoryFields mandatory field names
+     * @return true if all mandatory fields are present; false otherwise
+     */
+    protected boolean hasFields(String... mandatoryFields) {
+        return hasFields(object, mandatoryFields);
+    }
+
+    /**
+     * Indicates whether all specified fields are present in a particular
+     * JSON object.
+     *
+     * @param node            node whose fields to check
+     * @param mandatoryFields mandatory field names
+     * @return true if all mandatory fields are present; false otherwise
+     */
+    protected boolean hasFields(ObjectNode node, String... mandatoryFields) {
+        Set<String> fields = ImmutableSet.copyOf(mandatoryFields);
+        fields.forEach(f -> {
+            if (node.path(f).isMissingNode()) {
+                throw new InvalidFieldException(f, "Mandatory field is not present");
+            }
+        });
+        return true;
     }
 
     /**
@@ -422,12 +543,10 @@ public abstract class Config<S> {
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid MAC
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isMacAddress(String field, FieldPresence presence) {
-        JsonNode node = object.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                MacAddress.valueOf(node.asText()) != null);
+        return isMacAddress(object, field, presence);
     }
 
     /**
@@ -435,15 +554,16 @@ public abstract class Config<S> {
      * MAC address.
      *
      * @param objectNode JSON node
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid MAC
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isMacAddress(ObjectNode objectNode, String field, FieldPresence presence) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                MacAddress.valueOf(node.asText()) != null);
+        return isValid(objectNode, field, presence, n -> {
+            MacAddress.valueOf(n.asText());
+            return true;
+        });
     }
 
     /**
@@ -452,7 +572,7 @@ public abstract class Config<S> {
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid IP
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isIpAddress(String field, FieldPresence presence) {
         return isIpAddress(object, field, presence);
@@ -462,16 +582,17 @@ public abstract class Config<S> {
      * Indicates whether the specified field of a particular node holds a valid
      * IP address.
      *
-     * @param objectNode     node from whom to access the field
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
+     * @param objectNode node from whom to access the field
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid IP
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isIpAddress(ObjectNode objectNode, String field, FieldPresence presence) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                IpAddress.valueOf(node.asText()) != null);
+        return isValid(objectNode, field, presence, n -> {
+            IpAddress.valueOf(n.asText());
+            return true;
+        });
     }
 
     /**
@@ -480,8 +601,7 @@ public abstract class Config<S> {
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid IP
-     * prefix
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isIpPrefix(String field, FieldPresence presence) {
         return isIpPrefix(object, field, presence);
@@ -491,17 +611,46 @@ public abstract class Config<S> {
      * Indicates whether the specified field of a particular node holds a valid
      * IP prefix.
      *
-     * @param objectNode     node from whom to access the field
+     * @param objectNode node from whom to access the field
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @return true if valid; false otherwise
+     * @throws InvalidFieldException if the field is present but not valid
+     */
+    protected boolean isIpPrefix(ObjectNode objectNode, String field, FieldPresence presence) {
+        return isValid(objectNode, field, presence, n -> {
+            IpPrefix.valueOf(n.asText());
+            return true;
+        });
+    }
+
+    /**
+     * Indicates whether the specified field holds a valid transport layer port.
+     *
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid IP
-     * prefix
+     * @throws InvalidFieldException if the field is present but not valid
      */
-    protected boolean isIpPrefix(ObjectNode objectNode, String field, FieldPresence presence) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                IpPrefix.valueOf(node.asText()) != null);
+    protected boolean isTpPort(String field, FieldPresence presence) {
+        return isTpPort(object, field, presence);
+    }
+
+    /**
+     * Indicates whether the specified field of a particular node holds a valid
+     * transport layer port.
+     *
+     * @param objectNode node from whom to access the field
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @return true if valid; false otherwise
+     * @throws InvalidFieldException if the field is present but not valid
+     */
+    protected boolean isTpPort(ObjectNode objectNode, String field, FieldPresence presence) {
+        return isValid(objectNode, field, presence, n -> {
+            TpPort.tpPort(n.asInt());
+            return true;
+        });
     }
 
     /**
@@ -510,8 +659,7 @@ public abstract class Config<S> {
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
-     * connect point string representation
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isConnectPoint(String field, FieldPresence presence) {
         return isConnectPoint(object, field, presence);
@@ -522,16 +670,16 @@ public abstract class Config<S> {
      * connect point string.
      *
      * @param objectNode JSON node
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
-     * connect point string representation
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isConnectPoint(ObjectNode objectNode, String field, FieldPresence presence) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                ConnectPoint.deviceConnectPoint(node.asText()) != null);
+        return isValid(objectNode, field, presence, n -> {
+            ConnectPoint.deviceConnectPoint(n.asText());
+            return true;
+        });
     }
 
     /**
@@ -541,7 +689,7 @@ public abstract class Config<S> {
      * @param presence specifies if field is optional or mandatory
      * @param pattern  optional regex pattern
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid string
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isString(String field, FieldPresence presence, String... pattern) {
         return isString(object, field, presence, pattern);
@@ -552,17 +700,21 @@ public abstract class Config<S> {
      * string value.
      *
      * @param objectNode JSON node
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
-     * @param pattern  optional regex pattern
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @param pattern    optional regex pattern
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid string
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isString(ObjectNode objectNode, String field,
                                FieldPresence presence, String... pattern) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isTextual() &&
-                (pattern.length > 0 && node.asText().matches(pattern[0]) || pattern.length < 1));
+        return isValid(objectNode, field, presence, (node) -> {
+            if (!(node.isTextual() &&
+                    (pattern.length > 0 && node.asText().matches(pattern[0]) || pattern.length < 1))) {
+                fail("Invalid string value");
+            }
+            return true;
+        });
     }
 
     /**
@@ -572,28 +724,34 @@ public abstract class Config<S> {
      * @param presence specifies if field is optional or mandatory
      * @param minMax   optional min/max values
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isNumber(String field, FieldPresence presence, long... minMax) {
-        JsonNode node = object.path(field);
-        return isValid(node, presence, node.isNumber() &&
-                (minMax.length > 0 && minMax[0] <= node.asLong() || minMax.length < 1) &&
-                (minMax.length > 1 && minMax[1] > node.asLong() || minMax.length < 2));
+        return isNumber(object, field, presence, minMax);
     }
+
     /**
-     * Indicates whether the specified field holds a valid number.
+     * Indicates whether the specified field of a particular node holds a
+     * valid number.
      *
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
-     * @param minMax   optional min/max values
+     * @param objectNode JSON object
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @param minMax     optional min/max values
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
+     * @throws InvalidFieldException if the field is present but not valid
      */
-    protected boolean isNumber(String field, FieldPresence presence, double... minMax) {
-        JsonNode node = object.path(field);
-        return isValid(node, presence, node.isNumber() &&
-                (minMax.length > 0 && minMax[0] <= node.asDouble() || minMax.length < 1) &&
-                (minMax.length > 1 && minMax[1] > node.asDouble() || minMax.length < 2));
+    protected boolean isNumber(ObjectNode objectNode, String field,
+                               FieldPresence presence, long... minMax) {
+        return isValid(objectNode, field, presence, n -> {
+            long number = (n.isNumber()) ? n.asLong() : Long.parseLong(n.asText());
+            if (minMax.length > 1) {
+                verifyRange(number, minMax[0], minMax[1]);
+            } else if (minMax.length > 0) {
+                verifyRange(number, minMax[0]);
+            }
+            return true;
+        });
     }
 
     /**
@@ -603,7 +761,7 @@ public abstract class Config<S> {
      * @param presence specifies if field is optional or mandatory
      * @param minMax   optional min/max values
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isIntegralNumber(String field, FieldPresence presence, long... minMax) {
         return isIntegralNumber(object, field, presence, minMax);
@@ -614,20 +772,22 @@ public abstract class Config<S> {
      * integer.
      *
      * @param objectNode JSON node
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
-     * @param minMax   optional min/max values
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @param minMax     optional min/max values
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isIntegralNumber(ObjectNode objectNode, String field,
                                        FieldPresence presence, long... minMax) {
-        JsonNode node = objectNode.path(field);
-
-        return isValid(node, presence, n -> {
-            long number = (node.isIntegralNumber()) ? n.asLong() : Long.parseLong(n.asText());
-            return (minMax.length > 0 && minMax[0] <= number || minMax.length < 1) &&
-                    (minMax.length > 1 && minMax[1] > number || minMax.length < 2);
+        return isValid(objectNode, field, presence, n -> {
+            long number = (n.isIntegralNumber()) ? n.asLong() : Long.parseLong(n.asText());
+            if (minMax.length > 1) {
+                verifyRange(number, minMax[0], minMax[1]);
+            } else if (minMax.length > 0) {
+                verifyRange(number, minMax[0]);
+            }
+            return true;
         });
     }
 
@@ -638,13 +798,34 @@ public abstract class Config<S> {
      * @param presence specifies if field is optional or mandatory
      * @param minMax   optional min/max values
      * @return true if valid; false otherwise
-     * @throws IllegalArgumentException if field is present, but not valid
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isDecimal(String field, FieldPresence presence, double... minMax) {
-        JsonNode node = object.path(field);
-        return isValid(node, presence, (node.isDouble() || node.isFloat()) &&
-                (minMax.length > 0 && minMax[0] <= node.asDouble() || minMax.length < 1) &&
-                (minMax.length > 1 && minMax[1] > node.asDouble() || minMax.length < 2));
+        return isDecimal(object, field, presence, minMax);
+    }
+
+    /**
+     * Indicates whether the specified field of a particular node holds a valid
+     * decimal number.
+     *
+     * @param objectNode JSON node
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
+     * @param minMax     optional min/max values
+     * @return true if valid; false otherwise
+     * @throws InvalidFieldException if the field is present but not valid
+     */
+    protected boolean isDecimal(ObjectNode objectNode, String field,
+                                FieldPresence presence, double... minMax) {
+        return isValid(objectNode, field, presence, n -> {
+            double number = (n.isDouble()) ? n.asDouble() : Double.parseDouble(n.asText());
+            if (minMax.length > 1) {
+                verifyRange(number, minMax[0], minMax[1]);
+            } else if (minMax.length > 0) {
+                verifyRange(number, minMax[0]);
+            }
+            return true;
+        });
     }
 
     /**
@@ -653,6 +834,7 @@ public abstract class Config<S> {
      * @param field    JSON field name
      * @param presence specifies if field is optional or mandatory
      * @return true if valid; false otherwise
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isBoolean(String field, FieldPresence presence) {
         return isBoolean(object, field, presence);
@@ -663,14 +845,18 @@ public abstract class Config<S> {
      * boolean value.
      *
      * @param objectNode JSON object node
-     * @param field    JSON field name
-     * @param presence specifies if field is optional or mandatory
+     * @param field      JSON field name
+     * @param presence   specifies if field is optional or mandatory
      * @return true if valid; false otherwise
+     * @throws InvalidFieldException if the field is present but not valid
      */
     protected boolean isBoolean(ObjectNode objectNode, String field, FieldPresence presence) {
-        JsonNode node = objectNode.path(field);
-        return isValid(node, presence, node.isBoolean() ||
-                (node.isTextual() && isBooleanString(node.asText())));
+        return isValid(objectNode, field, presence, n -> {
+            if (!(n.isBoolean() || (n.isTextual() && isBooleanString(n.asText())))) {
+                fail("Field is not a boolean value");
+            }
+            return true;
+        });
     }
 
     /**
@@ -685,39 +871,61 @@ public abstract class Config<S> {
     }
 
     /**
-     * Indicates whether the node is present and of correct value or not
-     * mandatory and absent.
+     * Indicates whether a field in the node is present and of correct value or
+     * not mandatory and absent.
      *
-     * @param node         JSON node
-     * @param presence     specifies if field is optional or mandatory
-     * @param correctValue true if the value is correct
-     * @return true if the field is as expected
-     */
-    private boolean isValid(JsonNode node, FieldPresence presence, boolean correctValue) {
-        return isValid(node, presence, n -> correctValue);
-    }
-
-    /**
-     * Indicates whether the node is present and of correct value or not
-     * mandatory and absent.
-     *
-     * @param node JSON node
-     * @param presence specified if field is optional or mandatory
+     * @param objectNode         JSON object node containing field to validate
+     * @param field              name of field to validate
+     * @param presence           specified if field is optional or mandatory
      * @param validationFunction function which can be used to verify if the
      *                           node has the correct value
      * @return true if the field is as expected
+     * @throws InvalidFieldException if the field is present but not valid
      */
-    private boolean isValid(JsonNode node, FieldPresence presence,
+    private boolean isValid(ObjectNode objectNode, String field, FieldPresence presence,
                             Function<JsonNode, Boolean> validationFunction) {
+        JsonNode node = objectNode.path(field);
         boolean isMandatory = presence == FieldPresence.MANDATORY;
-        if (isMandatory && validationFunction.apply(node)) {
-            return true;
+        if (isMandatory && node.isMissingNode()) {
+            throw new InvalidFieldException(field, "Mandatory field not present");
         }
 
         if (!isMandatory && (node.isNull() || node.isMissingNode())) {
             return true;
         }
 
-        return validationFunction.apply(node);
+        try {
+            if (validationFunction.apply(node)) {
+                return true;
+            } else {
+                throw new InvalidFieldException(field, "Validation error");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new InvalidFieldException(field, e);
+        }
     }
+
+    private static void fail(String message) {
+        throw new IllegalArgumentException(message);
+    }
+
+    private static <N extends Comparable> void verifyRange(N num, N min) {
+        if (num.compareTo(min) < 0) {
+            fail("Field must be greater than " + min);
+        }
+    }
+
+    private static <N extends Comparable> void verifyRange(N num, N min, N max) {
+        verifyRange(num, min);
+
+        if (num.compareTo(max) > 0) {
+            fail("Field must be less than " + max);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return String.valueOf(node);
+    }
+
 }

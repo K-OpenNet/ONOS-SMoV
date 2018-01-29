@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ public class BgpLinkAttrUnRsrvdLinkBandwidth implements BgpValueType {
     public static final int NO_OF_BITS = 8;
     public static final int NO_OF_PRIORITY = 8;
 
-    public short sType;
+    private short sType;
 
     /* ISIS administrative group */
     private List<Float> maxUnResBandwidth = new ArrayList<Float>();
@@ -115,8 +115,6 @@ public class BgpLinkAttrUnRsrvdLinkBandwidth implements BgpValueType {
      * @return normal float
      */
     static float ieeeToFloatRead(int  iVal) {
-        iVal = (((iVal & 0xFF) << 24) | ((iVal & 0xFF00) << 8)
-                | ((iVal & 0xFF0000) >> 8) | ((iVal >> 24) & 0xFF));
 
         return Float.intBitsToFloat(iVal);
     }

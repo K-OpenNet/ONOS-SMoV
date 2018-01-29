@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package org.onlab.packet.ipv6;
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.Data;
 import org.onlab.packet.Deserializer;
-import org.onlab.packet.IPacket;
 import org.onlab.packet.IPv6;
 
 import java.nio.ByteBuffer;
@@ -108,20 +107,6 @@ public class EncapSecurityPayload extends BasePacket {
             ((IExtensionHeader) this.parent).setNextHeader(IPv6.PROTOCOL_ESP);
         }
         return data;
-    }
-
-    @Override
-    public IPacket deserialize(byte[] data, int offset, int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.securityParamIndex = bb.getInt();
-        this.sequence = bb.getInt();
-
-        this.payload = new Data();
-        this.payload.deserialize(data, bb.position(),
-                                 bb.limit() - bb.position());
-        this.payload.setParent(this);
-
-        return this;
     }
 
     /*

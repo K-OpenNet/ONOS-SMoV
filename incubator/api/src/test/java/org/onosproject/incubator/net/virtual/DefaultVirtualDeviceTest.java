@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,14 @@ package org.onosproject.incubator.net.virtual;
 
 import com.google.common.testing.EqualsTester;
 import org.junit.Test;
-import org.onosproject.net.DeviceId;
+import org.onosproject.net.TestDeviceParams;
 
 import static org.onlab.junit.ImmutableClassChecker.assertThatClassIsImmutable;
 
 /**
  * Test of the default virtual device model entity.
  */
-public class DefaultVirtualDeviceTest {
-    final String deviceIdValue1 = "DEVICE_ID1";
-    final String deviceIdValue2 = "DEVICE_ID2";
+public class DefaultVirtualDeviceTest extends TestDeviceParams {
 
     /**
      * Checks that the DefaultVirtualDevice class is immutable.
@@ -40,13 +38,13 @@ public class DefaultVirtualDeviceTest {
     @Test
     public void testEquality() {
         DefaultVirtualDevice device1 =
-                new DefaultVirtualDevice(NetworkId.networkId(0), DeviceId.deviceId(deviceIdValue1));
+                new DefaultVirtualDevice(NetworkId.networkId(0), DID1);
         DefaultVirtualDevice device2 =
-                new DefaultVirtualDevice(NetworkId.networkId(0), DeviceId.deviceId(deviceIdValue1));
+                new DefaultVirtualDevice(NetworkId.networkId(0), DID1);
         DefaultVirtualDevice device3 =
-                new DefaultVirtualDevice(NetworkId.networkId(0), DeviceId.deviceId(deviceIdValue2));
+                new DefaultVirtualDevice(NetworkId.networkId(0), DID2);
         DefaultVirtualDevice device4 =
-                new DefaultVirtualDevice(NetworkId.networkId(1), DeviceId.deviceId(deviceIdValue1));
+                new DefaultVirtualDevice(NetworkId.networkId(1), DID1);
 
         new EqualsTester().addEqualityGroup(device1, device2).addEqualityGroup(device3)
                 .addEqualityGroup(device4).testEquals();

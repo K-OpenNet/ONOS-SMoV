@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.onosproject.store.Store;
 public interface LeadershipStore extends Store<LeadershipEvent, LeadershipStoreDelegate> {
 
     /**
-     * Adds registration for the local instance to be leader for topic.
+     * Adds registration for the local instance to be part of the leadership contest for topic.
      *
      * @param topic leadership topic
      * @return Updated leadership after operation is completed

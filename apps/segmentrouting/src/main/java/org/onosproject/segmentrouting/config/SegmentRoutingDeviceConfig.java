@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableMap;
 import org.onlab.packet.Ip4Address;
+import org.onlab.packet.Ip6Address;
 import org.onlab.packet.MacAddress;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.Config;
 
 import java.util.HashMap;
@@ -36,23 +38,53 @@ import java.util.Set;
  */
 public class SegmentRoutingDeviceConfig extends Config<DeviceId> {
     private static final String NAME = "name";
-    private static final String IP = "routerIp";
+    private static final String IP4 = "ipv4Loopback";
+    private static final String IP6 = "ipv6Loopback";
     private static final String MAC = "routerMac";
-    private static final String SID = "nodeSid";
+    private static final String IP4_SID = "ipv4NodeSid";
+    private static final String IP6_SID = "ipv6NodeSid";
     private static final String EDGE = "isEdgeRouter";
+    /**
+     * Adjancency SIDs config.
+     *
+     * @deprecated in Loon (1.11). We are not using and do not plan to use it.
+     */
+    @Deprecated
     private static final String ADJSIDS = "adjacencySids";
+
+    /**
+     * Adjancency SID config.
+     *
+     * @deprecated in Loon (1.11). We are not using and do not plan to use it.
+     */
+    @Deprecated
     private static final String ADJSID = "adjSid";
+
+    /**
+     * Adjancency port config.
+     *
+     * @deprecated in Loon (1.11). We are not using and do not plan to use it.
+     */
+    @Deprecated
     private static final String PORTS = "ports";
+
+    private static final String PAIR_DEVICE_ID = "pairDeviceId";
+    private static final String PAIR_LOCAL_PORT = "pairLocalPort";
 
     @Override
     public boolean isValid() {
-        return hasOnlyFields(NAME, IP, MAC, SID, EDGE, ADJSIDS, ADJSID, PORTS) &&
+        return hasOnlyFields(NAME, IP4, IP6, MAC, IP4_SID, IP6_SID, EDGE, ADJSIDS, ADJSID, PORTS,
+                             PAIR_DEVICE_ID, PAIR_LOCAL_PORT) &&
                 name() != null &&
-                routerIp() != null &&
+                routerIpv4() != null && (!hasField(IP6) || routerIpv6() != null) &&
                 routerMac() != null &&
-                nodeSid() != -1 &&
+                nodeSidIPv4() != -1 && (!hasField(IP6_SID) || nodeSidIPv6() != -1) &&
                 isEdgeRouter() != null &&
-                adjacencySids() != null;
+                adjacencySids() != null &&
+                // pairDeviceId and pairLocalPort must be both configured or both omitted
+                (hasField(PAIR_DEVICE_ID) == hasField(PAIR_LOCAL_PORT)) &&
+                (!hasField(PAIR_DEVICE_ID) || pairDeviceId() != null) &&
+                (!hasField(PAIR_LOCAL_PORT) || pairLocalPort() != null);
     }
 
     /**
@@ -76,23 +108,43 @@ public class SegmentRoutingDeviceConfig extends Config<DeviceId> {
     }
 
     /**
-     * Gets the IP address of the router.
+     * Gets the IPv4 address of the router.
      *
      * @return IP address of the router. Or null if not configured.
      */
-    public Ip4Address routerIp() {
-        String ip = get(IP, null);
+    public Ip4Address routerIpv4() {
+        String ip = get(IP4, null);
         return ip != null ? Ip4Address.valueOf(ip) : null;
     }
 
     /**
-     * Sets the IP address of the router.
+     * Gets the IPv6 address of the router.
      *
-     * @param ip IP address of the router.
+     * @return IP address of the router. Or null if not configured.
+     */
+    public Ip6Address routerIpv6() {
+        String ip = get(IP6, null);
+        return ip != null ? Ip6Address.valueOf(ip) : null;
+    }
+
+    /**
+     * Sets the IPv4 address of the router.
+     *
+     * @param ip IPv4 address of the router.
      * @return the config of the router.
      */
-    public SegmentRoutingDeviceConfig setRouterIp(String ip) {
-        return (SegmentRoutingDeviceConfig) setOrClear(IP, ip);
+    public SegmentRoutingDeviceConfig setRouterIpv4(String ip) {
+        return (SegmentRoutingDeviceConfig) setOrClear(IP4, ip);
+    }
+
+    /**
+     * Sets the IPv6 address of the router.
+     *
+     * @param ip IPv6 address of the router.
+     * @return the config of the router.
+     */
+    public SegmentRoutingDeviceConfig setRouterIpv6(String ip) {
+        return (SegmentRoutingDeviceConfig) setOrClear(IP6, ip);
     }
 
     /**
@@ -116,22 +168,41 @@ public class SegmentRoutingDeviceConfig extends Config<DeviceId> {
     }
 
     /**
-     * Gets the node SID of the router.
+     * Gets the IPv4 node SID of the router.
      *
      * @return node SID of the router. Or -1 if not configured.
      */
-    public int nodeSid() {
-        return get(SID, -1);
+    public int nodeSidIPv4() {
+        return get(IP4_SID, -1);
     }
 
     /**
-     * Sets the node SID of the router.
+     * Gets the IPv6 node SID of the router.
+     *
+     * @return node SID of the router. Or -1 if not configured.
+     */
+    public int nodeSidIPv6() {
+        return get(IP6_SID, -1);
+    }
+
+    /**
+     * Sets the node IPv4 node SID of the router.
      *
      * @param sid node SID of the router.
      * @return the config of the router.
      */
-    public SegmentRoutingDeviceConfig setNodeSid(int sid) {
-        return (SegmentRoutingDeviceConfig) setOrClear(SID, sid);
+    public SegmentRoutingDeviceConfig setNodeSidIPv4(int sid) {
+        return (SegmentRoutingDeviceConfig) setOrClear(IP4_SID, sid);
+    }
+
+    /**
+     * Sets the node IPv6 node SID of the router.
+     *
+     * @param sid node SID of the router.
+     * @return the config of the router.
+     */
+    public SegmentRoutingDeviceConfig setNodeSidIPv6(int sid) {
+        return (SegmentRoutingDeviceConfig) setOrClear(IP6_SID, sid);
     }
 
     /**
@@ -221,5 +292,45 @@ public class SegmentRoutingDeviceConfig extends Config<DeviceId> {
         }
 
         return this;
+    }
+
+    /**
+     * Gets the pair device id.
+     *
+     * @return pair device id; Or null if not configured.
+     */
+    public DeviceId pairDeviceId() {
+        String pairDeviceId = get(PAIR_DEVICE_ID, null);
+        return pairDeviceId != null ? DeviceId.deviceId(pairDeviceId) : null;
+    }
+
+    /**
+     * Sets the pair device id.
+     *
+     * @param deviceId pair device id
+     * @return this configuration
+     */
+    public SegmentRoutingDeviceConfig setPairDeviceId(DeviceId deviceId) {
+        return (SegmentRoutingDeviceConfig) setOrClear(PAIR_DEVICE_ID, deviceId.toString());
+    }
+
+    /**
+     * Gets the pair local port.
+     *
+     * @return pair local port; Or null if not configured.
+     */
+    public PortNumber pairLocalPort() {
+        long pairLocalPort = get(PAIR_LOCAL_PORT, -1L);
+        return pairLocalPort != -1L ? PortNumber.portNumber(pairLocalPort) : null;
+    }
+
+    /**
+     * Sets the pair local port.
+     *
+     * @param portNumber pair local port
+     * @return this configuration
+     */
+    public SegmentRoutingDeviceConfig setPairLocalPort(PortNumber portNumber) {
+        return (SegmentRoutingDeviceConfig) setOrClear(PAIR_LOCAL_PORT, portNumber.toLong());
     }
 }

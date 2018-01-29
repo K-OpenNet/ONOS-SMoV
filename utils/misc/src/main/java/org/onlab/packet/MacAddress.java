@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,61 @@
  */
 package org.onlab.packet;
 
+import com.google.common.collect.ImmutableSet;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The class representing MAC address.
  */
 public class MacAddress {
 
-    public static final MacAddress NONE = valueOf("a4:23:05:00:00:00");
+    private static final Pattern MAC_PATTERN = Pattern.compile("^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$");
+    /**
+     * First MAC address in ONOS OUI range.
+     */
+    public static final MacAddress ONOS = valueOf("a4:23:05:00:00:00");
+    /**
+     * Dummy MAC address. We use the first MAC address in ONOS OUI range as the dummy MAC address.
+     */
+    public static final MacAddress NONE = ONOS;
+    /**
+     * ONOS LLDP MAC address with multicast bit set.
+     */
+    public static final MacAddress ONOS_LLDP = valueOf("a5:23:05:00:00:01");
+    /**
+     * All-zero MAC address.
+     */
     public static final MacAddress ZERO = valueOf("00:00:00:00:00:00");
+    /**
+     * Broadcast MAC address.
+     */
     public static final MacAddress BROADCAST = valueOf("ff:ff:ff:ff:ff:ff");
-
-    private static final byte[] LL = new byte[]{
-            0x01, (byte) 0x80, (byte) 0xc2, 0x00, 0x00,
-            0x00, 0x0e, 0x03
-    };
+    /**
+     * IPv4 multicast MAC address.
+     */
+    public static final MacAddress IPV4_MULTICAST = valueOf("01:00:5e:00:00:00");
+    /**
+     * IPv4 multicast MAC mask.
+     */
+    public static final MacAddress IPV4_MULTICAST_MASK = valueOf("ff:ff:ff:80:00:00");
+    /**
+     * IPv6 multicast MAC address.
+     */
+    public static final MacAddress IPV6_MULTICAST = valueOf("33:33:00:00:00:00");
+    /**
+     * IPv6 multicast MAC mask.
+     */
+    public static final MacAddress IPV6_MULTICAST_MASK = valueOf("FF:FF:00:00:00:00");
+    /**
+     * A set of LLDP MAC addresses.
+     */
+    public static final Set<MacAddress> LLDP = ImmutableSet.of(
+            MacAddress.valueOf("01:80:c2:00:00:00"),
+            MacAddress.valueOf("01:80:c2:00:00:03"),
+            MacAddress.valueOf("01:80:c2:00:00:0e"));
 
     public static final int MAC_ADDRESS_LENGTH = 6;
     private byte[] address = new byte[MacAddress.MAC_ADDRESS_LENGTH];
@@ -48,13 +88,12 @@ public class MacAddress {
      * @throws IllegalArgumentException if the string cannot be parsed as a MAC address.
      */
     public static MacAddress valueOf(final String address) {
-        final String[] elements = address.split(":");
-        if (elements.length != MacAddress.MAC_ADDRESS_LENGTH) {
+        if (!isValid(address)) {
             throw new IllegalArgumentException(
                     "Specified MAC Address must contain 12 hex digits"
                             + " separated pairwise by :'s.");
         }
-
+        final String[] elements = address.split(":");
         final byte[] addressInBytes = new byte[MacAddress.MAC_ADDRESS_LENGTH];
         for (int i = 0; i < MacAddress.MAC_ADDRESS_LENGTH; i++) {
             final String element = elements[i];
@@ -166,11 +205,40 @@ public class MacAddress {
      * Returns true if this MAC address is link local.
      *
      * @return true if link local
+     * @deprecated in Kingfisher release. Link local is not a correct description for
+     *             this MAC address. Replaced with {@link #isLldp()}
      */
+    @Deprecated
     public boolean isLinkLocal() {
-        return LL[0] == address[0] && LL[1] == address[1] && LL[2] == address[2] &&
-                LL[3] == address[3] && LL[4] == address[4] &&
-                (LL[5] == address[5] || LL[6] == address[5] || LL[7] == address[5]);
+        return isLldp();
+    }
+
+    /**
+     * Returns true if this MAC address is used by link layer discovery protocol.
+     *
+     * @return true if this MAC is LLDP MAC.
+     */
+    public boolean isLldp() {
+        return LLDP.contains(this);
+    }
+
+    /**
+     * Returns true if the Organizationally Unique Identifier (OUI) of this MAC
+     * address matches ONOS OUI.
+     *
+     * @return true if the OUI of this MAC address matches ONOS OUI.
+     */
+    public boolean isOnos() {
+        return Arrays.equals(this.oui(), ONOS.oui());
+    }
+
+    /**
+     * Returns the Organizationally Unique Identifier (OUI) of this MAC address.
+     *
+     * @return the OUI of this MAC address.
+     */
+    public byte[] oui() {
+        return Arrays.copyOfRange(this.address, 0, 3);
     }
 
     @Override
@@ -194,10 +262,10 @@ public class MacAddress {
 
     @Override
     public String toString() {
-        final StringBuilder builder = new StringBuilder();
+        final StringBuilder builder = new StringBuilder(2 * 6 + 5);
         for (final byte b : this.address) {
             if (builder.length() > 0) {
-                builder.append(":");
+                builder.append(':');
             }
             builder.append(String.format("%02X", b & 0xFF));
         }
@@ -214,5 +282,10 @@ public class MacAddress {
             builder.append(String.format("%02X", b & 0xFF));
         }
         return builder.toString();
+    }
+
+    private static boolean isValid(final String mac) {
+        Matcher matcher = MAC_PATTERN.matcher(mac);
+        return matcher.matches();
     }
 }

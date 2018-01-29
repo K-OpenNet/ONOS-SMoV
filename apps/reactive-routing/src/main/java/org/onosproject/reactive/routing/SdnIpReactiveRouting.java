@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,8 +31,10 @@ import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceService;
+import org.onosproject.routeservice.Route;
+import org.onosproject.routeservice.RouteService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.flow.DefaultTrafficSelector;
@@ -46,11 +48,7 @@ import org.onosproject.net.packet.OutboundPacket;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
-import org.onosproject.routing.IntentRequestListener;
-import org.onosproject.routing.IntentSynchronizationService;
-import org.onosproject.routing.RouteEntry;
-import org.onosproject.routing.RoutingService;
-import org.onosproject.routing.config.RoutingConfigurationService;
+import org.onosproject.intentsync.IntentSynchronizationService;
 import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -83,13 +81,13 @@ public class SdnIpReactiveRouting {
     protected PacketService packetService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingService routingService;
+    protected RouteService routeService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected IntentSynchronizationService intentSynchronizer;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingConfigurationService config;
+    protected ReactiveRoutingConfigurationService config;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected InterfaceService interfaceService;
@@ -107,9 +105,8 @@ public class SdnIpReactiveRouting {
     @Activate
     public void activate() {
         appId = coreService.registerApplication(APP_NAME);
-
         intentRequestListener = new ReactiveRoutingFib(appId, hostService,
-                config, interfaceService, intentSynchronizer);
+                interfaceService, intentSynchronizer);
 
         packetService.addProcessor(processor, PacketProcessor.director(2));
         requestIntercepts();
@@ -231,7 +228,7 @@ public class SdnIpReactiveRouting {
         // Step1: Try to update the existing intent first if it exists.
         //
         IpPrefix ipPrefix = null;
-        RouteEntry routeEntry = null;
+        Route route = null;
         if (config.isIpAddressLocal(dstIpAddress)) {
             if (dstIpAddress.isIp4()) {
                 ipPrefix = IpPrefix.valueOf(dstIpAddress,
@@ -242,9 +239,9 @@ public class SdnIpReactiveRouting {
             }
         } else {
             // Get IP prefix from BGP route table
-            routeEntry = routingService.getLongestMatchableRouteEntry(dstIpAddress);
-            if (routeEntry != null) {
-                ipPrefix = routeEntry.prefix();
+            route = routeService.longestPrefixMatch(dstIpAddress);
+            if (route != null) {
+                ipPrefix = route.prefix();
             }
         }
         if (ipPrefix != null
@@ -267,7 +264,7 @@ public class SdnIpReactiveRouting {
             // If the destination IP address is outside the local SDN network.
             // The Step 1 has already handled it. We do not need to do anything here.
             intentRequestListener.setUpConnectivityHostToInternet(srcIpAddress,
-                    ipPrefix, routeEntry.nextHop());
+                    ipPrefix, route.nextHop());
             break;
         case INTERNET_TO_HOST:
             intentRequestListener.setUpConnectivityInternetToHost(dstIpAddress);
@@ -300,23 +297,26 @@ public class SdnIpReactiveRouting {
      * @return the traffic type which this packet belongs to
      */
     private TrafficType trafficTypeClassifier(ConnectPoint srcConnectPoint,
-                                                             IpAddress dstIp) {
+                                              IpAddress dstIp) {
         LocationType dstIpLocationType = getLocationType(dstIp);
         Optional<Interface> srcInterface =
                 interfaceService.getInterfacesByPort(srcConnectPoint).stream().findFirst();
-        Set<ConnectPoint> ingressPoints = config.getBgpPeerConnectPoints();
+
+        Set<ConnectPoint> bgpPeerConnectPoints = config.getBgpPeerConnectPoints();
+
+
 
         switch (dstIpLocationType) {
         case INTERNET:
             if (srcInterface.isPresent() &&
-                    (!ingressPoints.contains(srcConnectPoint))) {
+                    (!bgpPeerConnectPoints.contains(srcConnectPoint))) {
                 return TrafficType.HOST_TO_INTERNET;
             } else {
                 return TrafficType.INTERNET_TO_INTERNET;
             }
         case LOCAL:
             if (srcInterface.isPresent() &&
-                    (!ingressPoints.contains(srcConnectPoint))) {
+                    (!bgpPeerConnectPoints.contains(srcConnectPoint))) {
                 return TrafficType.HOST_TO_HOST;
             } else {
                 // TODO Currently we only consider local public prefixes.
@@ -341,7 +341,7 @@ public class SdnIpReactiveRouting {
     private LocationType getLocationType(IpAddress ipAddress) {
         if (config.isIpAddressLocal(ipAddress)) {
             return LocationType.LOCAL;
-        } else if (routingService.getLongestMatchableRouteEntry(ipAddress) != null) {
+        } else if (routeService.longestPrefixMatch(ipAddress) != null) {
             return LocationType.INTERNET;
         } else {
             return LocationType.NO_ROUTE;
@@ -360,9 +360,9 @@ public class SdnIpReactiveRouting {
             }
         } else if (type == LocationType.INTERNET) {
             IpAddress nextHopIpAddress = null;
-            RouteEntry routeEntry = routingService.getLongestMatchableRouteEntry(dstIpAddress);
-            if (routeEntry != null) {
-                nextHopIpAddress = routeEntry.nextHop();
+            Route route = routeService.longestPrefixMatch(dstIpAddress);
+            if (route != null) {
+                nextHopIpAddress = route.nextHop();
                 Interface it = interfaceService.getMatchingInterface(nextHopIpAddress);
                 if (it != null) {
                     return it.connectPoint();
@@ -394,6 +394,5 @@ public class SdnIpReactiveRouting {
         packetService.emit(packet);
         log.trace("sending packet: {}", packet);
     }
-
 }
 

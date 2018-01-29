@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import org.onosproject.app.ApplicationStoreDelegate;
 import org.onosproject.common.app.ApplicationArchive;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.ApplicationIdStoreAdapter;
+import org.onosproject.app.ApplicationIdStoreAdapter;
 import org.onosproject.core.DefaultApplicationId;
 import org.onosproject.security.AppPermission;
 import org.onosproject.security.Permission;

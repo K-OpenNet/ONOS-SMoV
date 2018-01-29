@@ -85,6 +85,7 @@
         },
         activate: function () {
             $log.debug("Alarm topology overlay ACTIVATED");
+            atds.startDisplay();
         },
         deactivate: function () {
             atds.stopDisplay();
@@ -99,44 +100,9 @@
                     $log.debug('Show alarms for selected device. data:', data);
                     ns.navTo("alarmTable", {devId: data.id});
                 }
-            },
-            alarm2button: {
-                gid: '*clocks',
-                tt: 'Show alarms for all devices',
-                cb: function (data) {
-                    $log.debug('Show alarms for all devices. data:', data);
-                    ns.navTo("alarmTable");
-                }
             }
         },
-        // Key bindings for traffic overlay buttons
-        // NOTE: fully qual. button ID is derived from overlay-id and key-name
-        keyBindings: {
-            0: {
-                cb: function () {
-                    atds.stopDisplay();
-                },
-                tt: 'Cancel Alarm Count on Device',
-                gid: 'xMark'
-            },
-            V: {
-                cb: function () {
-                    atds.startDisplay('mouse');
-                },
-                tt: 'Start Alarm Count on Device',
-                gid: '*clock'
-            },
-            _keyOrder: [
-                '0', 'V'
-            ]
-        },
         hooks: {
-            // hook for handling escape key
-            // Must return true to consume ESC, false otherwise.
-            escape: function () {
-                // Must return true to consume ESC, false otherwise.
-                return atds.stopDisplay();
-            },
             // hooks for when the selection changes...
             empty: function () {
                 selectionCallback('empty');
@@ -147,16 +113,6 @@
             multi: function (selectOrder) {
                 selectionCallback('multi', selectOrder);
                 tov.addDetailButton('alarm1button');
-                tov.addDetailButton('alarm2button');
-            },
-            mouseover: function (m) {
-                // m has id, class, and type properties
-                $log.debug('mouseover:', m);
-                atds.updateDisplay(m);
-            },
-            mouseout: function () {
-                $log.debug('mouseout');
-                atds.updateDisplay();
             }
         }
     };

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,14 +24,14 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
 import org.onlab.util.SafeRecurringTask;
-import org.onosproject.incubator.net.intf.Interface;
-import org.onosproject.incubator.net.intf.InterfaceEvent;
-import org.onosproject.incubator.net.intf.InterfaceListener;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.net.intf.Interface;
+import org.onosproject.net.intf.InterfaceEvent;
+import org.onosproject.net.intf.InterfaceListener;
+import org.onosproject.net.intf.InterfaceService;
+import org.onosproject.routeservice.Route;
+import org.onosproject.routeservice.RouteService;
 import org.onosproject.net.ConnectPoint;
-
 import org.onosproject.net.Host;
-
 import org.onosproject.net.config.ConfigFactory;
 import org.onosproject.net.config.NetworkConfigEvent;
 import org.onosproject.net.config.NetworkConfigListener;
@@ -43,8 +43,6 @@ import org.onosproject.net.mcast.McastListener;
 import org.onosproject.net.mcast.McastRoute;
 import org.onosproject.net.mcast.MulticastRouteService;
 import org.onosproject.net.packet.PacketService;
-import org.onosproject.routing.RouteEntry;
-import org.onosproject.routing.RoutingService;
 import org.slf4j.Logger;
 
 import java.util.Map;
@@ -62,7 +60,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  */
 @Component(immediate = true)
 @Service
-public class PIMInterfaceManager implements PIMInterfaceService {
+public class PimInterfaceManager implements PimInterfaceService {
 
     private final Logger log = getLogger(getClass());
 
@@ -101,12 +99,12 @@ public class PIMInterfaceManager implements PIMInterfaceService {
     protected MulticastRouteService multicastRouteService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingService unicastRoutingService;
+    protected RouteService unicastRouteService;
 
     // Store PIM Interfaces in a map key'd by ConnectPoint
-    private final Map<ConnectPoint, PIMInterface> pimInterfaces = Maps.newConcurrentMap();
+    private final Map<ConnectPoint, PimInterface> pimInterfaces = Maps.newConcurrentMap();
 
-    private final Map<McastRoute, PIMInterface> routes = Maps.newConcurrentMap();
+    private final Map<McastRoute, PimInterface> routes = Maps.newConcurrentMap();
 
     private final InternalNetworkConfigListener configListener =
             new InternalNetworkConfigListener();
@@ -147,18 +145,18 @@ public class PIMInterfaceManager implements PIMInterfaceService {
         // Schedule the periodic hello sender.
         scheduledExecutorService.scheduleAtFixedRate(
                 SafeRecurringTask.wrap(
-                        () -> pimInterfaces.values().forEach(PIMInterface::sendHello)),
+                        () -> pimInterfaces.values().forEach(PimInterface::sendHello)),
                 initialHelloDelay, pimHelloPeriod, TimeUnit.MILLISECONDS);
 
         // Schedule task to periodically time out expired neighbors
         scheduledExecutorService.scheduleAtFixedRate(
                 SafeRecurringTask.wrap(
-                        () -> pimInterfaces.values().forEach(PIMInterface::checkNeighborTimeouts)),
+                        () -> pimInterfaces.values().forEach(PimInterface::checkNeighborTimeouts)),
                 0, timeoutTaskPeriod, TimeUnit.MILLISECONDS);
 
         scheduledExecutorService.scheduleAtFixedRate(
                 SafeRecurringTask.wrap(
-                        () -> pimInterfaces.values().forEach(PIMInterface::sendJoins)),
+                        () -> pimInterfaces.values().forEach(PimInterface::sendJoins)),
                 0, joinTaskPeriod, TimeUnit.MILLISECONDS);
 
         log.info("Started");
@@ -178,8 +176,8 @@ public class PIMInterfaceManager implements PIMInterfaceService {
     }
 
     @Override
-    public PIMInterface getPIMInterface(ConnectPoint cp) {
-        PIMInterface pi = pimInterfaces.get(cp);
+    public PimInterface getPimInterface(ConnectPoint cp) {
+        PimInterface pi = pimInterfaces.get(cp);
         if (pi == null && log.isTraceEnabled()) {
             log.trace("We have been asked for an Interface we don't have: {}", cp);
         }
@@ -187,7 +185,7 @@ public class PIMInterfaceManager implements PIMInterfaceService {
     }
 
     @Override
-    public Set<PIMInterface> getPimInterfaces() {
+    public Set<PimInterface> getPimInterfaces() {
         return ImmutableSet.copyOf(pimInterfaces.values());
     }
 
@@ -216,8 +214,8 @@ public class PIMInterfaceManager implements PIMInterfaceService {
         pimInterfaces.remove(cp);
     }
 
-    private PIMInterface buildPimInterface(PimInterfaceConfig config, Interface intf) {
-        PIMInterface.Builder builder = PIMInterface.builder()
+    private PimInterface buildPimInterface(PimInterfaceConfig config, Interface intf) {
+        PimInterface.Builder builder = PimInterface.builder()
                 .withPacketService(packetService)
                 .withInterface(intf);
 
@@ -231,17 +229,19 @@ public class PIMInterfaceManager implements PIMInterfaceService {
     }
 
     private void addRoute(McastRoute route) {
-        PIMInterface pimInterface = getSourceInterface(route);
+        PimInterface pimInterface = getSourceInterface(route);
 
         if (pimInterface == null) {
             return;
         }
 
+        multicastRouteService.addSource(route, pimInterface.getInterface().connectPoint());
+
         routes.put(route, pimInterface);
     }
 
     private void removeRoute(McastRoute route) {
-        PIMInterface pimInterface = routes.remove(route);
+        PimInterface pimInterface = routes.remove(route);
 
         if (pimInterface == null) {
             return;
@@ -250,29 +250,29 @@ public class PIMInterfaceManager implements PIMInterfaceService {
         pimInterface.removeRoute(route);
     }
 
-    private PIMInterface getSourceInterface(McastRoute route) {
-        RouteEntry routeEntry = unicastRoutingService.getLongestMatchableRouteEntry(route.source());
+    private PimInterface getSourceInterface(McastRoute route) {
+        Route unicastRoute = unicastRouteService.longestPrefixMatch(route.source());
 
-        if (routeEntry == null) {
+        if (unicastRoute == null) {
             log.warn("No route to source {}", route.source());
             return null;
         }
 
-        Interface intf = interfaceService.getMatchingInterface(routeEntry.nextHop());
+        Interface intf = interfaceService.getMatchingInterface(unicastRoute.nextHop());
 
         if (intf == null) {
-            log.warn("No interface with route to next hop {}", routeEntry.nextHop());
+            log.warn("No interface with route to next hop {}", unicastRoute.nextHop());
             return null;
         }
 
-        PIMInterface pimInterface = pimInterfaces.get(intf.connectPoint());
+        PimInterface pimInterface = pimInterfaces.get(intf.connectPoint());
 
         if (pimInterface == null) {
             log.warn("PIM is not enabled on interface {}", intf);
             return null;
         }
 
-        Set<Host> hosts = hostService.getHostsByIp(routeEntry.nextHop());
+        Set<Host> hosts = hostService.getHostsByIp(unicastRoute.nextHop());
         Host host = null;
         for (Host h : hosts) {
             if (h.vlan().equals(intf.vlan())) {
@@ -280,11 +280,11 @@ public class PIMInterfaceManager implements PIMInterfaceService {
             }
         }
         if (host == null) {
-            log.warn("Next hop host entry not found: {}", routeEntry.nextHop());
+            log.warn("Next hop host entry not found: {}", unicastRoute.nextHop());
             return null;
         }
 
-        pimInterface.addRoute(route, routeEntry.nextHop(), host.mac());
+        pimInterface.addRoute(route, unicastRoute.nextHop(), host.mac());
 
         return pimInterface;
     }

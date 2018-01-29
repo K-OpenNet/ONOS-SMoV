@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  */
 package org.onosproject.store.service;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import org.onosproject.core.ApplicationId;
 
@@ -27,7 +30,7 @@ public interface DistributedPrimitive {
     /**
      * Type of distributed primitive.
      */
-    public enum Type {
+    enum Type {
         /**
          * Map with strong consistency semantics.
          */
@@ -39,14 +42,34 @@ public interface DistributedPrimitive {
         EVENTUALLY_CONSISTENT_MAP,
 
         /**
-         * distributed set.
+         * Consistent Multimap.
+         */
+        CONSISTENT_MULTIMAP,
+
+        /**
+         * Distributed set.
          */
         SET,
 
         /**
-         * atomic counter.
+         * Tree map.
+         */
+        CONSISTENT_TREEMAP,
+
+        /**
+         * Atomic counter.
          */
         COUNTER,
+
+        /**
+         * Numeric ID generator.
+         */
+        ID_GENERATOR,
+
+        /**
+         * Atomic counter map.
+         */
+        COUNTER_MAP,
 
         /**
          * Atomic value.
@@ -54,9 +77,19 @@ public interface DistributedPrimitive {
         VALUE,
 
         /**
-         * Distributed queue.
+         * Distributed work queue.
          */
-        QUEUE,
+        WORK_QUEUE,
+
+        /**
+         * Document tree.
+         */
+        DOCUMENT_TREE,
+
+        /**
+         * Distributed topic.
+         */
+        TOPIC,
 
         /**
          * Leader elector.
@@ -69,7 +102,39 @@ public interface DistributedPrimitive {
         TRANSACTION_CONTEXT
     }
 
-    static final long DEFAULT_OPERTATION_TIMEOUT_MILLIS = 5000L;
+    /**
+     * Status of distributed primitive.
+     */
+    enum Status {
+
+        /**
+         * Signifies a state wherein the primitive is operating correctly and is capable of meeting the advertised
+         * consistency and reliability guarantees.
+         */
+        ACTIVE,
+
+        /**
+         * Signifies a state wherein the primitive is temporarily incapable of providing the advertised
+         * consistency properties.
+         */
+        SUSPENDED,
+
+        /**
+         * Signifies a state wherein the primitive has been shutdown and therefore cannot perform its functions.
+         */
+        INACTIVE
+    }
+
+    /**
+     * Use {@link #DEFAULT_OPERATION_TIMEOUT_MILLIS} instead.
+     */
+    @Deprecated
+    long DEFAULT_OPERTATION_TIMEOUT_MILLIS = 5000L;
+
+    /**
+     * Default timeout for primitive operations.
+     */
+    long DEFAULT_OPERATION_TIMEOUT_MILLIS = 5000L;
 
     /**
      * Returns the name of this primitive.
@@ -101,5 +166,25 @@ public interface DistributedPrimitive {
      */
     default CompletableFuture<Void> destroy() {
         return CompletableFuture.completedFuture(null);
+    }
+
+    /**
+     * Registers a listener to be called when the primitive's status changes.
+     * @param listener The listener to be called when the status changes.
+     */
+    default void addStatusChangeListener(Consumer<Status> listener) {}
+
+    /**
+     * Unregisters a previously registered listener to be called when the primitive's status changes.
+     * @param listener The listener to unregister
+     */
+    default void removeStatusChangeListener(Consumer<Status> listener) {}
+
+    /**
+     * Returns the collection of status change listeners previously registered.
+     * @return collection of status change listeners
+     */
+    default Collection<Consumer<Status>> statusChangeListeners() {
+        return Collections.emptyList();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -129,6 +129,15 @@ public interface IntentStore extends Store<IntentEvent, IntentStoreDelegate> {
      * @return pending intent data objects
      */
     Iterable<IntentData> getPendingData();
+
+    /**
+     * Returns the intent data object that are pending processing for a specfied
+     * key.
+     *
+     * @param intentKey key to look up
+     * @return pending intent data object
+     */
+    IntentData getPendingData(Key intentKey);
 
     /**
      * Returns the intent data objects that are pending processing for longer

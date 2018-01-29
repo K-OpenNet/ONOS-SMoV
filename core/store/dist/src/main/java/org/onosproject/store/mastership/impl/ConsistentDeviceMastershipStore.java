@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.onosproject.store.mastership.impl;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.mastership.MastershipEvent.Type.BACKUPS_CHANGED;
 import static org.onosproject.mastership.MastershipEvent.Type.MASTER_CHANGED;
+import static org.onosproject.mastership.MastershipEvent.Type.SUSPENDED;
 import static org.slf4j.LoggerFactory.getLogger;
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -58,8 +59,7 @@ import org.onosproject.store.AbstractStore;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.onosproject.store.serializers.KryoSerializer;
-import org.onosproject.store.serializers.StoreSerializer;
+import org.onosproject.store.service.Serializer;
 import org.slf4j.Logger;
 
 import com.google.common.base.Objects;
@@ -70,7 +70,7 @@ import com.google.common.collect.Maps;
 /**
  * Implementation of the MastershipStore on top of Leadership Service.
  */
-@Component(immediate = true, enabled = true)
+@Component(immediate = true)
 @Service
 public class ConsistentDeviceMastershipStore
     extends AbstractStore<MastershipEvent, MastershipStoreDelegate>
@@ -98,6 +98,7 @@ public class ConsistentDeviceMastershipStore
     private static final Pattern DEVICE_MASTERSHIP_TOPIC_PATTERN =
             Pattern.compile("device:(.*)");
 
+    private ExecutorService eventHandler;
     private ExecutorService messageHandlingExecutor;
     private ScheduledExecutorService transferExecutor;
     private final LeadershipEventListener leadershipEventListener =
@@ -107,26 +108,26 @@ public class ConsistentDeviceMastershipStore
     private static final String DEVICE_ID_NULL = "Device ID cannot be null";
     private static final int WAIT_BEFORE_MASTERSHIP_HANDOFF_MILLIS = 3000;
 
-    public static final StoreSerializer SERIALIZER = new KryoSerializer() {
-        @Override
-        protected void setupKryoPool() {
-            serializerPool = KryoNamespace.newBuilder()
+    public static final Serializer SERIALIZER = Serializer.using(
+            KryoNamespace.newBuilder()
                     .register(KryoNamespaces.API)
                     .register(MastershipRole.class)
                     .register(MastershipEvent.class)
                     .register(MastershipEvent.Type.class)
-                    .build();
-        }
-    };
+                    .build("MastershipStore"));
 
     @Activate
     public void activate() {
+
+        eventHandler = Executors.newSingleThreadExecutor(
+                        groupedThreads("onos/store/device/mastership", "event-handler", log));
+
         messageHandlingExecutor =
                 Executors.newSingleThreadExecutor(
-                        groupedThreads("onos/store/device/mastership", "message-handler"));
+                        groupedThreads("onos/store/device/mastership", "message-handler", log));
         transferExecutor =
                 Executors.newSingleThreadScheduledExecutor(
-                        groupedThreads("onos/store/device/mastership", "mastership-transfer-executor"));
+                        groupedThreads("onos/store/device/mastership", "mastership-transfer-executor", log));
         clusterCommunicator.addSubscriber(ROLE_RELINQUISH_SUBJECT,
                 SERIALIZER::decode,
                 this::relinquishLocalRole,
@@ -141,10 +142,10 @@ public class ConsistentDeviceMastershipStore
     @Deactivate
     public void deactivate() {
         clusterCommunicator.removeSubscriber(ROLE_RELINQUISH_SUBJECT);
+        leadershipService.removeListener(leadershipEventListener);
         messageHandlingExecutor.shutdown();
         transferExecutor.shutdown();
-        leadershipService.removeListener(leadershipEventListener);
-
+        eventHandler.shutdown();
         log.info("Stopped");
     }
 
@@ -154,8 +155,12 @@ public class ConsistentDeviceMastershipStore
 
         String leadershipTopic = createDeviceMastershipTopic(deviceId);
         Leadership leadership = leadershipService.runForLeadership(leadershipTopic);
-        return CompletableFuture.completedFuture(localNodeId.equals(leadership.leaderNodeId())
-                ? MastershipRole.MASTER : MastershipRole.STANDBY);
+        NodeId leader = leadership == null ? null : leadership.leaderNodeId();
+        List<NodeId> candidates = leadership == null ?
+                ImmutableList.of() : ImmutableList.copyOf(leadership.candidates());
+        MastershipRole role = Objects.equal(localNodeId, leader) ?
+                MastershipRole.MASTER : candidates.contains(localNodeId) ? MastershipRole.STANDBY : MastershipRole.NONE;
+        return CompletableFuture.completedFuture(role);
     }
 
     @Override
@@ -209,6 +214,10 @@ public class ConsistentDeviceMastershipStore
     public Set<DeviceId> getDevices(NodeId nodeId) {
         checkArgument(nodeId != null, NODE_ID_NULL);
 
+        // FIXME This result contains REMOVED device.
+        // MastershipService cannot listen to DeviceEvent to GC removed topic,
+        // since DeviceManager depend on it.
+        // Reference count, etc. at LeadershipService layer?
         return leadershipService
                 .ownedTopics(nodeId)
                 .stream()
@@ -313,9 +322,14 @@ public class ConsistentDeviceMastershipStore
 
         @Override
         public void event(LeadershipEvent event) {
+            eventHandler.execute(() -> handleEvent(event));
+        }
+
+        private void handleEvent(LeadershipEvent event) {
             Leadership leadership = event.subject();
             DeviceId deviceId = extractDeviceIdFromTopic(leadership.topic());
-            RoleInfo roleInfo = getNodes(deviceId);
+            RoleInfo roleInfo = event.type() != LeadershipEvent.Type.SERVICE_DISRUPTED ?
+                    getNodes(deviceId) : new RoleInfo();
             switch (event.type()) {
             case LEADER_AND_CANDIDATES_CHANGED:
                 notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, roleInfo));
@@ -326,6 +340,12 @@ public class ConsistentDeviceMastershipStore
                 break;
             case CANDIDATES_CHANGED:
                 notifyDelegate(new MastershipEvent(BACKUPS_CHANGED, deviceId, roleInfo));
+                break;
+            case SERVICE_DISRUPTED:
+                notifyDelegate(new MastershipEvent(SUSPENDED, deviceId, roleInfo));
+                break;
+            case SERVICE_RESTORED:
+                // Do nothing, wait for updates from peers
                 break;
             default:
                 return;

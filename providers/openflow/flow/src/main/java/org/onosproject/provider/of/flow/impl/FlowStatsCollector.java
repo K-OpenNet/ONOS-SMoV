@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package org.onosproject.provider.of.flow.impl;
 
-import org.onlab.util.SharedExecutors;
+import static com.google.common.base.Preconditions.checkNotNull;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.RoleState;
 import org.projectfloodlight.openflow.protocol.OFFlowStatsRequest;
@@ -31,7 +31,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Collects flow statistics for the specified switch.
  */
-class FlowStatsCollector {
+class FlowStatsCollector implements SwitchDataCollector {
 
     private final Logger log = getLogger(getClass());
 
@@ -52,7 +52,7 @@ class FlowStatsCollector {
      */
     FlowStatsCollector(Timer timer, OpenFlowSwitch sw, int pollInterval) {
         this.timer = timer;
-        this.sw = sw;
+        this.sw = checkNotNull(sw, "Null switch");
         this.pollInterval = pollInterval;
     }
 
@@ -87,8 +87,8 @@ class FlowStatsCollector {
         // Initially start polling quickly. Then drop down to configured value
         log.debug("Starting Stats collection thread for {}", sw.getStringId());
         task = new InternalTimerTask();
-        SharedExecutors.getTimer().scheduleAtFixedRate(task, 1 * SECONDS,
-                                                       pollInterval * SECONDS);
+        timer.scheduleAtFixedRate(task, 1 * SECONDS,
+                                  pollInterval * SECONDS);
     }
 
     public synchronized void stop() {

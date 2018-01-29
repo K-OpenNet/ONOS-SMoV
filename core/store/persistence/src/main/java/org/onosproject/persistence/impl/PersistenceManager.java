@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,10 +27,10 @@ import org.onosproject.persistence.PersistentMapBuilder;
 import org.onosproject.persistence.PersistentSetBuilder;
 import org.slf4j.Logger;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
@@ -41,18 +41,19 @@ import static org.onosproject.security.AppPermission.Type.PERSISTENCE_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
- * Service that maintains local disk backed maps and sets.  This implementation automatically deletes empty structures
- * on shutdown.
+ * Service that maintains local disk backed maps and sets.
+ * This implementation automatically deletes empty structures on shutdown.
  */
 @Component(immediate = true)
 @Service
 public class PersistenceManager implements PersistenceService {
 
-    private static final String DATABASE_PATH = "../data/localDB";
-    private static final String ENCLOSING_FOLDER = "../data";
+    private static final String DATABASE_ROOT =
+            System.getProperty("karaf.data") + "/db/local/";
+
+    private static final String DATABASE_PATH = "cache";
 
     static final String MAP_PREFIX = "map:";
-
     static final String SET_PREFIX = "set:";
 
     private final Logger log = getLogger(getClass());
@@ -68,13 +69,16 @@ public class PersistenceManager implements PersistenceService {
     @Activate
     public void activate() {
         timer = new Timer();
-        Path dbPath = Paths.get(DATABASE_PATH);
-        Path dbFolderPath = Paths.get(ENCLOSING_FOLDER);
+
+        File dbFolderPath = new File(DATABASE_ROOT);
+        Path dbPath = dbFolderPath.toPath().resolve(DATABASE_PATH);
+        log.debug("dbPath: {}", dbPath);
+
         //Make sure the directory exists, if it does not, make it.
-        if (!dbFolderPath.toFile().isDirectory()) {
+        if (!dbFolderPath.isDirectory()) {
             log.info("The specified folder location for the database did not exist and will be created.");
             try {
-                Files.createDirectories(dbFolderPath);
+                Files.createDirectories(dbFolderPath.toPath());
             } catch (IOException e) {
                 log.error("Could not create the required folder for the database.");
                 throw new PersistenceException("Database folder could not be created.");
@@ -102,15 +106,15 @@ public class PersistenceManager implements PersistenceService {
         for (Map.Entry<String, Object> entry : localDB.getAll().entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
-                //This is a map implementation to be handled as such
             if (value instanceof Map) {
+                // This is a map implementation to be handled as such
                 Map asMap = (Map) value;
                 if (asMap.isEmpty()) {
                     //the map is empty and may be deleted
                     localDB.delete(key);
                 }
-                //This is a set implementation and can be handled as such
             } else if (value instanceof Set) {
+                // This is a set implementation and can be handled as such
                 Set asSet = (Set) value;
                 if (asSet.isEmpty()) {
                     //the set is empty and may be deleted
@@ -123,11 +127,13 @@ public class PersistenceManager implements PersistenceService {
         log.info("Stopped");
     }
 
+    @Override
     public <K, V> PersistentMapBuilder<K, V> persistentMapBuilder() {
         checkPermission(PERSISTENCE_WRITE);
         return new DefaultPersistentMapBuilder<>(localDB);
     }
 
+    @Override
     public <E> PersistentSetBuilder<E> persistentSetBuilder() {
         checkPermission(PERSISTENCE_WRITE);
         return new DefaultPersistentSetBuilder<>(localDB);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,45 +24,55 @@
 
     // injected refs
     var $log, $timeout, fs, sus, ts, flash, wss, tov,
-        tis, tms, td3, tss, tts, tos, fltr, tls, uplink, svg;
+        tis, tms, td3, tss, tts, tos, fltr, tls, uplink, svg, tpis;
+
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#tfs#' + x + '#';
+    };
 
     // configuration
     var linkConfig = {
         light: {
-            baseColor: '#666',
+            baseColor: '#939598',
             inColor: '#66f',
-            outColor: '#f00'
+            outColor: '#f00',
         },
         dark: {
-            baseColor: '#aaa',
+            // TODO : theme
+            baseColor: '#939598',
             inColor: '#66f',
-            outColor: '#f66'
+            outColor: '#f00',
         },
         inWidth: 12,
-        outWidth: 10
+        outWidth: 10,
     };
 
     // internal state
-    var settings,   // merged default settings and options
-        force,      // force layout object
-        drag,       // drag behavior handler
+    var settings, // merged default settings and options
+        force, // force layout object
+        drag, // drag behavior handler
         network = {
             nodes: [],
             links: [],
             linksByDevice: {},
             lookup: {},
-            revLinkToKey: {}
+            revLinkToKey: {},
         },
-        lu,                     // shorthand for lookup
-        rlk,                    // shorthand for revLinktoKey
-        showHosts = false,      // whether hosts are displayed
-        showOffline = true,     // whether offline devices are displayed
-        nodeLock = false,       // whether nodes can be dragged or not (locked)
-        fTimer,                 // timer for delayed force layout
-        fNodesTimer,            // timer for delayed nodes update
-        fLinksTimer,            // timer for delayed links update
-        dim,                    // the dimensions of the force layout [w,h]
-        linkNums = [];          // array of link number labels
+        lu, // shorthand for lookup
+        rlk, // shorthand for revLinktoKey
+        showHosts = false, // whether hosts are displayed
+        showOffline = true, // whether offline devices are displayed
+        nodeLock = false, // whether nodes can be dragged or not (locked)
+        fTimer, // timer for delayed force layout
+        fNodesTimer, // timer for delayed nodes update
+        fLinksTimer, // timer for delayed links update
+        dim, // the dimensions of the force layout [w,h]
+        linkNums = [], // array of link number labels
+        devIconDim = 36, // node target dimension
+        devIconDimMin = 20, // node minimum dimension when zoomed out
+        devIconDimMax = 40, // node maximum dimension when zoomed in
+        portLabelDim = 30;
 
     // SVG elements;
     var linkG, linkLabelG, numLinkLblsG, portLabelG, nodeG;
@@ -78,23 +88,23 @@
             // note: key is node.class
             device: -8000,
             host: -5000,
-            _def_: -12000
+            _def_: -12000,
         },
         linkDistance: {
             // note: key is link.type
             direct: 100,
             optical: 120,
             hostLink: 3,
-            _def_: 50
+            _def_: 50,
         },
         linkStrength: {
             // note: key is link.type
             // range: {0.0 ... 1.0}
-            //direct: 1.0,
-            //optical: 1.0,
-            //hostLink: 1.0,
-            _def_: 1.0
-        }
+            // direct: 1.0,
+            // optical: 1.0,
+            // hostLink: 1.0,
+            _def_: 1.0,
+        },
     };
 
 
@@ -150,7 +160,7 @@
 
     function addHost(data) {
         var id = data.id,
-            d, lnk;
+            d;
 
         // although this is an add host event, if we already have the
         //  host, treat it as an update instead..
@@ -164,12 +174,10 @@
         lu[id] = d;
         updateNodes();
 
-        lnk = tms.createHostLink(data);
-        if (lnk) {
-            d.linkData = lnk;    // cache ref on its host
-            network.links.push(lnk);
-            lu[d.ingress] = lnk;
-            lu[d.egress] = lnk;
+        // need to handle possible multiple links (multi-homed host)
+        createHostLinks(data.allCps, d);
+
+        if (d.links.length) {
             updateLinks();
         }
         fStart();
@@ -187,13 +195,30 @@
         }
     }
 
+    function createHostLinks(cps, model) {
+        model.links = [];
+        cps.forEach(function (cp) {
+            var linkData = {
+                key: model.id + '/0-' + cp.device + '/' + cp.port,
+                dst: cp.device,
+                dstPort: cp.port,
+            };
+            model.links.push(linkData);
+
+            var lnk = tms.createHostLink(model.id, cp.device, cp.port);
+            if (lnk) {
+                network.links.push(lnk);
+                lu[linkData.key] = lnk;
+            }
+        });
+    }
+
     function moveHost(data) {
         var id = data.id,
-            d = lu[id],
-            lnk;
+            d = lu[id];
+
         if (d) {
-            // first remove the old host link
-            removeLinkElement(d.linkData);
+            removeAllLinkElements(d.links);
 
             // merge new data
             angular.extend(d, data);
@@ -201,14 +226,8 @@
                 sendUpdateMeta(d);
             }
 
-            // now create a new host link
-            lnk = tms.createHostLink(data);
-            if (lnk) {
-                d.linkData = lnk;
-                network.links.push(lnk);
-                lu[d.ingress] = lnk;
-                lu[d.egress] = lnk;
-            }
+            // now create new host link(s)
+            createHostLinks(data.allCps, d);
 
             updateNodes();
             updateLinks();
@@ -303,7 +322,7 @@
             network.linksByDevice[found].push(ldata);
             ldata.devicePair = found;
         } else {
-            network.linksByDevice[key] = [ ldata ];
+            network.linksByDevice[key] = [ldata];
             ldata.devicePair = key;
         }
     }
@@ -313,7 +332,7 @@
         ldata.fromTarget = link;
         rlk[link.id] = ldata.key;
         // possible solution to el being undefined in restyleLinkElement:
-        //_updateLinks();
+        // _updateLinks();
         restyleLinkElement(ldata);
     }
 
@@ -337,7 +356,7 @@
             modeCls = ldata.expected() ? 'inactive' : 'not-permitted',
             delay = immediate ? 0 : 1000;
 
-        // FIXME: understand why el is sometimes undefined on addLink events...
+        // NOTE: understand why el is sometimes undefined on addLink events...
         // Investigated:
         // el is undefined when it's a reverse link that is being added.
         // updateLinks (which sets ldata.el) isn't called before this is called.
@@ -358,6 +377,12 @@
         }
     }
 
+    function removeAllLinkElements(links) {
+        links.forEach(function (lnk) {
+            removeLinkElement(lnk);
+        });
+    }
+
     function removeLinkElement(d) {
         var idx = fs.find(d.key, network.links, 'key'),
             removed;
@@ -372,12 +397,8 @@
     }
 
     function removeHostElement(d, upd) {
-        // first, remove associated hostLink...
-        removeLinkElement(d.linkData);
-
-        // remove hostLink bindings
-        delete lu[d.ingress];
-        delete lu[d.egress];
+        // first, remove associated hostLink(s)...
+        removeAllLinkElements(d.links);
 
         // remove from lookup cache
         delete lu[d.id];
@@ -463,15 +484,15 @@
                 y: d.y,
                 equivLoc: {
                     lng: ll[0],
-                    lat: ll[1]
-                }
+                    lat: ll[1],
+                },
             };
         }
         d.metaUi = metaUi;
         wss.sendEvent('updateMeta', {
             id: d.id,
             class: d.class,
-            memento: metaUi
+            memento: metaUi,
         });
     }
 
@@ -481,7 +502,7 @@
     }
 
     function vis(b) {
-        return b ? 'visible' : 'hidden';
+        return topoLion(b ? 'visible' : 'hidden');
     }
 
     function toggleHosts(x) {
@@ -490,7 +511,7 @@
 
         showHosts = on;
         updateHostVisibility();
-        flash.flash('Hosts ' + vis(on));
+        flash.flash(topoLion('hosts') + ' ' + vis(on));
         return on;
     }
 
@@ -500,7 +521,7 @@
 
         showOffline = on;
         updateOfflineVisibility();
-        flash.flash('Offline devices ' + vis(on));
+        flash.flash(topoLion('fl_offline_devices') + ' ' + vis(on));
         return on;
     }
 
@@ -508,6 +529,13 @@
         flash.flash(td3.incDevLabIndex());
         tms.findDevices().forEach(function (d) {
             td3.updateDeviceLabel(d);
+        });
+    }
+
+    function cycleHostLabels() {
+        flash.flash(td3.incHostLabIndex());
+        tms.findHosts().forEach(function (d) {
+            td3.updateHostLabel(d);
         });
     }
 
@@ -545,7 +573,7 @@
     }
 
     function supAmt(less) {
-        return less ? "suppressed" : "suppressedmax";
+        return less ? 'suppressed' : 'suppressedmax';
     }
 
     function suppressLayers(b, less) {
@@ -574,7 +602,7 @@
 
     function showBadLinks() {
         var badLinks = tms.findBadLinks();
-        flash.flash('Bad Links: ' + badLinks.length);
+        flash.flash(topoLion('fl_bad_links') + ': ' + badLinks.length);
         $log.debug('Bad Link List (' + badLinks.length + '):');
         badLinks.forEach(function (d) {
             $log.debug('bad link: (' + d.bad + ') ' + d.key, d);
@@ -587,11 +615,58 @@
         $timeout(updateLinks, 2000);
     }
 
+    function deviceScale() {
+        var scale = uplink.zoomer().scale(),
+            dim = devIconDim,
+            multiplier = 1;
+
+        if (dim * scale < devIconDimMin) {
+            multiplier = devIconDimMin / (dim * scale);
+        } else if (dim * scale > devIconDimMax) {
+            multiplier = devIconDimMax / (dim * scale);
+        }
+
+        return multiplier;
+    }
+
+    function linkWidthScale(scale) {
+        var scale = uplink.zoomer().scale();
+        return linkScale(widthRatio) / scale;
+    }
+
+    function portLabelScale(scale) {
+        var scale = uplink.zoomer().scale();
+        return portLabelDim / (portLabelDim * scale);
+    }
+
+    function setNodeScale(scale) {
+        // Scale the network nodes
+        _.each(network.nodes, function (node) {
+            if (node.class === 'host') {
+                node.el.selectAll('g').style('transform', 'scale(' + deviceScale(scale) + ')');
+                node.el.selectAll('text').style('transform', 'scale(' + deviceScale(scale) + ')');
+                return;
+            }
+            node.el.selectAll('*')
+                .style('transform', 'scale(' + deviceScale(scale) + ')');
+        });
+
+        // Scale the network links
+        _.each(network.links, function (link) {
+            link.el.style('stroke-width', linkWidthScale(scale) + 'px');
+        });
+
+        d3.select('#topo-portLabels')
+            .selectAll('.portLabel')
+            .selectAll('*')
+            .style('transform', 'scale(' + portLabelScale(scale) + ')');
+    }
+
     function resetAllLocations() {
         tms.resetAllLocations();
         updateNodes();
         tick(); // force nodes to be redrawn in their new locations
-        flash.flash('Reset Node Locations');
+        flash.flash(topoLion('fl_reset_node_locations'));
     }
 
     // ==========================================
@@ -624,7 +699,7 @@
                     // Need to guard against NaN here ??
                     return sus.translate(d.x, d.y);
                 },
-                opacity: 0
+                opacity: 0,
             })
             .call(drag)
             .on('mouseover', tss.nodeMouseOver)
@@ -660,7 +735,7 @@
             x1: link.source.x,
             y1: link.source.y,
             x2: link.target.x,
-            y2: link.target.y
+            y2: link.target.y,
         };
     }
 
@@ -681,7 +756,7 @@
             x1: pos.x1 + (mult * dy / length),
             y1: pos.y1 + (mult * -dx / length),
             x2: pos.x2 + (mult * dy / length),
-            y2: pos.y2 + (mult * -dx / length)
+            y2: pos.y2 + (mult * -dx / length),
         };
     }
 
@@ -724,7 +799,7 @@
                 linkNums.push({
                     id: key,
                     num: numLinks,
-                    linkCoords: linkArr[0].position
+                    linkCoords: linkArr[0].position,
                 });
             } else {
                 linkSrcId = null;
@@ -773,14 +848,14 @@
                 x2: function (d) { return d.position.x2; },
                 y2: function (d) { return d.position.y2; },
                 stroke: linkConfig[th].inColor,
-                'stroke-width': linkConfig.inWidth
+                'stroke-width': linkConfig.inWidth,
             });
 
         // augment links
         entering.each(td3.linkEntering);
 
         // operate on both existing and new links:
-        //link.each(...)
+        // link.each(...)
 
         // add labels for how many links are in a thick line
         td3.applyNumLinkLabels(linkNums, numLinkLblsG);
@@ -797,7 +872,7 @@
             .duration(1500)
             .attr({
                 'stroke-dasharray': '3 12',
-                'stroke-width': linkConfig.outWidth
+                'stroke-width': linkConfig.outWidth,
             })
             .style('opacity', 0.0)
             .remove();
@@ -819,7 +894,7 @@
                 $timeout.cancel(fTimer);
             }
             fTimer = $timeout(function () {
-                $log.debug("Starting force-layout");
+                $log.debug('Starting force-layout');
                 force.start();
             }, 200);
         }
@@ -831,22 +906,22 @@
                 var dx = isNaN(d.x) ? 0 : d.x,
                     dy = isNaN(d.y) ? 0 : d.y;
                 return sus.translate(dx, dy);
-            }
+            },
         },
         linkAttr: {
             x1: function (d) { return d.position.x1; },
             y1: function (d) { return d.position.y1; },
             x2: function (d) { return d.position.x2; },
-            y2: function (d) { return d.position.y2; }
+            y2: function (d) { return d.position.y2; },
         },
         linkLabelAttr: {
             transform: function (d) {
                 var lnk = tms.findLinkById(d.key);
                 if (lnk) {
-                    return td3.transformLabel(lnk.position);
+                    return td3.transformLabel(lnk.position, d.key);
                 }
-            }
-        }
+            },
+        },
     };
 
     function tick() {
@@ -897,8 +972,8 @@
 
     // TODO: find an automatic way of tracking via the "showHighlights" events
     var allTrafficClasses = 'primary secondary optical animated ' +
-        'port-traffic-Kbps port-traffic-Mbps port-traffic-Gbps ' +
-        'port-traffic-Gbps-choked';
+        'port-traffic-green port-traffic-yellow port-traffic-orange ' +
+        'port-traffic-red';
 
     function clearLinkTrafficStyle() {
         link.style('stroke-width', null)
@@ -930,7 +1005,7 @@
                     id: 'lab-' + d.key,
                     key: d.key,
                     label: d.label,
-                    ldata: d
+                    ldata: d,
                 });
             }
         });
@@ -947,7 +1022,7 @@
             projection: uplink.projection,
             network: network,
             restyleLinkElement: restyleLinkElement,
-            removeLinkElement: removeLinkElement
+            removeLinkElement: removeLinkElement,
         };
     }
 
@@ -961,7 +1036,9 @@
             showHosts: function () { return showHosts; },
             restyleLinkElement: restyleLinkElement,
             updateLinkLabelModel: updateLinkLabelModel,
-            linkConfig: function () { return linkConfig; }
+            linkConfig: function () { return linkConfig; },
+            deviceScale: deviceScale,
+            linkWidthScale: linkWidthScale,
         };
     }
 
@@ -970,7 +1047,7 @@
             node: function () { return node; },
             zoomingOrPanning: zoomingOrPanning,
             updateDeviceColors: td3.updateDeviceColors,
-            deselectLink: tls.deselectLink
+            deselectAllLinks: tls.deselectAllLinks,
         };
     }
 
@@ -978,7 +1055,7 @@
         return {
             hovered: tss.hovered,
             somethingSelected: tss.somethingSelected,
-            selectOrder: tss.selectOrder
+            selectOrder: tss.selectOrder,
         };
     }
 
@@ -994,15 +1071,15 @@
             updateNodes: updateNodes,
             supLayers: suppressLayers,
             unsupNode: unsuppressNode,
-            unsupLink: unsuppressLink
+            unsupLink: unsuppressLink,
         };
     }
 
     function mkObliqueApi(uplink, fltr) {
         return {
-            force: function() { return force; },
+            force: function () { return force; },
             zoomLayer: uplink.zoomLayer,
-            nodeGBBox: function() { return nodeG.node().getBBox(); },
+            nodeGBBox: function () { return nodeG.node().getBBox(); },
             node: function () { return node; },
             link: function () { return link; },
             linkLabel: function () { return linkLabel; },
@@ -1018,14 +1095,14 @@
             calcLinkPos: calcPosition,
             applyNumLinkLabels: function () {
                 td3.applyNumLinkLabels(linkNums, numLinkLblsG);
-            }
+            },
         };
     }
 
     function mkFilterApi() {
         return {
             node: function () { return node; },
-            link: function () { return link; }
+            link: function () { return link; },
         };
     }
 
@@ -1035,8 +1112,24 @@
             zoomer: uplink.zoomer(),
             network: network,
             portLabelG: function () { return portLabelG; },
-            showHosts: function () { return showHosts; }
+            showHosts: function () { return showHosts; },
         };
+    }
+
+    function updateLinksAndNodes() {
+        updateLinks();
+        updateNodes();
+    }
+
+    // invoked after the localization bundle has been received from the server
+    function setLionBundle(bundle) {
+        topoLion = bundle;
+        td3.setLionBundle(bundle);
+        fltr.setLionBundle(bundle);
+        tls.setLionBundle(bundle);
+        tos.setLionBundle(bundle);
+        tov.setLionBundle(bundle);
+        tss.setLionBundle(bundle);
     }
 
     angular.module('ovTopo')
@@ -1046,9 +1139,10 @@
             'TopoOverlayService', 'TopoInstService', 'TopoModelService',
             'TopoD3Service', 'TopoSelectService', 'TopoTrafficService',
             'TopoObliqueService', 'TopoFilterService', 'TopoLinkService',
+            'TopoProtectedIntentsService',
 
         function (_$log_, _$timeout_, _fs_, _sus_, _ts_, _flash_, _wss_, _tov_,
-                  _tis_, _tms_, _td3_, _tss_, _tts_, _tos_, _fltr_, _tls_) {
+                  _tis_, _tms_, _td3_, _tss_, _tts_, _tos_, _fltr_, _tls_, _tpis_) {
             $log = _$log_;
             $timeout = _$timeout_;
             fs = _fs_;
@@ -1065,11 +1159,9 @@
             tos = _tos_;
             fltr = _fltr_;
             tls = _tls_;
+            tpis = _tpis_;
 
-            var themeListener = ts.addListener(function () {
-                updateLinks();
-                updateNodes();
-            });
+            ts.addListener(updateLinksAndNodes);
 
             // forceG is the SVG group to display the force layout in
             // uplink is the api from the main topo source file
@@ -1087,9 +1179,10 @@
 
                 tov.setApi(mkOverlayApi(), tss);
                 tms.initModel(mkModelApi(uplink), dim);
-                td3.initD3(mkD3Api());
+                td3.initD3(mkD3Api(), uplink.zoomer());
                 tss.initSelect(mkSelectApi());
                 tts.initTraffic(mkTrafficApi());
+                tpis.initProtectedIntents(mkTrafficApi());
                 tos.initOblique(mkObliqueApi(uplink, fltr));
                 fltr.initFilter(mkFilterApi());
                 tls.initLink(mkLinkApi(svg, uplink), td3);
@@ -1133,12 +1226,12 @@
                 tls.destroyLink();
                 tos.destroyOblique();
                 tts.destroyTraffic();
+                tpis.destroyProtectedIntents();
                 tss.destroySelect();
                 td3.destroyD3();
                 tms.destroyModel();
                 // note: no need to destroy overlay service
-                ts.removeListener(themeListener);
-                themeListener = null;
+                ts.removeListener(updateLinksAndNodes);
 
                 // clean up the DOM
                 svg.selectAll('g').remove();
@@ -1179,9 +1272,11 @@
                 togglePorts: tls.togglePorts,
                 toggleOffline: toggleOffline,
                 cycleDeviceLabels: cycleDeviceLabels,
+                cycleHostLabels: cycleHostLabels,
                 unpin: unpin,
                 showMastership: showMastership,
                 showBadLinks: showBadLinks,
+                setNodeScale: setNodeScale,
 
                 resetAllLocations: resetAllLocations,
                 addDevice: addDevice,
@@ -1194,7 +1289,9 @@
                 addLink: addLink,
                 updateLink: updateLink,
                 removeLink: removeLink,
-                topoStartDone: topoStartDone
+                topoStartDone: topoStartDone,
+
+                setLionBundle: setLionBundle,
             };
         }]);
 }());

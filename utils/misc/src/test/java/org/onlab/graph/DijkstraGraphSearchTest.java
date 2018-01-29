@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,13 @@
  */
 package org.onlab.graph;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import java.text.DecimalFormat;
 import java.util.HashSet;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 import static com.google.common.collect.ImmutableSet.of;
@@ -37,110 +40,161 @@ public class DijkstraGraphSearchTest extends BreadthFirstSearchTest {
     @Test
     @Override
     public void defaultGraphTest() {
-        executeDefaultTest(7, 5, 5.0);
+        executeDefaultTest(7, 5, new TestDoubleWeight(5.0));
     }
 
     @Test
     @Override
     public void defaultHopCountWeight() {
-        weight = null;
-        executeDefaultTest(10, 3, 3.0);
+        weigher = null;
+        executeDefaultTest(10, 3, new ScalarWeight(3.0));
     }
+
+    @Rule
+    public final ExpectedException exception = ExpectedException.none();
 
     @Test
     public void noPath() {
         graph = new AdjacencyListsGraph<>(of(A, B, C, D),
-                                          of(new TestEdge(A, B, 1),
-                                             new TestEdge(B, A, 1),
-                                             new TestEdge(C, D, 1),
-                                             new TestEdge(D, C, 1)));
+                of(new TestEdge(A, B, W1),
+                        new TestEdge(B, A, W1),
+                        new TestEdge(C, D, W1),
+                        new TestEdge(D, C, W1)));
         GraphPathSearch<TestVertex, TestEdge> gs = graphSearch();
-        Set<Path<TestVertex, TestEdge>> paths = gs.search(graph, A, B, weight, 1).paths();
+        Set<Path<TestVertex, TestEdge>> paths = gs.search(graph, A, B, weigher, 1).paths();
         printPaths(paths);
         assertEquals("incorrect paths count", 1, paths.size());
-        assertEquals("incorrect path cost", 1.0, paths.iterator().next().cost(), 0.1);
+        assertEquals("incorrect path cost", new TestDoubleWeight(1.0), paths.iterator().next().cost());
 
-        paths = gs.search(graph, A, D, weight, 1).paths();
+        paths = gs.search(graph, A, D, weigher, 1).paths();
         printPaths(paths);
         assertEquals("incorrect paths count", 0, paths.size());
 
-        paths = gs.search(graph, A, null, weight, 1).paths();
+        paths = gs.search(graph, A, null, weigher, 1).paths();
         printPaths(paths);
         assertEquals("incorrect paths count", 1, paths.size());
-        assertEquals("incorrect path cost", 1.0, paths.iterator().next().cost(), 0.1);
+        assertEquals("incorrect path cost", new TestDoubleWeight(1.0), paths.iterator().next().cost());
+    }
+
+    @Test
+    public void exceptions() {
+        graph = new AdjacencyListsGraph<>(of(A, B, C, D),
+                of(new TestEdge(A, B, W2),
+                        new TestEdge(B, A, W1),
+                        new TestEdge(A, A, W3),
+                        new TestEdge(A, C, NW1),
+                        new TestEdge(C, D, W3)));
+        GraphPathSearch<TestVertex, TestEdge> gs = graphSearch();
+        Set<Path<TestVertex, TestEdge>> paths = gs.search(graph, A, D, weigher, GraphPathSearch.ALL_PATHS).paths();
+        printPaths(paths);
+        assertEquals("Incorrect path count", 0, paths.size());
+
+        paths = gs.search(graph, A, A, weigher, 5).paths();
+        exception.expect(NoSuchElementException.class);
+        paths.iterator().next().cost();
+    }
+
+    @Test
+    public void noEdges() {
+        graph = new AdjacencyListsGraph<>(vertexes(), of());
+        for (TestVertex v: vertexes()) {
+            executeSearch(graphSearch(), graph, v, null, weigher, 0, new TestDoubleWeight(0));
+        }
+
     }
 
     @Test
     public void simpleMultiplePath() {
         graph = new AdjacencyListsGraph<>(of(A, B, C, D),
-                                          of(new TestEdge(A, B, 1),
-                                             new TestEdge(A, C, 1),
-                                             new TestEdge(B, D, 1),
-                                             new TestEdge(C, D, 1)));
-        executeSearch(graphSearch(), graph, A, D, weight, 2, 2.0);
-        executeSinglePathSearch(graphSearch(), graph, A, D, weight, 1, 2.0);
+                of(new TestEdge(A, B, W1),
+                        new TestEdge(A, C, W1),
+                        new TestEdge(B, D, W1),
+                        new TestEdge(C, D, W1),
+                        new TestEdge(D, E, W1),
+                        new TestEdge(A, E, ZW),
+                        new TestEdge(E, F, NW1),
+                        new TestEdge(F, B, ZW)));
+        executeSearch(graphSearch(), graph, A, D, weigher, 2, W2);
+        executeSinglePathSearch(graphSearch(), graph, A, D, weigher, 1, W2);
+
+        executeSearch(graphSearch(), graph, A, B, weigher, 1, W1);
+        executeSearch(graphSearch(), graph, D, A, weigher, 0, null);
+    }
+
+
+    @Test
+    public void manualDoubleWeights() {
+        graph = new AdjacencyListsGraph<>(of(A, B, C, D, E),
+                of(new TestEdge(A, B, new TestDoubleWeight(1.5)),
+                        new TestEdge(B, D, new TestDoubleWeight(3.5)),
+                        new TestEdge(A, C, new TestDoubleWeight(2.2)),
+                        new TestEdge(C, E, new TestDoubleWeight(1.1)),
+                        new TestEdge(E, D, new TestDoubleWeight(1.7)),
+                        new TestEdge(A, D, new TestDoubleWeight(5.0))));
+        executeSearch(graphSearch(), graph, A, D, weigher, 3, new TestDoubleWeight(5.0));
+        executeSinglePathSearch(graphSearch(), graph, A, D, weigher, 1, W5);
     }
 
     @Test
     public void denseMultiplePath() {
         graph = new AdjacencyListsGraph<>(of(A, B, C, D, E, F, G),
-                                          of(new TestEdge(A, B, 1),
-                                             new TestEdge(A, C, 1),
-                                             new TestEdge(B, D, 1),
-                                             new TestEdge(C, D, 1),
-                                             new TestEdge(D, E, 1),
-                                             new TestEdge(D, F, 1),
-                                             new TestEdge(E, G, 1),
-                                             new TestEdge(F, G, 1),
-                                             new TestEdge(A, G, 4)));
-        executeSearch(graphSearch(), graph, A, G, weight, 5, 4.0);
-        executeSinglePathSearch(graphSearch(), graph, A, G, weight, 1, 4.0);
+                of(new TestEdge(A, B, W1),
+                        new TestEdge(A, C, W1),
+                        new TestEdge(B, D, W1),
+                        new TestEdge(C, D, W1),
+                        new TestEdge(D, E, W1),
+                        new TestEdge(D, F, W1),
+                        new TestEdge(E, G, W1),
+                        new TestEdge(F, G, W1),
+                        new TestEdge(A, G, W4)));
+        executeSearch(graphSearch(), graph, A, G, weigher, 5, W4);
+        executeSinglePathSearch(graphSearch(), graph, A, G, weigher, 1, W4);
     }
 
     @Test
     public void dualEdgeMultiplePath() {
         graph = new AdjacencyListsGraph<>(of(A, B, C, D, E, F, G, H),
-                                          of(new TestEdge(A, B, 1), new TestEdge(A, C, 3),
-                                             new TestEdge(B, D, 2), new TestEdge(B, C, 1),
-                                             new TestEdge(B, E, 4), new TestEdge(C, E, 1),
-                                             new TestEdge(D, H, 5), new TestEdge(D, E, 1),
-                                             new TestEdge(E, F, 1), new TestEdge(F, D, 1),
-                                             new TestEdge(F, G, 1), new TestEdge(F, H, 1),
-                                             new TestEdge(A, E, 3), new TestEdge(B, D, 1)));
-        executeSearch(graphSearch(), graph, A, E, weight, 3, 3.0);
-        executeSinglePathSearch(graphSearch(), graph, A, E, weight, 1, 3.0);
+                of(new TestEdge(A, B, W1),
+                        new TestEdge(A, C, W3),
+                        new TestEdge(B, D, W2),
+                        new TestEdge(B, C, W1),
+                        new TestEdge(B, E, W4),
+                        new TestEdge(C, E, W1),
+                        new TestEdge(D, H, W5),
+                        new TestEdge(D, E, W1),
+                        new TestEdge(E, F, W1),
+                        new TestEdge(F, D, W1),
+                        new TestEdge(F, G, W1),
+                        new TestEdge(F, H, W1),
+                        new TestEdge(A, E, W3),
+                        new TestEdge(B, D, W1)));
+        executeSearch(graphSearch(), graph, A, E, weigher, 3, W3);
+        executeSinglePathSearch(graphSearch(), graph, A, E, weigher, 1, W3);
+
+        GraphPathSearch<TestVertex, TestEdge> gs = graphSearch();
+        Set<Path<TestVertex, TestEdge>> pathF = gs.search(graph, A, F, weigher, GraphPathSearch.ALL_PATHS).paths();
+        Set<Path<TestVertex, TestEdge>> pathE = gs.search(graph, A, E, weigher, GraphPathSearch.ALL_PATHS).paths();
+        assertEquals(0, pathF.size() - pathE.size());
+        assertEquals(new TestDoubleWeight(1.0),
+                     pathF.iterator().next().cost().subtract(pathE.iterator().next().cost()));
     }
 
     @Test
     public void negativeWeights() {
         graph = new AdjacencyListsGraph<>(of(A, B, C, D, E, F, G),
-                                          of(new TestEdge(A, B, 1),
-                                             new TestEdge(A, C, -1),
-                                             new TestEdge(B, D, 1),
-                                             new TestEdge(D, A, -2),
-                                             new TestEdge(C, D, 1),
-                                             new TestEdge(D, E, 1),
-                                             new TestEdge(D, F, 1),
-                                             new TestEdge(E, G, 1),
-                                             new TestEdge(F, G, 1),
-                                             new TestEdge(G, A, -5),
-                                             new TestEdge(A, G, 4)));
-        executeSearch(graphSearch(), graph, A, G, weight, 3, 4.0);
-        executeSinglePathSearch(graphSearch(), graph, A, G, weight, 1, 4.0);
-    }
-
-    @Test
-    public void disconnectedPerf() {
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
-        disconnected();
+                of(new TestEdge(A, B, W1),
+                        new TestEdge(A, C, NW1),
+                        new TestEdge(B, D, W1),
+                        new TestEdge(D, A, NW2),
+                        new TestEdge(C, D, W1),
+                        new TestEdge(D, E, W1),
+                        new TestEdge(D, F, W1),
+                        new TestEdge(E, G, W1),
+                        new TestEdge(F, G, W1),
+                        new TestEdge(G, A, NW5),
+                        new TestEdge(A, G, W4)));
+        executeSearch(graphSearch(), graph, A, G, weigher, 3, new TestDoubleWeight(4.0));
+        executeSinglePathSearch(graphSearch(), graph, A, G, weigher, 1, new TestDoubleWeight(4.0));
     }
 
 
@@ -155,7 +209,7 @@ public class DijkstraGraphSearchTest extends BreadthFirstSearchTest {
 
         long start = System.nanoTime();
         for (TestVertex src : vertexes) {
-            executeSearch(graphSearch(), graph, src, null, null, 0, 0);
+            executeSearch(graphSearch(), graph, src, null, null, 0, new TestDoubleWeight(0));
         }
         long end = System.nanoTime();
         DecimalFormat fmt = new DecimalFormat("#,###");

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,14 @@ public interface DemoApi {
      * @return JSON representation
      */
     JsonNode flowTest(Optional<JsonNode> params);
+
+    /**
+     * Tests flow Objective subsystem based on the parameters supplied.
+     *
+     * @param params the test parameters
+     * @return JSON representation
+     */
+    JsonNode flowObjTest(Optional<JsonNode> params);
 
     /**
      * Installs intents based on the installation type.

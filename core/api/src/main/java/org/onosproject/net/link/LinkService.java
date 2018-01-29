@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,6 +103,8 @@ public interface LinkService
 
     // FIXME: I don't think this makes sense; discuss and remove or adjust return
     // to be a Set<Link> or add Link.Type parameter
+    // NOTE: TopoViewMessageHandler uses this to acquire a given link from
+    //        two connect points. Would hate to see this method go away.. SDH
     /**
      * Returns the infrastructure links between the specified source
      * and destination connection points.

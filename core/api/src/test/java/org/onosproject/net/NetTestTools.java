@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,23 @@
  */
 package org.onosproject.net;
 
+import com.google.common.collect.ImmutableList;
 import org.onlab.junit.TestUtils;
 import org.onlab.packet.ChassisId;
+import org.onlab.packet.IpPrefix;
+import org.onlab.packet.MacAddress;
+import org.onlab.packet.MplsLabel;
+import org.onlab.packet.VlanId;
 import org.onosproject.TestApplicationId;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.event.EventDeliveryService;
+import org.onosproject.net.flow.DefaultTrafficSelector;
+import org.onosproject.net.flow.DefaultTrafficTreatment;
+import org.onosproject.net.flow.TrafficSelector;
+import org.onosproject.net.flow.TrafficTreatment;
+import org.onosproject.net.intent.Constraint;
+import org.onosproject.net.intent.constraint.EncapsulationConstraint;
 import org.onosproject.net.provider.ProviderId;
 
 import java.lang.reflect.Field;
@@ -65,10 +76,15 @@ public final class NetTestTools {
     }
 
     // Crates a new host with the specified id
-    public static Host host(String id, String did) {
+    public static Host host(String id, String did, long port) {
         return new DefaultHost(PID, hid(id), valueOf(1234), vlanId((short) 2),
-                               new HostLocation(did(did), portNumber(1), 321),
+                               new HostLocation(did(did), portNumber(port), 321),
                                new HashSet<>());
+    }
+
+    // Crates a new host with the specified id
+    public static Host host(String id, String did) {
+        return host(id, did, 1);
     }
 
     // Short-hand for creating a connection point.
@@ -76,19 +92,58 @@ public final class NetTestTools {
         return new ConnectPoint(did(id), portNumber(port));
     }
 
+    // Short-hand for creating a connection point.
+    public static ConnectPoint connectPointNoOF(String id, int port) {
+        return new ConnectPoint(DeviceId.deviceId(id), portNumber(port));
+    }
+
     // Short-hand for creating a link.
     public static Link link(String src, int sp, String dst, int dp) {
         return new DefaultLink(PID,
                                connectPoint(src, sp),
                                connectPoint(dst, dp),
-                               Link.Type.DIRECT);
+                               Link.Type.DIRECT, Link.State.ACTIVE);
+    }
+
+    // Short-hand for creating a link.
+    public static Link linkNoPrefixes(String src, int sp, String dst, int dp) {
+        return new DefaultLink(PID,
+                               connectPointNoOF(src, sp),
+                               connectPointNoOF(dst, dp),
+                               Link.Type.DIRECT, Link.State.ACTIVE);
+    }
+
+    /**
+     * Short-hand for creating a link.
+     *
+     * @param src the src of the link
+     * @param dst the dst of the link
+     * @return a link
+     */
+    public static Link link(ConnectPoint src, ConnectPoint dst) {
+        return new DefaultLink(PID, src, dst, Link.Type.DIRECT, Link.State.ACTIVE);
     }
 
     // Creates a path that leads through the given devices.
     public static Path createPath(String... ids) {
         List<Link> links = new ArrayList<>();
         for (int i = 0; i < ids.length - 1; i++) {
-            links.add(link(ids[i], i, ids[i + 1], i));
+            links.add(link(ids[i], 2, ids[i + 1], 1));
+        }
+        return new DefaultPath(PID, links, ids.length);
+    }
+
+    // Creates a path that leads through the given hosts.
+    public static Path createPath(boolean srcIsEdge, boolean dstIsEdge, String... ids) {
+        List<Link> links = new ArrayList<>();
+        for (int i = 0; i < ids.length - 1; i++) {
+            if (i == 0 && srcIsEdge) {
+                links.add(DefaultEdgeLink.createEdgeLink(host(ids[i], ids[i + 1], 1), true));
+            } else if (i == ids.length - 2 && dstIsEdge) {
+                links.add(DefaultEdgeLink.createEdgeLink(host(ids[i + 1], ids[i], 2), false));
+            } else {
+                links.add(link(ids[i], 2, ids[i + 1], 1));
+            }
         }
         return new DefaultPath(PID, links, ids.length);
     }
@@ -135,6 +190,109 @@ public final class NetTestTools {
                 break;
             }
         }
+    }
+
+    /**
+     * Builds an empty selector.
+     *
+     * @return the selector
+     */
+    public static TrafficSelector emptySelector() {
+        return DefaultTrafficSelector.emptySelector();
+    }
+
+    /**
+     * Builds a vlan selector.
+     *
+     * @return the selector
+     */
+    public static TrafficSelector vlanSelector(String vlanId) {
+        return DefaultTrafficSelector.builder()
+                .matchVlanId(VlanId.vlanId(vlanId))
+                .build();
+    }
+
+    /**
+     * Builds a mpls selector.
+     *
+     * @return the selector
+     */
+    public static TrafficSelector mplsSelector(String mplsLabel) {
+        return DefaultTrafficSelector.builder()
+                .matchMplsLabel(MplsLabel.mplsLabel(mplsLabel))
+                .build();
+    }
+
+    /**
+     * Builds an ip prefix dst selector.
+     *
+     * @return the selector
+     */
+    public static TrafficSelector ipPrefixDstSelector(String prefix) {
+        return DefaultTrafficSelector.builder()
+                .matchIPDst(IpPrefix.valueOf(prefix))
+                .build();
+    }
+
+    public static TrafficSelector ethDstSelector(String macAddress) {
+        return DefaultTrafficSelector.builder()
+                .matchEthDst(MacAddress.valueOf(macAddress))
+                .build();
+    }
+
+    /**
+     * Builds an empty treatment.
+     *
+     * @return the treatment
+     */
+    public static TrafficTreatment emptyTreatment() {
+        return DefaultTrafficTreatment.emptyTreatment();
+    }
+
+    /**
+     * Builds a mac dst treatment.
+     *
+     * @return the treatment
+     */
+    public static TrafficTreatment macDstTreatment(String mac) {
+        return DefaultTrafficTreatment.builder()
+                .setEthDst(MacAddress.valueOf(mac))
+                .build();
+    }
+
+    /**
+     * Builds a list containing a vlan encapsulation constraint.
+     *
+     * @return the list of constraints
+     */
+    public static List<Constraint> vlanConstraint() {
+        return ImmutableList.of(
+                new EncapsulationConstraint(EncapsulationType.VLAN)
+        );
+    }
+
+    /**
+     * Builds a list containing a mpls encapsulation constraint.
+     *
+     * @return the list of constraints
+     */
+    public static List<Constraint> mplsConstraint() {
+        return ImmutableList.of(
+                new EncapsulationConstraint(EncapsulationType.MPLS)
+        );
+    }
+
+    /**
+     * Builds a treatment which contains the dec ttl
+     * actions.
+     *
+     * @return the treatment
+     */
+    public static TrafficTreatment decTtlTreatment() {
+        return DefaultTrafficTreatment.builder()
+                .decMplsTtl()
+                .decNwTtl()
+                .build();
     }
 
 }

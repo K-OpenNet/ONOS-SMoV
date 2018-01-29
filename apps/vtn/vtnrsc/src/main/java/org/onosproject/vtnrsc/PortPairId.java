@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ public final class PortPairId extends Identifier<UUID> {
     }
 
     /**
-     * Returns teh value of port pair id.
+     * Returns the value of port pair id.
      *
      * @return port pair id
      */

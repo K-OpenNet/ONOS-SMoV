@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.apache.felix.scr.annotations.ReferenceCardinality;
 /**
  * Self-registering REST API provider.
  */
-@Component(immediate = true, componentAbstract = true)
+@Component(immediate = true)
 public abstract class AbstractApiDocRegistrator {
 
     protected final ApiDocProvider provider;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,10 @@
 
 package org.onlab.packet;
 
+/**
+ * @deprecated 1.11 Loon, move into DHCP class.
+ */
+@Deprecated
 public enum DHCPPacketType {
     // From RFC 1533
     DHCPDISCOVER(1), DHCPOFFER(2), DHCPREQUEST(3), DHCPDECLINE(4), DHCPACK(5), DHCPNAK(

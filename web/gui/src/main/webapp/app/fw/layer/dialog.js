@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 Open Networking Laboratory
+ *  Copyright 2016-present Open Networking Foundation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@
     'use strict';
 
     // injected refs
-    var $log, $window, fs, ps, bns, ks;
+    var $log, fs, ps, ks;
 
     // configuration
     var defaultSettings = {
             width: 300,
-            edge: 'left'
+            edge: 'left',
         };
 
     // internal state
@@ -92,18 +92,20 @@
             appendHeader: hAppend,
             appendBody: bAppend,
             appendFooter: fAppend,
-            destroy: destroy
+            destroy: destroy,
         };
     }
 
-    function makeButton(callback, text, keyName) {
+    function makeButton(callback, text, keyName, chained) {
         var cb = fs.isF(callback),
             key = fs.isS(keyName);
 
         function invoke() {
             cb && cb();
-            clearBindings();
-            panel.hide();
+            if (!chained) {
+                clearBindings();
+                panel.hide();
+            }
         }
 
         if (key) {
@@ -129,15 +131,23 @@
         return dApi;
     }
 
-    function addButton(cb, text, key) {
+    function addButton(cb, text, key, chained) {
         if (pApi) {
-            pApi.appendFooter(makeButton(cb, text, key));
+            pApi.appendFooter(makeButton(cb, text, key, chained));
         }
         return dApi;
     }
 
+    function _addOk(cb, text, chained) {
+        return addButton(cb, text || 'OK', 'enter', chained);
+    }
+
     function addOk(cb, text) {
-        return addButton(cb, text || 'OK', 'enter');
+        return _addOk(cb, text, false);
+    }
+
+    function addOkChained(cb, text) {
+        return _addOk(cb, text, true);
     }
 
     function addCancel(cb, text) {
@@ -164,10 +174,11 @@
             addContent: addContent,
             addButton: addButton,
             addOk: addOk,
+            addOkChained: addOkChained,
             addCancel: addCancel,
             bindKeys: function () {
                 ks.dialogKeys(keyBindings);
-            }
+            },
         };
         return dApi;
     }
@@ -196,25 +207,21 @@
 
     angular.module('onosLayer')
     .factory('DialogService',
-        ['$log', '$window', 'FnService', 'PanelService', 'ButtonService',
-            'KeyService',
+        ['$log', 'FnService', 'PanelService', 'KeyService',
 
-        // TODO: for now, $window is not used, but we should provide an option
-            // to center the dialog on the window.
+        // TODO: use $window to provide an option to center the
+        // dialog on the window.
 
-        function (_$log_, _$window_, _fs_, _ps_, _bns_, _ks_) {
+        function (_$log_, _fs_, _ps_, _ks_) {
             $log = _$log_;
-            $window = _$window_;
             fs = _fs_;
             ps = _ps_;
-            bns = _bns_;
             ks = _ks_;
 
             return {
                 openDialog: openDialog,
                 closeDialog: closeDialog,
-                createDiv: createDiv
+                createDiv: createDiv,
             };
         }]);
-
 }());

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,58 +15,93 @@
  */
 package org.onosproject.store.primitives.impl;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-
-import org.onosproject.cluster.PartitionId;
-import org.onosproject.store.primitives.DistributedPrimitiveCreator;
-import org.onosproject.store.service.AsyncAtomicCounter;
-import org.onosproject.store.service.AsyncAtomicValue;
-import org.onosproject.store.service.AsyncConsistentMap;
-import org.onosproject.store.service.AsyncDistributedSet;
-import org.onosproject.store.service.AsyncLeaderElector;
-import org.onosproject.store.service.DistributedQueue;
-import org.onosproject.store.service.Serializer;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.hash.HashCode;
+import com.google.common.hash.Funnel;
+import com.google.common.hash.Funnels;
 import com.google.common.hash.Hashing;
-import com.google.common.primitives.Bytes;
+import org.onlab.util.HexString;
+import org.onosproject.cluster.PartitionId;
+import org.onosproject.store.primitives.DistributedPrimitiveCreator;
+import org.onosproject.store.service.AsyncAtomicCounter;
+import org.onosproject.store.service.AsyncAtomicCounterMap;
+import org.onosproject.store.service.AsyncAtomicIdGenerator;
+import org.onosproject.store.service.AsyncAtomicValue;
+import org.onosproject.store.service.AsyncConsistentMap;
+import org.onosproject.store.service.AsyncConsistentMultimap;
+import org.onosproject.store.service.AsyncConsistentTreeMap;
+import org.onosproject.store.service.AsyncDistributedSet;
+import org.onosproject.store.service.AsyncDocumentTree;
+import org.onosproject.store.service.AsyncLeaderElector;
+import org.onosproject.store.service.DocumentPath;
+import org.onosproject.store.service.Ordering;
+import org.onosproject.store.service.Serializer;
+import org.onosproject.store.service.WorkQueue;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * {@code DistributedPrimitiveCreator} that federates responsibility for creating
  * distributed primitives to a collection of other {@link DistributedPrimitiveCreator creators}.
  */
 public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiveCreator {
+
+    private static final Funnel<Iterable<? extends CharSequence>> STR_LIST_FUNNEL =
+                Funnels.sequentialFunnel(Funnels.unencodedCharsFunnel());
+
     private final TreeMap<PartitionId, DistributedPrimitiveCreator> members;
     private final List<PartitionId> sortedMemberPartitionIds;
+    private final int buckets;
 
-    public FederatedDistributedPrimitiveCreator(Map<PartitionId, DistributedPrimitiveCreator> members) {
+    public FederatedDistributedPrimitiveCreator(Map<PartitionId, DistributedPrimitiveCreator> members, int buckets) {
         this.members = Maps.newTreeMap();
         this.members.putAll(checkNotNull(members));
         this.sortedMemberPartitionIds = Lists.newArrayList(members.keySet());
+        this.buckets = buckets;
     }
 
     @Override
     public <K, V> AsyncConsistentMap<K, V> newAsyncConsistentMap(String name, Serializer serializer) {
         checkNotNull(name);
         checkNotNull(serializer);
-        Map<PartitionId, AsyncConsistentMap<K, V>> maps =
+        Map<PartitionId, AsyncConsistentMap<byte[], byte[]>> maps =
                 Maps.transformValues(members,
-                                     partition -> partition.newAsyncConsistentMap(name, serializer));
-        Hasher<K> hasher = key -> {
-            long hashCode = HashCode.fromBytes(Bytes.ensureCapacity(serializer.encode(key), 8, 0)).asLong();
-            return sortedMemberPartitionIds.get(Hashing.consistentHash(hashCode, members.size()));
+                                     partition -> DistributedPrimitives.newTranscodingMap(
+                                             partition.<String, byte[]>newAsyncConsistentMap(name, null),
+                                             HexString::toHexString,
+                                             HexString::fromHexString,
+                                             Function.identity(),
+                                             Function.identity()));
+        Hasher<byte[]> hasher = key -> {
+            int bucket = Math.abs(Hashing.murmur3_32().hashBytes(key).asInt()) % buckets;
+            return sortedMemberPartitionIds.get(Hashing.consistentHash(bucket, sortedMemberPartitionIds.size()));
         };
-        return new PartitionedAsyncConsistentMap<>(name, maps, hasher);
+        AsyncConsistentMap<byte[], byte[]> partitionedMap = new PartitionedAsyncConsistentMap<>(name, maps, hasher);
+        return DistributedPrimitives.newTranscodingMap(partitionedMap,
+                key -> serializer.encode(key),
+                bytes -> serializer.decode(bytes),
+                value -> value == null ? null : serializer.encode(value),
+                bytes -> serializer.decode(bytes));
+    }
+
+    @Override
+    public <V> AsyncConsistentTreeMap<V> newAsyncConsistentTreeMap(String name, Serializer serializer) {
+        return getCreator(name).newAsyncConsistentTreeMap(name, serializer);
+    }
+
+    @Override
+    public <K, V> AsyncConsistentMultimap<K, V> newAsyncConsistentSetMultimap(String name, Serializer serializer) {
+        return getCreator(name).newAsyncConsistentSetMultimap(name, serializer);
     }
 
     @Override
@@ -75,8 +110,18 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
     }
 
     @Override
+    public <K> AsyncAtomicCounterMap<K> newAsyncAtomicCounterMap(String name, Serializer serializer) {
+        return getCreator(name).newAsyncAtomicCounterMap(name, serializer);
+    }
+
+    @Override
     public AsyncAtomicCounter newAsyncCounter(String name) {
         return getCreator(name).newAsyncCounter(name);
+    }
+
+    @Override
+    public AsyncAtomicIdGenerator newAsyncIdGenerator(String name) {
+        return getCreator(name).newAsyncIdGenerator(name);
     }
 
     @Override
@@ -85,21 +130,37 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
     }
 
     @Override
-    public <E> DistributedQueue<E> newDistributedQueue(String name, Serializer serializer) {
-        return getCreator(name).newDistributedQueue(name, serializer);
-    }
-
-    @Override
-    public AsyncLeaderElector newAsyncLeaderElector(String name) {
+    public AsyncLeaderElector newAsyncLeaderElector(String name, long leaderTimeout, TimeUnit timeUnit) {
         checkNotNull(name);
         Map<PartitionId, AsyncLeaderElector> leaderElectors =
                 Maps.transformValues(members,
-                                     partition -> partition.newAsyncLeaderElector(name));
+                                     partition -> partition.newAsyncLeaderElector(name, leaderTimeout, timeUnit));
         Hasher<String> hasher = topic -> {
-            long hashCode = HashCode.fromBytes(topic.getBytes(Charsets.UTF_8)).asLong();
-            return sortedMemberPartitionIds.get(Hashing.consistentHash(hashCode, members.size()));
+            int hashCode = Hashing.sha256().hashString(topic, Charsets.UTF_8).asInt();
+            return sortedMemberPartitionIds.get(Math.abs(hashCode) % members.size());
         };
         return new PartitionedAsyncLeaderElector(name, leaderElectors, hasher);
+    }
+
+    @Override
+    public <E> WorkQueue<E> newWorkQueue(String name, Serializer serializer) {
+        return getCreator(name).newWorkQueue(name, serializer);
+    }
+
+    @Override
+    public <V> AsyncDocumentTree<V> newAsyncDocumentTree(String name, Serializer serializer, Ordering ordering) {
+        checkNotNull(name);
+        checkNotNull(serializer);
+        Map<PartitionId, AsyncDocumentTree<V>> trees =
+                Maps.transformValues(members, part -> part.<V>newAsyncDocumentTree(name, serializer, ordering));
+        Hasher<DocumentPath> hasher = key -> {
+            int bucket = (key == null) ? 0 :
+                    Math.abs(Hashing.murmur3_32()
+                                  .hashObject(key.pathElements(), STR_LIST_FUNNEL)
+                                  .asInt()) % buckets;
+            return sortedMemberPartitionIds.get(Hashing.consistentHash(bucket, sortedMemberPartitionIds.size()));
+        };
+        return new PartitionedAsyncDocumentTree<>(name, trees, hasher);
     }
 
     @Override
@@ -120,13 +181,22 @@ public class FederatedDistributedPrimitiveCreator implements DistributedPrimitiv
                       .orElse(ImmutableSet.of());
     }
 
+    @Override
+    public Set<String> getWorkQueueNames() {
+        return members.values()
+                      .stream()
+                      .map(DistributedPrimitiveCreator::getWorkQueueNames)
+                      .reduce(Sets::union)
+                      .orElse(ImmutableSet.of());
+    }
+
     /**
      * Returns the {@code DistributedPrimitiveCreator} to use for hosting a primitive.
      * @param name primitive name
      * @return primitive creator
      */
     private DistributedPrimitiveCreator getCreator(String name) {
-        int index = Hashing.consistentHash(name.hashCode(), members.size());
-        return members.get(sortedMemberPartitionIds.get(index));
+        int hashCode = Hashing.sha256().hashString(name, Charsets.UTF_8).asInt();
+        return members.get(sortedMemberPartitionIds.get(Math.abs(hashCode) % members.size()));
     }
 }

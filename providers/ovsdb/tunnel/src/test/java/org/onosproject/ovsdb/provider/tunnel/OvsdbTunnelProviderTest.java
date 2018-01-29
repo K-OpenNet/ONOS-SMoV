@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.packet.IpAddress;
-import org.onosproject.core.DefaultGroupId;
+import org.onosproject.core.GroupId;
 import org.onosproject.incubator.net.tunnel.DefaultTunnelDescription;
 import org.onosproject.incubator.net.tunnel.IpTunnelEndPoint;
 import org.onosproject.incubator.net.tunnel.Tunnel;
@@ -38,6 +38,7 @@ import org.onosproject.incubator.net.tunnel.TunnelName;
 import org.onosproject.incubator.net.tunnel.TunnelProvider;
 import org.onosproject.incubator.net.tunnel.TunnelProviderRegistry;
 import org.onosproject.incubator.net.tunnel.TunnelProviderService;
+import org.onosproject.incubator.net.tunnel.Tunnel.State;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.DefaultLink;
@@ -90,7 +91,7 @@ public class OvsdbTunnelProviderTest {
                                                                 src,
                                                                 dst,
                                                                 Tunnel.Type.VXLAN,
-                                                                new DefaultGroupId(0),
+                                                                new GroupId(0),
                                                                 this.provider.id(),
                                                                 TunnelName.tunnelName("tunnel12"),
                                                                 new DefaultPath(this.provider.id(), links, 0.3),
@@ -115,7 +116,7 @@ public class OvsdbTunnelProviderTest {
                                                                 src,
                                                                 dst,
                                                                 Tunnel.Type.VXLAN,
-                                                                new DefaultGroupId(0),
+                                                                new GroupId(0),
                                                                 this.provider.id(),
                                                                 TunnelName.tunnelName("tunnel1"),
                                                                 new DefaultPath(this.provider.id(), links, 0.3),
@@ -166,12 +167,22 @@ public class OvsdbTunnelProviderTest {
         }
 
         @Override
+        public TunnelId tunnelAdded(TunnelDescription tunnel, State state) {
+            return null;
+        }
+
+        @Override
         public void tunnelRemoved(TunnelDescription tunnel) {
             tunnelSet.remove(tunnel);
         }
 
         @Override
         public void tunnelUpdated(TunnelDescription tunnel) {
+
+        }
+
+        @Override
+        public void tunnelUpdated(TunnelDescription tunnel, State state) {
 
         }
 

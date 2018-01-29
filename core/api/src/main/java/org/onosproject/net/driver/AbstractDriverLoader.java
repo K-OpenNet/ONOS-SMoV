@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,22 @@
  */
 package org.onosproject.net.driver;
 
-import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * Abstract boot-strapper for loading and registering driver definitions.
+ * Abstract bootstrapper for loading and registering driver definitions that
+ * are dependent on the default driver definitions.
  */
 @Component
-public abstract class AbstractDriverLoader {
+public abstract class AbstractDriverLoader extends AbstractIndependentDriverLoader {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
-
-    private DriverProvider provider;
-    private final String path;
-
+    // FIXME: This requirement should be removed and the driver extensions that
+    // depend on the default drivers being loaded should be modified to instead
+    // express the dependency using the application dependency mechanism.
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected DriverAdminService driverAdminService;
+    protected DefaultDriverProviderService defaultDriverProviderService;
 
     /**
      * Creates a new loader for resource with the specified path.
@@ -43,25 +38,7 @@ public abstract class AbstractDriverLoader {
      * @param path drivers definition XML resource path
      */
     protected AbstractDriverLoader(String path) {
-        this.path = path;
-    }
-
-    @Activate
-    protected void activate() {
-        try {
-            provider = new XmlDriverLoader(getClass().getClassLoader())
-                    .loadDrivers(getClass().getResourceAsStream(path), driverAdminService);
-            driverAdminService.registerProvider(provider);
-        } catch (Exception e) {
-            log.error("Unable to load {} driver definitions", path, e);
-        }
-        log.info("Started");
-    }
-
-    @Deactivate
-    protected void deactivate() {
-        driverAdminService.unregisterProvider(provider);
-        log.info("Stopped");
+        super(path);
     }
 
 }

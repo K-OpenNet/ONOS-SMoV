@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,7 @@ public class XmlDriverLoader {
     private static final String IMPL = "[@impl]";
 
     private final ClassLoader classLoader;
+    private final BehaviourClassResolver resolver;
 
     private Map<String, Driver> drivers = Maps.newHashMap();
 
@@ -72,9 +73,11 @@ public class XmlDriverLoader {
      * class loader.
      *
      * @param classLoader class loader to use
+     * @param resolver    behaviour class resolver
      */
-    public XmlDriverLoader(ClassLoader classLoader) {
+    public XmlDriverLoader(ClassLoader classLoader, BehaviourClassResolver resolver) {
         this.classLoader = classLoader;
+        this.resolver = resolver;
     }
 
     /**
@@ -132,7 +135,7 @@ public class XmlDriverLoader {
         String name = driverCfg.getString(NAME);
         String parentsString = driverCfg.getString(EXTENDS, "");
         List<Driver> parents = Lists.newArrayList();
-        if (!parentsString.equals("")) {
+        if (!"".equals(parentsString)) {
             List<String> parentsNames;
             if (parentsString.contains(",")) {
                 parentsNames = Arrays.asList(parentsString.replace(" ", "").split(","));
@@ -142,12 +145,30 @@ public class XmlDriverLoader {
             parents = parentsNames.stream().map(parent -> (parent != null) ?
                     resolve(parent, resolver) : null).collect(Collectors.toList());
         }
-        String manufacturer = driverCfg.getString(MFG, "");
-        String hwVersion = driverCfg.getString(HW, "");
-        String swVersion = driverCfg.getString(SW, "");
+        String manufacturer = driverCfg.getString(MFG, getParentAttribute(parents, MFG));
+        String hwVersion = driverCfg.getString(HW, getParentAttribute(parents, HW));
+        String swVersion = driverCfg.getString(SW, getParentAttribute(parents, SW));
         return new DefaultDriver(name, parents, manufacturer, hwVersion, swVersion,
                                  parseBehaviours(driverCfg),
                                  parseProperties(driverCfg));
+    }
+
+    // Returns the specified property from the highest priority parent
+    private String getParentAttribute(List<Driver> parents, String attribute) {
+        if (!parents.isEmpty()) {
+            Driver parent = parents.get(0);
+            switch (attribute) {
+                case MFG:
+                    return parent.manufacturer();
+                case HW:
+                    return parent.hwVersion();
+                case SW:
+                    return parent.swVersion();
+                default:
+                    throw new IllegalArgumentException("Unsupported attribute");
+            }
+        }
+        return "";
     }
 
     // Resolves the driver by name locally at first and then using the specified resolver.
@@ -182,7 +203,13 @@ public class XmlDriverLoader {
         try {
             return (Class<? extends Behaviour>) classLoader.loadClass(className);
         } catch (ClassNotFoundException e) {
-            throw new IllegalArgumentException("Unable to load class " + className, e);
+            if (resolver != null) {
+                Class<? extends Behaviour> cls = resolver.getBehaviourClass(className);
+                if (cls != null) {
+                    return cls;
+                }
+            }
+            throw new IllegalArgumentException("Unable to resolve class " + className, e);
         }
     }
 

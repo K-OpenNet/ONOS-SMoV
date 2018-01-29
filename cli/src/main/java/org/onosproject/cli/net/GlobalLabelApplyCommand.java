@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ public class GlobalLabelApplyCommand extends AbstractShellCommand {
         LabelResourceService lrs = get(LabelResourceService.class);
         Collection<LabelResource> result =
                 lrs.applyFromGlobalPool(Long.parseLong(applyNum));
-        if (result.size() > 0) {
+        if (!result.isEmpty()) {
             for (Iterator<LabelResource> iterator = result.iterator(); iterator
                     .hasNext();) {
                 DefaultLabelResource defaultLabelResource = (DefaultLabelResource) iterator

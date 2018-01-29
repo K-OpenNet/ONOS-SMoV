@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -ex
 # -----------------------------------------------------------------------------
 # Drives the ONOS release process.
 # -----------------------------------------------------------------------------
@@ -9,6 +9,12 @@
 set -e
 
 export NEW_VERSION=${1:-$ONOS_VERSION}
+DRY_RUN=${2:-""}
+dryRun=0
+if [ "${DRY_RUN}" == "--dry-run" ]; then
+    dryRun=1
+fi
+
 [ -z "$NEW_VERSION" ] && echo "New ONOS version not specified" && exit 1
 
 export NEW_VERSION_SHORT=${NEW_VERSION%-SNAPSHOT}
@@ -26,19 +32,38 @@ export ONOS_VERSION=$NEW_VERSION
 onos-validate-change-version
 
 # Build ONOS & deploy to staging repo using the release profile.
-onos-build && onos-package --tar --zip && mvn -Prelease clean deploy -DskipTests
+onos-buck build onos
+
+if [ $dryRun -eq 0 ]; then
+    time onos-buck-publish
+else
+    time onos-buck-publish-local
+fi
 
 # Build ONOS docs
-onos-build-docs
+onos-buck build //docs:internal //docs:external
+
+# Package test tar.gz
+onos-buck build //:onos-test
 
 # Build ONOS archetypes & deploy to staging repo using the release profile.
 # Note that release of the staging repository is a separate manual step.
-pushd tools/package/archetypes/
-mvn clean install && onos-archetypes-test && mvn -Prelease clean deploy
-popd
+if [ $dryRun -eq 0 ]; then
+    export MVN_CLI_OPTS=-Pstaging
+    pushd tools/package/archetypes/
+    mvn -Pstaging clean install && onos-archetypes-test && mvn -Pstaging -Prelease clean deploy
+    popd
+    unset MVN_CLI_OPTS
+else
+    pushd tools/package/archetypes/
+    mvn clean install && onos-archetypes-test
+    popd
+fi
 
-# Commit newly versioned artifacts and issue a tag.
-git commit -a -m"Tagging $NEW_VERSION"
-git tag -sm"Tagging $NEW_VERSION" $NEW_VERSION #signed tag
+if [ $dryRun -eq 0 ]; then
+    # Commit newly versioned artifacts and issue a tag.
+    git commit -a -m"Tagging $NEW_VERSION"
+    git tag -sm"Tagging $NEW_VERSION" $NEW_VERSION #signed tag
+fi
 
 # TODO: push?

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@
 
 package org.onosproject.provider.of.group.impl;
 
-import org.jboss.netty.util.HashedWheelTimer;
-import org.jboss.netty.util.Timeout;
-import org.jboss.netty.util.TimerTask;
 import org.onlab.util.Timer;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
 import org.onosproject.openflow.controller.RoleState;
@@ -26,6 +23,9 @@ import org.projectfloodlight.openflow.protocol.OFGroupDescStatsRequest;
 import org.projectfloodlight.openflow.protocol.OFGroupStatsRequest;
 import org.projectfloodlight.openflow.types.OFGroup;
 import org.slf4j.Logger;
+
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
 
 import java.util.concurrent.TimeUnit;
 
@@ -36,10 +36,9 @@ import static org.slf4j.LoggerFactory.getLogger;
  */
 public class GroupStatsCollector implements TimerTask {
 
-    private final HashedWheelTimer timer = Timer.getTimer();
     private final OpenFlowSwitch sw;
     private final Logger log = getLogger(getClass());
-    private final int refreshInterval;
+    private int refreshInterval;
 
     private Timeout timeout;
 
@@ -60,31 +59,34 @@ public class GroupStatsCollector implements TimerTask {
     public void run(Timeout timeout) throws Exception {
         log.trace("Collecting stats for {}", sw.getStringId());
 
-        sendGroupStatistic();
+        sendGroupStatisticRequest();
 
         if (!this.stopTimer) {
             log.trace("Scheduling stats collection in {} seconds for {}",
                     this.refreshInterval, this.sw.getStringId());
-            timeout.getTimer().newTimeout(this, refreshInterval,
+            timeout.timer().newTimeout(this, refreshInterval,
                     TimeUnit.SECONDS);
         }
     }
 
-    private void sendGroupStatistic() {
+    private void sendGroupStatisticRequest() {
         if (log.isTraceEnabled()) {
             log.trace("sendGroupStatistics {}:{}", sw.getStringId(), sw.getRole());
         }
         if (sw.getRole() != RoleState.MASTER) {
             return;
         }
-        Long statsXid = OpenFlowGroupProvider.getXidAndAdd(2);
+        if (!sw.isConnected()) {
+            return;
+        }
+        long statsXid = OpenFlowGroupProvider.getXidAndAdd(2);
         OFGroupStatsRequest statsRequest = sw.factory().buildGroupStatsRequest()
                 .setGroup(OFGroup.ALL)
                 .setXid(statsXid)
                 .build();
         sw.sendMsg(statsRequest);
 
-        Long descXid = statsXid + 1;
+        long descXid = statsXid + 1;
         OFGroupDescStatsRequest descStatsRequest =
                 sw.factory().buildGroupDescStatsRequest()
                         .setXid(descXid)
@@ -92,12 +94,16 @@ public class GroupStatsCollector implements TimerTask {
         sw.sendMsg(descStatsRequest);
     }
 
+    public void adjustRate(int pollInterval) {
+        this.refreshInterval = pollInterval;
+    }
+
     /**
      * Starts the collector.
      */
     public void start() {
         log.info("Starting Group Stats collection thread for {}", sw.getStringId());
-        timeout = timer.newTimeout(this, 1, TimeUnit.SECONDS);
+        timeout = Timer.newTimeout(this, 1, TimeUnit.SECONDS);
     }
 
     /**

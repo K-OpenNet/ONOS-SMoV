@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -14,28 +14,32 @@
   ~ limitations under the License.
   -->
 <scenario name="net-setup" description="Network setup steps">
-    <!-- TODO: parametrize this via recipes -->
+    <!-- Note: This scenario is tailored using 'topo' recipe mechanism; see topos/*.recipe files -->
     <group name="Net-Setup">
         <step name="Push-Topos" exec="onos-push-topos ${OCN}"/>
 
         <step name="Stop-Mininet-If-Needed" env="~" exec="onos-mininet stop"/>
+        <step name="Clean-Mininet-If-Needed" env="~" exec="onos-mininet cleanup" requires="^"/>
         <step name="Wipe-Out-Data-Before" exec="onos-wipe-out" requires="^"/>
 
         <step name="Initial-Summary-Check" requires="~Wipe-Out-Data-Before"
               exec="onos-check-summary ${OC1} [0-9]* 0 0 0"/>
 
         <step name="Config-Topo" requires="~Initial-Summary-Check"
-              exec="onos-netcfg ${OC1} ${ONOS_ROOT}/tools/test/topos/attmpls-cfg.json"/>
+              exec="onos-netcfg ${OC1} ${ONOS_ROOT}/tools/test/topos/${ONOS_TOPO}.json"/>
 
         <step name="Start-Mininet"
-              requires="Install-Apps,Config-Topo,Push-Topos,Stop-Mininet-If-Needed"
-              exec="onos-mininet start topos/topo att-onos.py ${ONOS_INSTANCES}"/>
+              requires="Config-Topo,Push-Topos,Stop-Mininet-If-Needed"
+              exec="onos-mininet start topos/topo ${ONOS_TOPO}.py ${ONOS_INSTANCES}"/>
 
         <step name="Wait-For-Mininet" requires="Start-Mininet"
               exec="onos-mininet wait 10"/>
 
-        <step name="Check-Summary" requires="~Wait-For-Mininet"
-              exec="onos-check-summary ${OC1} [0-9]* 25 140 25"/>
+        <step name="ARP-Hosts" requires="~Wait-For-Mininet"
+              exec="onos-mininet sendAndExpect gratuitousArp --expect ."/>
+
+        <step name="Check-Summary" requires="ARP-Hosts"
+              exec="onos-check-summary ${OC1} [0-9]* ${OTD} ${OTL} ${OTH}"/>
 
         <step name="Balance-Masters" requires="~Check-Summary" if="${OC2}"
               exec="onos ${OC1} balance-masters"/>

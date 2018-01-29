@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ public class DefaultTransactionalSet<E> implements TransactionalSet<E> {
     private TransactionalMap<E, Boolean> map;
 
     // dummy value to associate with an Object in the backing map
-    private static final Boolean PRESENT = new Boolean(true);
+    private static final Boolean PRESENT = Boolean.TRUE;
 
     public DefaultTransactionalSet(
             String name,

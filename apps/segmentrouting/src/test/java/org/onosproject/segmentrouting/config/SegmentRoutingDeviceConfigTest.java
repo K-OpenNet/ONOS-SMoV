@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.junit.Test;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
 
@@ -32,6 +33,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertTrue;
@@ -41,13 +44,24 @@ import static org.junit.Assert.assertTrue;
  */
 public class SegmentRoutingDeviceConfigTest {
     private SegmentRoutingDeviceConfig config;
+    private SegmentRoutingDeviceConfig ipv6Config;
+    private SegmentRoutingDeviceConfig pairConfig;
+    private SegmentRoutingDeviceConfig invalidConfig;
     private Map<Integer, Set<Integer>> adjacencySids1;
     private Map<Integer, Set<Integer>> adjacencySids2;
+    private static final DeviceId PAIR_DEVICE_ID = DeviceId.deviceId("of:123456789ABCDEF0");
+    private static final PortNumber PAIR_LOCAL_PORT = PortNumber.portNumber(10);
 
     @Before
     public void setUp() throws Exception {
         InputStream jsonStream = SegmentRoutingDeviceConfigTest.class
-                .getResourceAsStream("/sr-device-config.json");
+                .getResourceAsStream("/device.json");
+        InputStream ipv6JsonStream = SegmentRoutingDeviceConfigTest.class
+                .getResourceAsStream("/device-ipv6.json");
+        InputStream pairJsonStream = SegmentRoutingDeviceConfigTest.class
+                .getResourceAsStream("/device-pair.json");
+        InputStream invalidJsonStream = SegmentRoutingDeviceConfigTest.class
+                .getResourceAsStream("/device-invalid.json");
 
         adjacencySids1 = new HashMap<>();
         Set<Integer> ports1 = new HashSet<>();
@@ -68,10 +82,30 @@ public class SegmentRoutingDeviceConfigTest {
         String key = "segmentrouting";
         ObjectMapper mapper = new ObjectMapper();
         JsonNode jsonNode = mapper.readTree(jsonStream);
+        JsonNode ipv6JsonNode = mapper.readTree(ipv6JsonStream);
+        JsonNode pairJsonNode = mapper.readTree(pairJsonStream);
+        JsonNode invalidJsonNode = mapper.readTree(invalidJsonStream);
         ConfigApplyDelegate delegate = new MockDelegate();
 
         config = new SegmentRoutingDeviceConfig();
         config.init(subject, key, jsonNode, mapper, delegate);
+
+        ipv6Config = new SegmentRoutingDeviceConfig();
+        ipv6Config.init(subject, key, ipv6JsonNode, mapper, delegate);
+
+        pairConfig = new SegmentRoutingDeviceConfig();
+        pairConfig.init(subject, key, pairJsonNode, mapper, delegate);
+
+        invalidConfig = new SegmentRoutingDeviceConfig();
+        invalidConfig.init(subject, key, invalidJsonNode, mapper, delegate);
+    }
+
+    @Test
+    public void testIsValid() {
+        assertTrue(config.isValid());
+        assertTrue(ipv6Config.isValid());
+        assertTrue(pairConfig.isValid());
+        assertFalse(invalidConfig.isValid());
     }
 
     @Test
@@ -89,13 +123,19 @@ public class SegmentRoutingDeviceConfigTest {
 
     @Test
     public void testRouterIp() throws Exception {
-        assertThat(config.routerIp(), is(IpAddress.valueOf("10.0.1.254")));
+        assertThat(config.routerIpv4(), is(IpAddress.valueOf("10.0.1.254")));
+        assertThat(ipv6Config.routerIpv4(), is(IpAddress.valueOf("10.0.1.254")));
+        assertThat(ipv6Config.routerIpv6(), is(IpAddress.valueOf("2000::c0a8:0101")));
     }
 
     @Test
     public void testSetRouterIp() throws Exception {
-        config.setRouterIp("10.0.2.254");
-        assertThat(config.routerIp(), is(IpAddress.valueOf("10.0.2.254")));
+        config.setRouterIpv4("10.0.2.254");
+        assertThat(config.routerIpv4(), is(IpAddress.valueOf("10.0.2.254")));
+        ipv6Config.setRouterIpv4("10.0.2.254");
+        assertThat(ipv6Config.routerIpv4(), is(IpAddress.valueOf("10.0.2.254")));
+        ipv6Config.setRouterIpv6("2000::c0a9:0101");
+        assertThat(ipv6Config.routerIpv6(), is(IpAddress.valueOf("2000::c0a9:0101")));
     }
 
     @Test
@@ -111,13 +151,19 @@ public class SegmentRoutingDeviceConfigTest {
 
     @Test
     public void testNodeSid() throws Exception {
-        assertThat(config.nodeSid(), is(101));
+        assertThat(config.nodeSidIPv4(), is(101));
+        assertThat(ipv6Config.nodeSidIPv4(), is(101));
+        assertThat(ipv6Config.nodeSidIPv6(), is(111));
     }
 
     @Test
     public void testSetNodeSid() throws Exception {
-        config.setNodeSid(200);
-        assertThat(config.nodeSid(), is(200));
+        config.setNodeSidIPv4(200);
+        assertThat(config.nodeSidIPv4(), is(200));
+        ipv6Config.setNodeSidIPv4(200);
+        assertThat(ipv6Config.nodeSidIPv4(), is(200));
+        ipv6Config.setNodeSidIPv6(201);
+        assertThat(ipv6Config.nodeSidIPv6(), is(201));
     }
 
     @Test
@@ -142,9 +188,35 @@ public class SegmentRoutingDeviceConfigTest {
         assertThat(config.adjacencySids(), is(adjacencySids2));
     }
 
+    @Test
+    public void testPairDeviceId() throws Exception {
+        assertNull(config.pairDeviceId());
+        assertNull(ipv6Config.pairDeviceId());
+        assertThat(pairConfig.pairDeviceId(), is(PAIR_DEVICE_ID));
+    }
+
+    @Test
+    public void testSetPairDeviceId() throws Exception {
+        config.setPairDeviceId(PAIR_DEVICE_ID);
+        assertThat(config.pairDeviceId(), is(PAIR_DEVICE_ID));
+    }
+
+    @Test
+    public void testPairLocalPort() throws Exception {
+        assertNull(config.pairLocalPort());
+        assertNull(ipv6Config.pairLocalPort());
+        assertThat(pairConfig.pairLocalPort(), is(PAIR_LOCAL_PORT));
+    }
+
+    @Test
+    public void testSetPairLocalPort() throws Exception {
+        config.setPairLocalPort(PAIR_LOCAL_PORT);
+        assertThat(config.pairLocalPort(), is(PAIR_LOCAL_PORT));
+    }
+
     private class MockDelegate implements ConfigApplyDelegate {
         @Override
-        public void onApply(Config config) {
+        public void onApply(Config configFile) {
         }
     }
 }

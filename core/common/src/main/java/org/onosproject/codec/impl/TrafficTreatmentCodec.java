@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,17 @@
  */
 package org.onosproject.codec.impl;
 
-import java.util.stream.IntStream;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.instructions.Instruction;
+import org.onosproject.net.flow.instructions.Instructions;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -34,6 +34,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public final class TrafficTreatmentCodec extends JsonCodec<TrafficTreatment> {
     private static final String INSTRUCTIONS = "instructions";
+    private static final String DEFERRED = "deferred";
+    private static final String CLEAR_DEFERRED = "clearDeferred";
 
     @Override
     public ObjectNode encode(TrafficTreatment treatment, CodecContext context) {
@@ -49,7 +51,19 @@ public final class TrafficTreatmentCodec extends JsonCodec<TrafficTreatment> {
             jsonInstructions.add(instructionCodec.encode(instruction, context));
         }
 
-        final ArrayNode jsonDeferred = result.putArray("deferred");
+        if (treatment.metered() != null) {
+            for (Instructions.MeterInstruction instruction : treatment.meters()) {
+                jsonInstructions.add(instructionCodec.encode(instruction, context));
+            }
+        }
+        if (treatment.tableTransition() != null) {
+            jsonInstructions.add(instructionCodec.encode(treatment.tableTransition(), context));
+        }
+        if (treatment.clearedDeferred()) {
+            result.put(CLEAR_DEFERRED, true);
+        }
+
+        final ArrayNode jsonDeferred = result.putArray(DEFERRED);
 
         for (final Instruction instruction : treatment.deferred()) {
             jsonDeferred.add(instructionCodec.encode(instruction, context));
@@ -71,6 +85,20 @@ public final class TrafficTreatmentCodec extends JsonCodec<TrafficTreatment> {
                             instructionsCodec.decode(get(instructionsJson, i),
                                     context)));
         }
+
+        JsonNode clearDeferred = json.get(CLEAR_DEFERRED);
+        if (clearDeferred != null && clearDeferred.asBoolean(false)) {
+            builder.wipeDeferred();
+        }
+
+        JsonNode deferredJson = json.get(DEFERRED);
+        if (deferredJson != null) {
+            IntStream.range(0, deferredJson.size())
+            .forEach(i -> builder.deferred().add(
+                    instructionsCodec.decode(get(deferredJson, i),
+                            context)));
+        }
+
         return builder.build();
     }
 }

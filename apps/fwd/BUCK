@@ -1,0 +1,125 @@
+COMPILE_DEPS = [
+    '//lib:CORE_DEPS',
+    '//lib:KRYO',
+    '//core/store/serializers:onos-core-serializers',
+    '//core/store/primitives:onos-core-primitives',
+    '//core/api:onos-api',
+    '//lib:org.apache.karaf.shell.console',
+    '//cli:onos-cli',
+    '//incubator/api:onos-incubator-api',
+]
+
+osgi_jar_with_tests (
+    deps = COMPILE_DEPS,
+)
+
+onos_app (
+    title = 'Reactive Forwarding',
+    category = 'Traffic Steering',
+    url = 'http://onosproject.org',
+    description = 'Provisions traffic between end-stations using hop-by-hop flow programming by ' +
+        'intercepting packets for which there are currently no matching flow objectives on the ' +
+        'data plane. The paths paved in this manner are short-lived, i.e. they expire a few ' +
+        'seconds after the flow on whose behalf they were programmed stops.\n\n' +
+        'The application relies on the ONOS path service to compute the shortest paths. ' +
+        'In the event of negative topology events (link loss, device disconnect, etc.), ' +
+        'the application will proactively invalidate any paths that it had programmed to lead ' +
+        'through the resources that are no longer available.',
+ 
+    security = '''\
+	<role>USER</role>
+        <permissions>
+            <app-perm>DRIVER_READ</app-perm>
+            <app-perm>APP_WRITE</app-perm>
+            <app-perm>DEVICE_READ</app-perm>
+            <app-perm>CONFIG_READ</app-perm>
+            <app-perm>CONFIG_WRITE</app-perm>
+            <app-perm>CLUSTER_READ</app-perm>
+            <app-perm>DEVICE_READ</app-perm>
+            <app-perm>TOPOLOGY_READ</app-perm>
+            <app-perm>PACKET_READ</app-perm>
+            <app-perm>PACKET_WRITE</app-perm>
+            <app-perm>PACKET_EVENT</app-perm>
+            <app-perm>HOST_READ</app-perm>
+            <app-perm>FLOWRULE_READ</app-perm>
+            <app-perm>FLOWRULE_WRITE</app-perm>
+            <app-perm>STORAGE_WRITE</app-perm>
+            <app-perm>CLUSTER_WRITE</app-perm>
+
+            <vnet-perm>
+                <permission>VNET_READ</permission>
+                <vnetId>1</vnetId>
+            </vnet-perm>
+
+            <vnet-perm>
+                <permission>VNET_WRITE</permission>
+                <vnetId>*</vnetId>
+            </vnet-perm>
+
+            <java-perm>
+                <classname>org.osgi.framework.AdminPermission</classname>
+                <name>*</name>
+                <actions>*</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.karaf.shell.console.CompletableFunction</name>
+                 <actions>register</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.karaf.shell.commands.CommandWithAction</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>java.lang.RuntimePermission</classname>
+                 <name>accessDeclaredMembers</name>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.net.flowobjective.FlowObjectiveService</name>
+                 <actions>get</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.incubator.net.virtual.VirtualNetworkService</name>
+                 <actions>get</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.osgi.service.blueprint.container.BlueprintContainer</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.fwd.ReactiveForwarding</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.store.service.StorageService</name>
+                 <actions>get</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.felix.service.command.Function</name>
+                 <actions>register</actions>
+            </java-perm>
+
+            <java-perm>
+                <classname>java.util.PropertyPermission</classname>
+                <name>java.version</name>
+                <actions>read</actions>
+            </java-perm>
+
+            <java-perm>
+                <classname>java.lang.reflect.ReflectPermission</classname>
+                <name>suppressAccessChecks</name>
+            </java-perm>
+	</permissions>''',
+)

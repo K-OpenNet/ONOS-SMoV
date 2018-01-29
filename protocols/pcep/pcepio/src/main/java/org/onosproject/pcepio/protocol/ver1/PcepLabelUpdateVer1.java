@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -279,7 +279,7 @@ public class PcepLabelUpdateVer1 implements PcepLabelUpdate {
             }
 
             llLabelList = labelDownload.getLabelList();
-            if (llLabelList == null) {
+            if (llLabelList == null || llLabelList.isEmpty()) {
                 throw new PcepParseException("Label list is mandatory object for Label Download.");
             } else {
                 ListIterator<PcepLabelObject> listIterator = llLabelList.listIterator();

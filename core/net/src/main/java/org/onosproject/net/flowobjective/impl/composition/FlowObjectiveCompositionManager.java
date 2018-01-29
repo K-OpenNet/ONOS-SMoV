@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package org.onosproject.net.flowobjective.impl.composition;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.apache.felix.scr.annotations.Activate;
@@ -35,7 +36,6 @@ import org.onosproject.net.behaviour.PipelinerContext;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.driver.DefaultDriverProviderService;
 import org.onosproject.net.driver.DriverHandler;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.flow.FlowRuleService;
@@ -118,12 +118,6 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected FlowObjectiveStore flowObjectiveStore;
 
-    // Note: This must remain an optional dependency to allow re-install of default drivers.
-    // Note: For now disabled until we can move to OPTIONAL_UNARY dependency
-    // @Reference(cardinality = ReferenceCardinality.OPTIONAL_UNARY, policy = ReferencePolicy.DYNAMIC)
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected DefaultDriverProviderService defaultDriverService;
-
     private final FlowObjectiveStoreDelegate delegate = new InternalStoreDelegate();
 
     private final Map<DeviceId, DriverHandler> driverHandlers = Maps.newConcurrentMap();
@@ -144,7 +138,7 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
 
     @Activate
     protected void activate() {
-        executorService = newFixedThreadPool(4, groupedThreads("onos/objective-installer", "%d"));
+        executorService = newFixedThreadPool(4, groupedThreads("onos/objective-installer", "%d", log));
         flowObjectiveStore.setDelegate(delegate);
         mastershipService.addListener(mastershipListener);
         deviceService.addListener(deviceListener);
@@ -201,7 +195,7 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
                     }
                 } else if (numAttempts < INSTALL_RETRY_ATTEMPTS) {
                     Thread.sleep(INSTALL_RETRY_INTERVAL);
-                    executorService.submit(new ObjectiveInstaller(deviceId, objective, numAttempts + 1));
+                    executorService.execute(new ObjectiveInstaller(deviceId, objective, numAttempts + 1));
                 } else {
                     // Otherwise we've tried a few times and failed, report an
                     // error back to the user.
@@ -221,7 +215,7 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
         List<FilteringObjective> filteringObjectives
                 = this.deviceCompositionTreeMap.get(deviceId).updateFilter(filteringObjective);
         for (FilteringObjective tmp : filteringObjectives) {
-            executorService.submit(new ObjectiveInstaller(deviceId, tmp));
+            executorService.execute(new ObjectiveInstaller(deviceId, tmp));
         }
     }
 
@@ -235,7 +229,7 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
         List<ForwardingObjective> forwardingObjectives
                 = this.deviceCompositionTreeMap.get(deviceId).updateForward(forwardingObjective);
         for (ForwardingObjective tmp : forwardingObjectives) {
-            executorService.submit(new ObjectiveInstaller(deviceId, tmp));
+            executorService.execute(new ObjectiveInstaller(deviceId, tmp));
         }
     }
 
@@ -245,7 +239,7 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
 
         List<NextObjective> nextObjectives = this.deviceCompositionTreeMap.get(deviceId).updateNext(nextObjective);
         for (NextObjective tmp : nextObjectives) {
-            executorService.submit(new ObjectiveInstaller(deviceId, tmp));
+            executorService.execute(new ObjectiveInstaller(deviceId, tmp));
         }
     }
 
@@ -281,16 +275,10 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
 
     // Retrieves the device pipeline behaviour from the cache.
     private Pipeliner getDevicePipeliner(DeviceId deviceId) {
-        Pipeliner pipeliner = pipeliners.get(deviceId);
-        return pipeliner;
+        return pipeliners.get(deviceId);
     }
 
     private void setupPipelineHandler(DeviceId deviceId) {
-        if (defaultDriverService == null) {
-            // We're not ready to go to work yet.
-            return;
-        }
-
         // Attempt to lookup the handler in the cache
         DriverHandler handler = driverHandlers.get(deviceId);
         if (handler == null) {
@@ -435,5 +423,22 @@ public class FlowObjectiveCompositionManager implements FlowObjectiveService {
         }
         str += ")";
         return str;
+    }
+
+    @Override
+    public List<String> getNextMappings() {
+        // TODO Implementation deferred as this is an experimental component.
+        return ImmutableList.of();
+    }
+
+    @Override
+    public List<String> getPendingFlowObjectives() {
+        // TODO Implementation deferred as this is an experimental component.
+        return ImmutableList.of();
+    }
+
+    @Override
+    public List<String> getPendingNexts() {
+        return ImmutableList.of();
     }
 }

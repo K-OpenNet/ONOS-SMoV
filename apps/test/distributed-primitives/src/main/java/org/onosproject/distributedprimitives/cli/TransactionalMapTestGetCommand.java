@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.onosproject.distributedprimitives.cli;
 
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
-import org.apache.karaf.shell.commands.Option;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.Serializer;
@@ -32,10 +31,6 @@ import org.onosproject.store.service.TransactionalMap;
         description = "Get a value associated with a specific key in a transactional map")
 public class TransactionalMapTestGetCommand extends AbstractShellCommand {
 
-    @Option(name = "-i", aliases = "--inMemory", description = "use in memory map?",
-            required = false, multiValued = false)
-    private boolean inMemory = false;
-
     @Argument(index = 0, name = "key",
             description = "Key to get the value of",
             required = true, multiValued = false)
@@ -49,11 +44,7 @@ public class TransactionalMapTestGetCommand extends AbstractShellCommand {
     protected void execute() {
         StorageService storageService = get(StorageService.class);
         TransactionContext context;
-        if (inMemory) {
-            context = storageService.transactionContextBuilder().withPartitionsDisabled().build();
-        } else {
-            context = storageService.transactionContextBuilder().build();
-        }
+        context = storageService.transactionContextBuilder().build();
         context.begin();
         try {
             map = context.getTransactionalMap(mapName, serializer);

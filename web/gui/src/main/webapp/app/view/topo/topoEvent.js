@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,14 +27,11 @@
     'use strict';
 
     // injected refs
-    var $log, $interval, wss, tps, tis, tfs, tss, tov, tspr;
+    var $log, wss, tps, tis, tfs, tss, tov, tspr;
 
     // internal state
     var handlerMap,
-        openListener,
-        heartbeatTimer;
-
-    var heartbeatPeriod = 9000; // 9 seconds
+        openListener;
 
     // ==========================
 
@@ -64,7 +61,7 @@
             topoStartDone: tfs,
 
             spriteListResponse: tspr,
-            spriteDataResponse: tspr
+            spriteDataResponse: tspr,
         };
     }
 
@@ -74,31 +71,16 @@
         wss.sendEvent('topoStart');
     }
 
-    function cancelHeartbeat() {
-        if (heartbeatTimer) {
-            $interval.cancel(heartbeatTimer);
-        }
-        heartbeatTimer = null;
-    }
-
-    function scheduleHeartbeat() {
-        cancelHeartbeat();
-        heartbeatTimer = $interval(function () {
-            wss.sendEvent('topoHeartbeat');
-        }, heartbeatPeriod);
-    }
-
 
     angular.module('ovTopo')
     .factory('TopoEventService',
-        ['$log', '$interval', 'WebSocketService',
+        ['$log', 'WebSocketService',
             'TopoPanelService', 'TopoInstService', 'TopoForceService',
             'TopoSelectService', 'TopoOverlayService', 'TopoSpriteService',
 
-        function (_$log_,  _$interval_, _wss_,
+        function (_$log_, _wss_,
                   _tps_, _tis_, _tfs_, _tss_, _tov_, _tspr_) {
             $log = _$log_;
-            $interval = _$interval_;
             wss = _wss_;
             tps = _tps_;
             tis = _tis_;
@@ -118,12 +100,10 @@
                 // in case we fail over to a new server, listen for wsock-open
                 openListener = wss.addOpenListener(wsOpen);
                 wss.sendEvent('topoStart');
-                scheduleHeartbeat();
                 $log.debug('topo comms started');
             }
 
             function stop() {
-                cancelHeartbeat();
                 wss.sendEvent('topoStop');
                 wss.unbindHandlers(handlerMap);
                 wss.removeOpenListener(openListener);
@@ -134,7 +114,7 @@
             return {
                 bindHandlers: bindHandlers,
                 start: start,
-                stop: stop
+                stop: stop,
             };
         }]);
 }());

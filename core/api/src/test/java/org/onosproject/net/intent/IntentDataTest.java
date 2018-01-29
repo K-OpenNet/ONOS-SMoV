@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,24 @@
  */
 package org.onosproject.net.intent;
 
-import org.junit.After;
+import com.google.common.testing.EqualsTester;
 import org.junit.Before;
 import org.junit.Test;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.store.Timestamp;
 
-import com.google.common.testing.EqualsTester;
-
 import static junit.framework.TestCase.assertFalse;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertTrue;
+import static org.onosproject.net.intent.IntentState.FAILED;
 import static org.onosproject.net.intent.IntentTestsMocks.MockIntent;
 import static org.onosproject.net.intent.IntentTestsMocks.MockTimestamp;
 
 /**
  * Unit tests for intent data objects.
  */
-public class IntentDataTest {
+public class IntentDataTest extends AbstractIntentTest {
 
     private Timestamp timestamp1;
     private Timestamp timestamp2;
@@ -52,10 +51,10 @@ public class IntentDataTest {
 
     IdGenerator idGenerator;
 
+    @Override
     @Before
-    public void setUpTest() {
-        idGenerator = new MockIdGenerator();
-        Intent.bindIdGenerator(idGenerator);
+    public void setUp() {
+        super.setUp();
 
         timestamp1 = new MockTimestamp(1);
         timestamp2 = new MockTimestamp(2);
@@ -71,11 +70,6 @@ public class IntentDataTest {
         data2Copy = new IntentData(intent2, IntentState.INSTALLED, timestamp2);
         data3 = new IntentData(intent3, IntentState.INSTALLED, timestamp3);
         data3Copy = new IntentData(intent3, IntentState.INSTALLED, timestamp3);
-    }
-
-    @After
-    public void tearDownTest() {
-        Intent.unbindIdGenerator(idGenerator);
     }
 
     /**
@@ -110,17 +104,18 @@ public class IntentDataTest {
         assertFalse(IntentData.isUpdateAcceptable(data2, data1));
 
         IntentData installing = new IntentData(intent1, IntentState.INSTALLING, timestamp1);
-        IntentData installed = new IntentData(intent1, IntentState.INSTALLED, timestamp1);
+        IntentData installed = IntentData.nextState(installing, IntentState.INSTALLED);
         IntentData withdrawing = new IntentData(intent1, IntentState.WITHDRAWING, timestamp1);
-        IntentData withdrawn = new IntentData(intent1, IntentState.WITHDRAWN, timestamp1);
+        IntentData withdrawn = IntentData.nextState(withdrawing, IntentState.WITHDRAWN);
 
         IntentData failed = new IntentData(intent1, IntentState.FAILED, timestamp1);
-        IntentData purgeReq = new IntentData(intent1, IntentState.PURGE_REQ, timestamp1);
 
         IntentData compiling = new IntentData(intent1, IntentState.COMPILING, timestamp1);
         IntentData recompiling = new IntentData(intent1, IntentState.RECOMPILING, timestamp1);
-        IntentData installReq = new IntentData(intent1, IntentState.INSTALL_REQ, timestamp1);
-        IntentData withdrawReq = new IntentData(intent1, IntentState.WITHDRAW_REQ, timestamp1);
+
+        IntentData installReq = new IntentData(intent1, IntentState.INSTALL_REQ, timestamp2);
+        IntentData withdrawReq = new IntentData(intent1, IntentState.WITHDRAW_REQ, timestamp2);
+        IntentData purgeReq = new IntentData(intent1, IntentState.PURGE_REQ, timestamp2);
 
         // We can't change to the same state
         assertFalse(IntentData.isUpdateAcceptable(installing, installing));
@@ -128,6 +123,8 @@ public class IntentDataTest {
 
         // From installing we can change to installed
         assertTrue(IntentData.isUpdateAcceptable(installing, installed));
+        // transition in reverse should be rejected
+        assertFalse(IntentData.isUpdateAcceptable(installed, installing));
 
         // Sanity checks in case the manager submits bogus state transitions
         assertFalse(IntentData.isUpdateAcceptable(installing, withdrawing));
@@ -152,10 +149,10 @@ public class IntentDataTest {
         assertFalse(IntentData.isUpdateAcceptable(failed, failed));
 
         // But we can go from any install* or withdraw* state to failed
-        assertTrue(IntentData.isUpdateAcceptable(installing, failed));
-        assertTrue(IntentData.isUpdateAcceptable(installed, failed));
-        assertTrue(IntentData.isUpdateAcceptable(withdrawing, failed));
-        assertTrue(IntentData.isUpdateAcceptable(withdrawn, failed));
+        assertTrue(IntentData.isUpdateAcceptable(installing, IntentData.nextState(installing, FAILED)));
+        assertTrue(IntentData.isUpdateAcceptable(installed, IntentData.nextState(installed, FAILED)));
+        assertTrue(IntentData.isUpdateAcceptable(withdrawing, IntentData.nextState(withdrawing, FAILED)));
+        assertTrue(IntentData.isUpdateAcceptable(withdrawn, IntentData.nextState(withdrawn, FAILED)));
 
         // We can go from anything to purgeReq
         assertTrue(IntentData.isUpdateAcceptable(installing, purgeReq));
@@ -173,7 +170,7 @@ public class IntentDataTest {
         // We're never allowed to store transient states
         assertFalse(IntentData.isUpdateAcceptable(installing, compiling));
         assertFalse(IntentData.isUpdateAcceptable(installing, recompiling));
-        assertFalse(IntentData.isUpdateAcceptable(installing, installReq));
-        assertFalse(IntentData.isUpdateAcceptable(installing, withdrawReq));
+        assertFalse(IntentData.isUpdateAcceptable(installing, installing));
+        assertFalse(IntentData.isUpdateAcceptable(installing, withdrawing));
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onlab.util;
 
 import com.google.common.collect.Lists;
+
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -142,6 +144,7 @@ public final class BoundedThreadPoolTest {
         return latches;
     }
 
+    @Ignore("Disabled due to ONOS-5900")
     @Test
     public void releaseOneThread() {
         maxQueueSize = 10;
@@ -171,7 +174,7 @@ public final class BoundedThreadPoolTest {
             latches.remove(0).countDown(); // release the second thread
 
             assertTrue("Thread should be unblocked",
-                       myLatch.await(10, TimeUnit.MILLISECONDS));
+                       myLatch.await(10, TimeUnit.SECONDS));
             long delta = System.nanoTime() - start;
             double load = exec.getQueue().size() / (double) maxQueueSize;
             assertTrue("Load is greater than threshold", load <= 0.8);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Test Adapter for OvsdbController.
@@ -70,6 +71,11 @@ public class OvsdbControllerAdapter implements OvsdbController {
 
     @Override
     public void connect(IpAddress ip, TpPort port) {
+
+    }
+
+    @Override
+    public void connect(IpAddress ip, TpPort port, Consumer<Exception> failhandler) {
 
     }
 }

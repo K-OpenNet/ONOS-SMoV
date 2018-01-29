@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,17 @@ import org.projectfloodlight.openflow.protocol.OFFactory;
 import org.projectfloodlight.openflow.protocol.OFMeterFlags;
 import org.projectfloodlight.openflow.protocol.OFMeterMod;
 import org.projectfloodlight.openflow.protocol.OFMeterModCommand;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.meterband.OFMeterBand;
 import org.projectfloodlight.openflow.protocol.meterband.OFMeterBandDrop;
 import org.projectfloodlight.openflow.protocol.meterband.OFMeterBandDscpRemark;
 import org.slf4j.Logger;
 
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -82,43 +85,47 @@ public final class MeterModBuilder {
     public OFMeterMod add() {
         validate();
         OFMeterMod.Builder builder = builderMeterMod();
-        builder.setCommand(OFMeterModCommand.ADD.ordinal());
+        builder.setCommand(OFMeterModCommand.ADD);
         return builder.build();
     }
 
     public OFMeterMod remove() {
         validate();
         OFMeterMod.Builder builder = builderMeterMod();
-        builder.setCommand(OFMeterModCommand.DELETE.ordinal());
+        builder.setCommand(OFMeterModCommand.DELETE);
         return builder.build();
     }
 
     public OFMeterMod modify() {
         validate();
         OFMeterMod.Builder builder = builderMeterMod();
-        builder.setCommand(OFMeterModCommand.MODIFY.ordinal());
+        builder.setCommand(OFMeterModCommand.MODIFY);
         return builder.build();
     }
 
     private OFMeterMod.Builder builderMeterMod() {
         OFMeterMod.Builder builder = factory.buildMeterMod();
-        int flags = 0;
+        Set<OFMeterFlags> flags = EnumSet.noneOf(OFMeterFlags.class);
         if (burst) {
-            // covering loxi short comings.
-            flags |= 1 << OFMeterFlags.BURST.ordinal();
+            flags.add(OFMeterFlags.BURST);
         }
         switch (unit) {
             case PKTS_PER_SEC:
-                flags |= 1 << OFMeterFlags.PKTPS.ordinal();
+                flags.add(OFMeterFlags.PKTPS);
                 break;
             case KB_PER_SEC:
-                flags |= 1 << OFMeterFlags.KBPS.ordinal();
+                flags.add(OFMeterFlags.KBPS);
                 break;
             default:
                 log.warn("Unknown unit type {}", unit);
         }
-        //FIXME: THIS WILL CHANGE IN OF1.4 to setBands.
-        builder.setMeters(buildBands());
+
+        if (factory.getVersion().getWireVersion() >= OFVersion.OF_14.getWireVersion()) {
+            builder.setBands(buildBands());
+        } else {
+            builder.setMeters(buildBands());
+        }
+
         builder.setFlags(flags)
                 .setMeterId(id)
                 .setXid(xid);
@@ -155,6 +162,6 @@ public final class MeterModBuilder {
     private void validate() {
         checkNotNull(id, "id cannot be null");
         checkNotNull(bands, "Must have bands");
-        checkArgument(bands.size() > 0, "Must have at lease one band");
+        checkArgument(!bands.isEmpty(), "Must have at lease one band");
     }
 }

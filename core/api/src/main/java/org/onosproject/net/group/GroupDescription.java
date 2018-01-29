@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ public interface GroupDescription {
      * Returns groupId passed in by caller.
      *
      * @return Integer group id passed in by caller. May be null if caller
-     *                 passed in null to let groupService determin the group id.
+     *                 passed in null to let groupService determine the group id.
      */
     Integer givenGroupId();
 

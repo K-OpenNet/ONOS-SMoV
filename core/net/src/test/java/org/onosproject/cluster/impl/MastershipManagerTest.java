@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,20 @@
  */
 package org.onosproject.cluster.impl;
 
+import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.junit.TestUtils;
 import org.onlab.packet.IpAddress;
+import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.ClusterServiceAdapter;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.DefaultControllerNode;
 import org.onosproject.cluster.NodeId;
@@ -31,17 +37,30 @@ import org.onosproject.mastership.MastershipService;
 import org.onosproject.mastership.MastershipStore;
 import org.onosproject.mastership.MastershipTermService;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.config.NetworkConfigServiceAdapter;
+import org.onosproject.net.region.Region;
+import org.onosproject.net.region.RegionId;
+import org.onosproject.net.region.RegionStore;
+import org.onosproject.net.region.impl.RegionManager;
+import org.onosproject.store.cluster.StaticClusterService;
+import org.onosproject.store.region.impl.DistributedRegionStore;
+import org.onosproject.store.service.TestStorageService;
 import org.onosproject.store.trivial.SimpleMastershipStore;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
+import org.onosproject.upgrade.impl.UpgradeServiceAdapter;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.expectLastCall;
+import static org.easymock.EasyMock.replay;
+import static org.junit.Assert.*;
 import static org.onosproject.net.MastershipRole.MASTER;
 import static org.onosproject.net.MastershipRole.NONE;
 import static org.onosproject.net.MastershipRole.STANDBY;
 import static org.onosproject.net.NetTestTools.injectEventDispatcher;
+import static org.onosproject.net.region.Region.Type.METRO;
 
 /**
  * Test codifying the mastership service contracts.
@@ -54,16 +73,63 @@ public class MastershipManagerTest {
     private static final DeviceId DEV_MASTER = DeviceId.deviceId("of:1");
     private static final DeviceId DEV_OTHER = DeviceId.deviceId("of:2");
 
+    private static final RegionId RID1 = RegionId.regionId("r1");
+    private static final RegionId RID2 = RegionId.regionId("r2");
+    private static final DeviceId DID1 = DeviceId.deviceId("foo:d1");
+    private static final DeviceId DID2 = DeviceId.deviceId("foo:d2");
+    private static final DeviceId DID3 = DeviceId.deviceId("foo:d3");
+    private static final DeviceId DID4 = DeviceId.deviceId("foo:d4");
+    private static final DeviceId DID5 = DeviceId.deviceId("foo:d5");
+    private static final DeviceId DID6 = DeviceId.deviceId("foo:d6");
+    private static final NodeId NID1 = NodeId.nodeId("n1");
+    private static final NodeId NID2 = NodeId.nodeId("n2");
+    private static final NodeId NID3 = NodeId.nodeId("n3");
+    private static final NodeId NID4 = NodeId.nodeId("n4");
+    private static final ControllerNode CNODE1 =
+            new DefaultControllerNode(NID1, IpAddress.valueOf("127.0.1.1"));
+    private static final ControllerNode CNODE2 =
+            new DefaultControllerNode(NID2, IpAddress.valueOf("127.0.1.2"));
+    private static final ControllerNode CNODE3 =
+            new DefaultControllerNode(NID3, IpAddress.valueOf("127.0.1.3"));
+    private static final ControllerNode CNODE4 =
+            new DefaultControllerNode(NID4, IpAddress.valueOf("127.0.1.4"));
+
+
     private MastershipManager mgr;
     protected MastershipService service;
+    private TestRegionManager regionManager;
+    private RegionStore regionStore;
+    private TestClusterService testClusterService;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         mgr = new MastershipManager();
         service = mgr;
         injectEventDispatcher(mgr, new TestEventDispatcher());
-        mgr.clusterService = new TestClusterService();
+        testClusterService = new TestClusterService();
+        mgr.clusterService = testClusterService;
+        mgr.upgradeService = new UpgradeServiceAdapter();
         mgr.store = new TestSimpleMastershipStore(mgr.clusterService);
+        regionStore = new DistributedRegionStore();
+        TestUtils.setField(regionStore, "storageService", new TestStorageService());
+        TestUtils.callMethod(regionStore, "activate",
+                             new Class<?>[] {});
+        regionManager = new TestRegionManager();
+        TestUtils.setField(regionManager, "store", regionStore);
+        regionManager.activate();
+        mgr.regionService = regionManager;
+
+        ComponentConfigService mockConfigService =
+                EasyMock.createMock(ComponentConfigService.class);
+        expect(mockConfigService.getProperties(anyObject())).andReturn(ImmutableSet.of());
+        mockConfigService.registerProperties(mgr.getClass());
+        expectLastCall();
+        mockConfigService.unregisterProperties(mgr.getClass(), false);
+        expectLastCall();
+        expect(mockConfigService.getProperties(anyObject())).andReturn(ImmutableSet.of());
+        mgr.cfgService = mockConfigService;
+        replay(mockConfigService);
+
         mgr.activate();
     }
 
@@ -72,6 +138,8 @@ public class MastershipManagerTest {
         mgr.deactivate();
         mgr.clusterService = null;
         injectEventDispatcher(mgr, null);
+        regionManager.deactivate();
+        mgr.regionService = null;
         mgr.store = null;
     }
 
@@ -154,7 +222,169 @@ public class MastershipManagerTest {
         assertEquals("inconsistent terms: ", 3, ts.getMastershipTerm(DEV_MASTER).termNumber());
     }
 
-    private final class TestClusterService extends ClusterServiceAdapter {
+    @Test
+    public void balanceWithOrphans() {
+        // Setup cluster of three nodes
+        testClusterService.put(CNODE1, ControllerNode.State.ACTIVE);
+        testClusterService.put(CNODE2, ControllerNode.State.INACTIVE);
+        testClusterService.put(CNODE3, ControllerNode.State.ACTIVE);
+
+        // Pre-assign some devices to each of the node
+        // Leave some devices as orphans assigned to a downed node
+        assignRoles(NID1, ImmutableSet.of(DID1, DID2, DID3, DID4));
+        assignRoles(NID2, ImmutableSet.of(DID5));
+        assignRoles(NID3, ImmutableSet.of(DID6));
+
+        // Trigger load balancing
+        mgr.balanceRoles();
+
+        // Make sure we have a balanced load
+        // Make sure that we no longer have any orphans
+        assertEquals("incorrect balance for node 1", 3, mgr.getDevicesOf(NID1).size());
+        assertEquals("incorrect balance for node 2", 0, mgr.getDevicesOf(NID2).size());
+        assertEquals("incorrect balance for node 3", 3, mgr.getDevicesOf(NID3).size());
+    }
+
+    private void assignRoles(NodeId nid, Set<DeviceId> deviceIds) {
+        Set<DeviceId> all = ImmutableSet.of(DID1, DID2, DID3, DID4, DID5, DID6);
+        for (DeviceId did : all) {
+            mgr.setRole(nid, did, deviceIds.contains(did) ? MASTER : STANDBY);
+        }
+    }
+
+    @Test
+    public void balanceWithRegion1() {
+        //set up region - 2 sets of masters with 1 node in each
+        Set<NodeId> masterSet1 = ImmutableSet.of(NID1);
+        Set<NodeId> masterSet2 = ImmutableSet.of(NID2);
+        List<Set<NodeId>> masters = ImmutableList.of(masterSet1, masterSet2);
+        Region r = regionManager.createRegion(RID1, "R1", METRO, masters);
+        regionManager.addDevices(RID1, ImmutableSet.of(DID1, DID2));
+        Set<DeviceId> deviceIds = regionManager.getRegionDevices(RID1);
+        assertEquals("incorrect device count", 2, deviceIds.size());
+
+        testClusterService.put(CNODE1, ControllerNode.State.ACTIVE);
+        testClusterService.put(CNODE2, ControllerNode.State.ACTIVE);
+
+        //set master to non region nodes
+        mgr.setRole(NID_LOCAL, DID1, MASTER);
+        mgr.setRole(NID_LOCAL, DID2, MASTER);
+        assertEquals("wrong local role:", MASTER, mgr.getLocalRole(DID1));
+        assertEquals("wrong local role:", MASTER, mgr.getLocalRole(DID2));
+        assertEquals("wrong master:", NID_LOCAL, mgr.getMasterFor(DID1));
+        assertEquals("wrong master:", NID_LOCAL, mgr.getMasterFor(DID2));
+
+        //do region balancing
+        mgr.useRegionForBalanceRoles = true;
+        mgr.balanceRoles();
+        assertEquals("wrong master:", NID1, mgr.getMasterFor(DID1));
+        assertEquals("wrong master:", NID1, mgr.getMasterFor(DID2));
+
+        // make N1 inactive
+        testClusterService.put(CNODE1, ControllerNode.State.INACTIVE);
+        mgr.balanceRoles();
+        assertEquals("wrong master:", NID2, mgr.getMasterFor(DID1));
+        assertEquals("wrong master:", NID2, mgr.getMasterFor(DID2));
+
+    }
+
+    @Test
+    public void balanceWithRegion2() {
+        //set up region - 2 sets of masters with (3 nodes, 1 node)
+        Set<NodeId> masterSet1 = ImmutableSet.of(NID1, NID3, NID4);
+        Set<NodeId> masterSet2 = ImmutableSet.of(NID2);
+        List<Set<NodeId>> masters = ImmutableList.of(masterSet1, masterSet2);
+        Region r = regionManager.createRegion(RID1, "R1", METRO, masters);
+        Set<DeviceId> deviceIdsOrig = ImmutableSet.of(DID1, DID2, DID3, DEV_OTHER);
+        regionManager.addDevices(RID1, deviceIdsOrig);
+        Set<DeviceId> deviceIds = regionManager.getRegionDevices(RID1);
+        assertEquals("incorrect device count", deviceIdsOrig.size(), deviceIds.size());
+        assertEquals("incorrect devices in region", deviceIdsOrig, deviceIds);
+
+        testClusterService.put(CNODE1, ControllerNode.State.ACTIVE);
+        testClusterService.put(CNODE2, ControllerNode.State.ACTIVE);
+        testClusterService.put(CNODE3, ControllerNode.State.ACTIVE);
+        testClusterService.put(CNODE4, ControllerNode.State.ACTIVE);
+
+        //set master to non region nodes
+        deviceIdsOrig.forEach(deviceId1 -> mgr.setRole(NID_LOCAL, deviceId1, MASTER));
+        checkDeviceMasters(deviceIds, Sets.newHashSet(NID_LOCAL), deviceId ->
+                assertEquals("wrong local role:", MASTER, mgr.getLocalRole(deviceId)));
+
+        //do region balancing
+        mgr.useRegionForBalanceRoles = true;
+        mgr.balanceRoles();
+        Set<NodeId> expectedMasters = Sets.newHashSet(NID1, NID3, NID4);
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N1 inactive
+        testClusterService.put(CNODE1, ControllerNode.State.INACTIVE);
+        expectedMasters.remove(NID1);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N4 inactive
+        testClusterService.put(CNODE4, ControllerNode.State.INACTIVE);
+        expectedMasters.remove(NID4);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N3 inactive
+        testClusterService.put(CNODE3, ControllerNode.State.INACTIVE);
+        expectedMasters = Sets.newHashSet(NID2);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N3 active
+        testClusterService.put(CNODE3, ControllerNode.State.ACTIVE);
+        expectedMasters = Sets.newHashSet(NID3);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N4 active
+        testClusterService.put(CNODE4, ControllerNode.State.ACTIVE);
+        expectedMasters.add(NID4);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+
+        // make N1 active
+        testClusterService.put(CNODE1, ControllerNode.State.ACTIVE);
+        expectedMasters.add(NID1);
+        mgr.balanceRoles();
+        checkDeviceMasters(deviceIds, expectedMasters);
+    }
+
+    private void checkDeviceMasters(Set<DeviceId> deviceIds, Set<NodeId> expectedMasters) {
+        checkDeviceMasters(deviceIds, expectedMasters, null);
+    }
+
+    private void checkDeviceMasters(Set<DeviceId> deviceIds, Set<NodeId> expectedMasters,
+                                     Consumer<DeviceId> checkRole) {
+        // each device's master must be contained in the list of expectedMasters
+        deviceIds.forEach(deviceId -> {
+            assertTrue("wrong master:", expectedMasters.contains(mgr.getMasterFor(deviceId)));
+            if (checkRole != null) {
+                checkRole.accept(deviceId);
+            }
+        });
+        // each node in expectedMasters must have approximately the same number of devices
+        if (expectedMasters.size() > 1) {
+            int minValue = Integer.MAX_VALUE;
+            int maxDevices = -1;
+            for (NodeId nodeId: expectedMasters) {
+                int numDevicesManagedByNode = mgr.getDevicesOf(nodeId).size();
+                if (numDevicesManagedByNode < minValue) {
+                    minValue = numDevicesManagedByNode;
+                }
+                if (numDevicesManagedByNode > maxDevices) {
+                    maxDevices = numDevicesManagedByNode;
+                }
+                assertTrue("not balanced:", maxDevices - minValue <= 1);
+            }
+        }
+    }
+
+    private final class TestClusterService extends StaticClusterService {
 
         ControllerNode local = new DefaultControllerNode(NID_LOCAL, LOCALHOST);
 
@@ -163,11 +393,10 @@ public class MastershipManagerTest {
             return local;
         }
 
-        @Override
-        public Set<ControllerNode> getNodes() {
-            return Sets.newHashSet();
+        public void put(ControllerNode cn, ControllerNode.State state) {
+            nodes.put(cn.id(), cn);
+            nodeStates.put(cn.id(), state);
         }
-
     }
 
     private final class TestSimpleMastershipStore extends SimpleMastershipStore
@@ -175,6 +404,13 @@ public class MastershipManagerTest {
 
         public TestSimpleMastershipStore(ClusterService clusterService) {
             super.clusterService = clusterService;
+        }
+    }
+
+    private class TestRegionManager extends RegionManager {
+        TestRegionManager() {
+            eventDispatcher = new TestEventDispatcher();
+            networkConfigService = new NetworkConfigServiceAdapter();
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Laboratory
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,12 @@ public class ReviewCommand extends AbstractShellCommand {
             required = false, multiValued = false)
     String accept = null;
 
+
+    public static final String ANSI_RESET = "\u001B[0m";
+    public static final String ANSI_RED = "\u001B[31m";
+    public static final String ANSI_GREEN = "\u001B[32m";
+    public static final String ANSI_YELLOW = "\u001B[33m";
+
     @Override
     protected void execute() {
         ApplicationAdminService applicationAdminService = get(ApplicationAdminService.class);
@@ -79,45 +85,76 @@ public class ReviewCommand extends AbstractShellCommand {
         print("Application role: " + app.role());
         print("\nDeveloper specified permissions: ");
         printMap(smService.getPrintableSpecifiedPermissions(app.id()));
-        print("\nPermissions granted: ");
-        printMap(smService.getPrintableGrantedPermissions(app.id()));
+
+        if(smService.isSecured(app.id()) == true) {
+            print("\nPermissions granted: ");
+            printMap(smService.getPrintableGrantedPermissions(app.id()));
+        }
+
         print("\nAdditional permissions requested on runtime (POLICY VIOLATIONS): ");
         printMap(smService.getPrintableRequestedPermissions(app.id()));
         print("");
 
     }
+
+    /**
+     * TYPES.
+     * 0 - APP_PERM
+     * 1 - ADMIN SERVICE
+     * 2 - NB_SERVICE
+     * 3 - SB_SERVICE
+     * 4 - CLI_SERVICE
+     * 5 - ETC_SERVICE
+     * 6 - CRITICAL PERMISSIONS
+     * 7 - ETC
+     **/
     private void printMap(Map<Integer, List<Permission>> assortedMap) {
-        for (Integer type : assortedMap.keySet()) {
-            switch (type) {
-                case 0:
-                    for (Permission perm: assortedMap.get(0)) {
-                        print("\t[APP PERMISSION] " + perm.getName());
-                    }
-                    break;
-                case 1:
-                    for (Permission perm: assortedMap.get(1)) {
-                        print("\t[NB-ADMIN SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
-                    }
-                    break;
-                case 2:
-                    for (Permission perm: assortedMap.get(2)) {
-                        print("\t[NB SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
-                    }
-                    break;
-                case 3:
-                    for (Permission perm: assortedMap.get(3)) {
-                        print("\t[Other SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
-                    }
-                    break;
-                case 4:
-                    for (Permission perm: assortedMap.get(4)) {
-                        print("\t[Other] " + perm.getClass().getSimpleName() +
-                                " " + perm.getName() + " (" + perm.getActions() + ")");
-                    }
-                    break;
-                default:
-                    break;
+
+        for (Permission perm: assortedMap.get(0)) { // APP PERM
+            if (perm.getName().contains("WRITE")) {
+                printYellow("\t[APP PERMISSION] " + perm.getName());
+            } else {
+                printGreen("\t[APP PERMISSION] " + perm.getName());
             }
         }
+
+        for (Permission perm: assortedMap.get(4)) {
+            printGreen("\t[CLI SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
+        }
+
+        for (Permission perm: assortedMap.get(5)) {
+            printYellow("\t[Other SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
+        }
+
+        for (Permission perm: assortedMap.get(7)) {
+            printYellow("\t[Other] " + perm.getClass().getSimpleName() +
+                                " " + perm.getName() + " (" + perm.getActions() + ")");
+        }
+
+        for (Permission perm: assortedMap.get(1)) { // ADMIN SERVICES
+            printRed("\t[NB-ADMIN SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
+        }
+
+        for (Permission perm: assortedMap.get(3)) { // ADMIN SERVICES
+            printRed("\t[SB SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
+        }
+
+        for (Permission perm: assortedMap.get(6)) { // CRITICAL SERVICES
+            printRed("\t[CRITICAL PERMISSION] " + perm.getClass().getSimpleName() +
+                             " " + perm.getName() + " (" + perm.getActions() + ")");
+        }
+    }
+
+    private void printRed(String format, Object... args) {
+        print(ANSI_RED + String.format(format, args) + ANSI_RESET);
+    }
+
+    private void printYellow(String format, Object... args) {
+        print(ANSI_YELLOW + String.format(format, args) + ANSI_RESET);
+    }
+
+    private void printGreen(String format, Object... args) {
+        print(ANSI_GREEN + String.format(format, args) + ANSI_RESET);
     }
 }
+

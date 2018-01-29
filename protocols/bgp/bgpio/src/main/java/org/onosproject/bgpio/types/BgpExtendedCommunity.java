@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,6 +90,11 @@ public class BgpExtendedCommunity implements BgpValueType {
             while (actionBuf.readableBytes() > 0) {
                 short actionType = actionBuf.readShort();
                 switch (actionType) {
+                    case Constants.BGP_ROUTE_TARGET_AS:
+                    case Constants.BGP_ROUTE_TARGET_IP:
+                    case Constants.BGP_ROUTE_TARGET_LARGEAS:
+                        fsActionTlv = RouteTarget.read(actionType, actionBuf);
+                        break;
                     case Constants.BGP_FLOWSPEC_ACTION_TRAFFIC_ACTION:
                         fsActionTlv = BgpFsActionTrafficAction.read(actionBuf);
                         break;
@@ -102,7 +107,8 @@ public class BgpExtendedCommunity implements BgpValueType {
                     case Constants.BGP_FLOWSPEC_ACTION_TRAFFIC_REDIRECT:
                         fsActionTlv = BgpFsActionReDirect.read(actionBuf);
                         break;
-                    default: log.debug("Other type Not Supported:" + actionType);
+                    default:
+                        log.debug("Other type Not Supported:" + actionType);
                         break;
                 }
                 if (fsActionTlv != null) {
@@ -156,7 +162,13 @@ public class BgpExtendedCommunity implements BgpValueType {
 
         while (listIterator.hasNext()) {
             BgpValueType fsTlv = listIterator.next();
-            if (fsTlv.getType() == Constants.BGP_FLOWSPEC_ACTION_TRAFFIC_ACTION) {
+            if (fsTlv.getType() == Constants.BGP_ROUTE_TARGET_AS
+                    || fsTlv.getType() == Constants.BGP_ROUTE_TARGET_IP
+                    || fsTlv.getType() == Constants.BGP_ROUTE_TARGET_LARGEAS) {
+                RouteTarget routeTarget = (RouteTarget) fsTlv;
+                routeTarget.write(cb);
+            } else if (fsTlv.getType() == Constants
+                    .BGP_FLOWSPEC_ACTION_TRAFFIC_ACTION) {
                 BgpFsActionTrafficAction trafficAction = (BgpFsActionTrafficAction) fsTlv;
                 trafficAction.write(cb);
             } else if (fsTlv.getType() == Constants.BGP_FLOWSPEC_ACTION_TRAFFIC_MARKING) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
 package org.onosproject.incubator.net.virtual;
 
 import com.google.common.annotations.Beta;
-import org.onosproject.incubator.net.tunnel.TunnelId;
+import org.onlab.packet.IpAddress;
+import org.onlab.packet.MacAddress;
+import org.onlab.packet.VlanId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.Port;
+import org.onosproject.net.HostId;
+import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
 
 import java.util.Set;
@@ -52,7 +55,6 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      */
     Set<TenantId> getTenantIds();
 
-
     /**
      * Creates a new virtual network for the specified tenant.
      *
@@ -68,14 +70,13 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      */
     void removeVirtualNetwork(NetworkId networkId);
 
-
     /**
      * Creates a new virtual device within the specified network. The device id
      * must be unique within the bounds of the network.
      *
      * @param networkId network identifier
      * @param deviceId  device identifier
-     * @return newly created device
+     * @return newly created virtual device
      * @throws org.onlab.util.ItemNotFoundException if no such network found
      */
     VirtualDevice createVirtualDevice(NetworkId networkId, DeviceId deviceId);
@@ -89,6 +90,30 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      */
     void removeVirtualDevice(NetworkId networkId, DeviceId deviceId);
 
+    /**
+     * Creates a new virtual host within the specified network. The host id
+     * must be unique within the bounds of the network.
+     *
+     * @param networkId network identifier
+     * @param hostId    host identifier
+     * @param mac       mac address
+     * @param vlan      vlan identifier
+     * @param location  host location
+     * @param ips       set of ip addresses
+     * @return newly created virtual host
+     * @throws org.onlab.util.ItemNotFoundException if no such network found
+     */
+    VirtualHost createVirtualHost(NetworkId networkId, HostId hostId, MacAddress mac,
+                                  VlanId vlan, HostLocation location, Set<IpAddress> ips);
+
+    /**
+     * Removes the specified virtual host.
+     *
+     * @param networkId network identifier
+     * @param hostId  host identifier
+     * @throws org.onlab.util.ItemNotFoundException if no such network or host found
+     */
+    void removeVirtualHost(NetworkId networkId, HostId hostId);
 
     /**
      * Creates a new virtual link within the specified network.
@@ -96,13 +121,11 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      * @param networkId  network identifier
      * @param src        source connection point
      * @param dst        destination connection point
-     * @param realizedBy identifier of the tunnel using which this link is realized
      * @return newly created virtual link
      * @throws org.onlab.util.ItemNotFoundException if no such network found
      */
     VirtualLink createVirtualLink(NetworkId networkId,
-                                  ConnectPoint src, ConnectPoint dst,
-                                  TunnelId realizedBy);
+                                  ConnectPoint src, ConnectPoint dst);
 
     // TODO: Discuss whether we should provide an alternate createVirtualLink
     // which is backed by a Path instead; I'm leaning towards not doing that.
@@ -121,14 +144,38 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      * Creates a new virtual port on the specified device.
      *
      * @param networkId  network identifier
-     * @param deviceId   device identifier
-     * @param portNumber port number
-     * @param realizedBy underlying port using which this virtual port is realized
+     * @param deviceId   virtual device identifier
+     * @param portNumber virtual port number
+     * @param realizedBy underlying physical port using which this virtual port is realized
      * @return newly created port
-     * @throws org.onlab.util.ItemNotFoundException if no such network or device found
+     * @throws org.onlab.util.ItemNotFoundException if no such network or device is found
      */
     VirtualPort createVirtualPort(NetworkId networkId, DeviceId deviceId,
-                                  PortNumber portNumber, Port realizedBy);
+                                  PortNumber portNumber, ConnectPoint realizedBy);
+
+    /**
+     * Binds an existing virtual port on the specified device.
+     *
+     * @param networkId  network identifier
+     * @param deviceId   virtual device identifier
+     * @param portNumber virtual port number
+     * @param realizedBy underlying physical port using which this virtual port is realized
+     * @throws org.onlab.util.ItemNotFoundException if no such network or device is found
+     */
+    void bindVirtualPort(NetworkId networkId, DeviceId deviceId,
+                                  PortNumber portNumber, ConnectPoint realizedBy);
+
+    /**
+     * Updates port state of an existing virtual port on the specified device.
+     *
+     * @param networkId  network identifier
+     * @param deviceId   virtual device identifier
+     * @param portNumber virtual port number
+     * @param isEnabled  indicator whether the port is up and active
+     * @throws org.onlab.util.ItemNotFoundException if no such network or device is found
+     */
+    void updatePortState(NetworkId networkId, DeviceId deviceId,
+                                  PortNumber portNumber, boolean isEnabled);
 
     /**
      * Removes the specified virtual port.
@@ -139,5 +186,4 @@ public interface VirtualNetworkAdminService extends VirtualNetworkService {
      * @throws org.onlab.util.ItemNotFoundException if no such network or port found
      */
     void removeVirtualPort(NetworkId networkId, DeviceId deviceId, PortNumber portNumber);
-
 }

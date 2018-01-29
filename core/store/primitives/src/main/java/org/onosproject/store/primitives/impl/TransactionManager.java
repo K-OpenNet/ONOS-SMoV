@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,96 +15,155 @@
  */
 package org.onosproject.store.primitives.impl;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
+import java.util.concurrent.ExecutionException;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.Futures;
+import org.onosproject.cluster.PartitionId;
+import org.onosproject.store.primitives.MapUpdate;
+import org.onosproject.store.primitives.PartitionService;
 import org.onosproject.store.primitives.TransactionId;
-import org.onosproject.store.primitives.resources.impl.CommitResult;
+import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.AsyncConsistentMap;
-
-import static org.onosproject.store.primitives.impl.Transaction.State.COMMITTED;
-import static org.onosproject.store.primitives.impl.Transaction.State.COMMITTING;
-import static org.onosproject.store.primitives.impl.Transaction.State.ROLLEDBACK;
-import static org.onosproject.store.primitives.impl.Transaction.State.ROLLINGBACK;
+import org.onosproject.store.service.Serializer;
+import org.onosproject.store.service.StorageService;
+import org.onosproject.store.service.TransactionException;
 
 /**
- * Agent that runs the two phase commit protocol.
+ * Transaction manager for managing state shared across multiple transactions.
  */
 public class TransactionManager {
+    private static final int DEFAULT_CACHE_SIZE = 100;
 
-    private final Database database;
-    private final AsyncConsistentMap<TransactionId, Transaction> transactions;
+    private final PartitionService partitionService;
+    private final List<PartitionId> sortedPartitions;
+    private final AsyncConsistentMap<TransactionId, Transaction.State> transactions;
+    private final int cacheSize;
+    private final int buckets;
+    private final Map<PartitionId, Cache<String, CachedMap>> partitionCache = Maps.newConcurrentMap();
 
-    public TransactionManager(Database database, AsyncConsistentMap<TransactionId, Transaction> transactions) {
-        this.database = checkNotNull(database, "database cannot be null");
-        this.transactions = transactions;
+    public TransactionManager(StorageService storageService, PartitionService partitionService, int buckets) {
+        this(storageService, partitionService, DEFAULT_CACHE_SIZE, buckets);
+    }
+
+    public TransactionManager(
+            StorageService storageService,
+            PartitionService partitionService,
+            int cacheSize,
+            int buckets) {
+        this.partitionService = partitionService;
+        this.cacheSize = cacheSize;
+        this.buckets = buckets;
+        this.transactions = storageService.<TransactionId, Transaction.State>consistentMapBuilder()
+                .withName("onos-transactions")
+                .withSerializer(Serializer.using(KryoNamespaces.API,
+                        Transaction.class,
+                        Transaction.State.class))
+                .buildAsyncMap();
+        this.sortedPartitions = Lists.newArrayList(partitionService.getAllPartitionIds());
+        Collections.sort(sortedPartitions);
     }
 
     /**
-     * Executes the specified transaction by employing a two phase commit protocol.
+     * Returns the collection of currently pending transactions.
      *
-     * @param transaction transaction to commit
-     * @return transaction commit result
+     * @return a collection of currently pending transactions
      */
-    public CompletableFuture<CommitResult> execute(Transaction transaction) {
-        // short-circuit if there is only a single update
-        if (transaction.updates().size() <= 1) {
-            return database.prepareAndCommit(transaction)
-                    .thenApply(response -> response.success()
-                                   ? CommitResult.OK : CommitResult.FAILURE_DURING_COMMIT);
+    public Collection<TransactionId> getPendingTransactions() {
+        return Futures.getUnchecked(transactions.keySet());
+    }
+
+    /**
+     * Returns a partitioned transactional map for use within a transaction context.
+     * <p>
+     * The transaction coordinator will return a map that takes advantage of caching that's shared across transaction
+     * contexts.
+     *
+     * @param name the map name
+     * @param serializer the map serializer
+     * @param transactionCoordinator the transaction coordinator for which the map is being created
+     * @param <K> key type
+     * @param <V> value type
+     * @return a partitioned transactional map
+     */
+    <K, V> PartitionedTransactionalMap<K, V> getTransactionalMap(
+            String name,
+            Serializer serializer,
+            TransactionCoordinator transactionCoordinator) {
+        Map<PartitionId, TransactionalMapParticipant<K, V>> partitions = new HashMap<>();
+        for (PartitionId partitionId : partitionService.getAllPartitionIds()) {
+            partitions.put(partitionId, getTransactionalMapPartition(
+                    name, partitionId, serializer, transactionCoordinator));
         }
-        // clean up if this transaction in already in a terminal state.
-        if (transaction.state() == COMMITTED || transaction.state() == ROLLEDBACK) {
-            return transactions.remove(transaction.id()).thenApply(v -> CommitResult.OK);
-        } else if (transaction.state() == COMMITTING) {
-            return commit(transaction);
-        } else if (transaction.state() == ROLLINGBACK) {
-            return rollback(transaction).thenApply(v -> CommitResult.FAILURE_TO_PREPARE);
-        } else {
-            return prepare(transaction).thenCompose(v -> v ? commit(transaction) : rollback(transaction));
+
+        Hasher<K> hasher = key -> {
+            int bucket = Math.abs(Hashing.murmur3_32().hashBytes(serializer.encode(key)).asInt()) % buckets;
+            int partition = Hashing.consistentHash(bucket, sortedPartitions.size());
+            return sortedPartitions.get(partition);
+        };
+        return new PartitionedTransactionalMap<>(partitions, hasher);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <K, V> TransactionalMapParticipant<K, V> getTransactionalMapPartition(
+            String mapName,
+            PartitionId partitionId,
+            Serializer serializer,
+            TransactionCoordinator transactionCoordinator) {
+        Cache<String, CachedMap> mapCache = partitionCache.computeIfAbsent(partitionId, p ->
+                CacheBuilder.newBuilder().maximumSize(cacheSize / partitionService.getNumberOfPartitions()).build());
+        try {
+            CachedMap<K, V> cachedMap = mapCache.get(mapName,
+                    () -> new CachedMap<>(partitionService.getDistributedPrimitiveCreator(partitionId)
+                            .newAsyncConsistentMap(mapName, serializer)));
+
+            Transaction<MapUpdate<K, V>> transaction = new Transaction<>(
+                    transactionCoordinator.transactionId,
+                    cachedMap.baseMap);
+            return new DefaultTransactionalMapParticipant<>(cachedMap.cachedMap.asConsistentMap(), transaction);
+        } catch (ExecutionException e) {
+            throw new TransactionException(e);
         }
     }
 
     /**
-     * Returns all pending transaction identifiers.
+     * Updates the state of a transaction in the transaction registry.
      *
-     * @return future for a collection of transaction identifiers.
+     * @param transactionId the transaction identifier
+     * @param state the state of the transaction
+     * @return a completable future to be completed once the transaction state has been updated in the registry
      */
-    public CompletableFuture<Collection<TransactionId>> getPendingTransactionIds() {
-        return transactions.values().thenApply(c -> c.stream()
-                    .map(v -> v.value())
-                    .filter(v -> v.state() != COMMITTED && v.state() != ROLLEDBACK)
-                    .map(Transaction::id)
-                    .collect(Collectors.toList()));
+    CompletableFuture<Void> updateState(TransactionId transactionId, Transaction.State state) {
+        return transactions.put(transactionId, state).thenApply(v -> null);
     }
 
-    private CompletableFuture<Boolean> prepare(Transaction transaction) {
-        return transactions.put(transaction.id(), transaction)
-                .thenCompose(v -> database.prepare(transaction))
-                .thenCompose(status -> transactions.put(
-                            transaction.id(),
-                            transaction.transition(status ? COMMITTING : ROLLINGBACK))
-                .thenApply(v -> status));
+    /**
+     * Removes the given transaction from the transaction registry.
+     *
+     * @param transactionId the transaction identifier
+     * @return a completable future to be completed once the transaction state has been removed from the registry
+     */
+    CompletableFuture<Void> remove(TransactionId transactionId) {
+        return transactions.remove(transactionId).thenApply(v -> null);
     }
 
-    private CompletableFuture<CommitResult> commit(Transaction transaction) {
-        return database.commit(transaction)
-                       .thenCompose(r -> {
-                           if (r.success()) {
-                               return transactions.put(transaction.id(), transaction.transition(COMMITTED))
-                                                  .thenApply(v -> CommitResult.OK);
-                           } else {
-                               return CompletableFuture.completedFuture(CommitResult.FAILURE_DURING_COMMIT);
-                           }
-                       });
-    }
+    private static class CachedMap<K, V> {
+        private final AsyncConsistentMap<K, V> baseMap;
+        private final AsyncConsistentMap<K, V> cachedMap;
 
-    private CompletableFuture<CommitResult> rollback(Transaction transaction) {
-        return database.rollback(transaction)
-                       .thenCompose(v -> transactions.put(transaction.id(), transaction.transition(ROLLEDBACK)))
-                       .thenApply(v -> CommitResult.FAILURE_TO_PREPARE);
+        public CachedMap(AsyncConsistentMap<K, V> baseMap) {
+            this.baseMap = baseMap;
+            this.cachedMap = DistributedPrimitives.newCachingMap(baseMap);
+        }
     }
 }

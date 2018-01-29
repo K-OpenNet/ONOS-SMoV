@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.onosproject.driver.pipeline;
 
 import org.onlab.osgi.ServiceDirectory;
+import org.onlab.packet.EthType;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IpPrefix;
 import org.onlab.packet.VlanId;
@@ -23,6 +24,7 @@ import org.onlab.util.KryoNamespace;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.PortNumber;
 import org.onosproject.net.behaviour.NextGroup;
 import org.onosproject.net.behaviour.Pipeliner;
 import org.onosproject.net.behaviour.PipelinerContext;
@@ -41,6 +43,8 @@ import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.EthTypeCriterion;
 import org.onosproject.net.flow.criteria.IPCriterion;
+import org.onosproject.net.flow.criteria.IPProtocolCriterion;
+import org.onosproject.net.flow.criteria.Icmpv6TypeCriterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.instructions.Instruction;
@@ -57,8 +61,13 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
+import static org.onlab.packet.Ethernet.TYPE_IPV4;
+import static org.onlab.packet.ICMP6.ECHO_REPLY;
+import static org.onlab.packet.ICMP6.ECHO_REQUEST;
+import static org.onlab.packet.IPv6.PROTOCOL_ICMP6;
 import static org.onlab.util.Tools.delay;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -85,10 +94,9 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
     private ApplicationId driverId;
 
     private KryoNamespace appKryo = new KryoNamespace.Builder()
-        .register(DummyGroup.class)
-        .register(KryoNamespaces.API)
-        .register(byte[].class)
-        .build();
+            .register(KryoNamespaces.API)
+            .register(DummyGroup.class)
+            .build();
 
     private final Logger log = getLogger(getClass());
 
@@ -156,25 +164,25 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
     @Override
     public void next(NextObjective nextObjective) {
         switch (nextObjective.type()) {
-        case SIMPLE:
-            Collection<TrafficTreatment> treatments = nextObjective.next();
-            if (treatments.size() != 1) {
-                log.error("Next Objectives of type Simple should only have a "
-                        + "single Traffic Treatment. Next Objective Id:{}", nextObjective.id());
-               fail(nextObjective, ObjectiveError.BADPARAMS);
-               return;
-            }
-            processSimpleNextObjective(nextObjective);
-            break;
-        case HASHED:
-        case BROADCAST:
-        case FAILOVER:
-            fail(nextObjective, ObjectiveError.UNSUPPORTED);
-            log.warn("Unsupported next objective type {}", nextObjective.type());
-            break;
-        default:
-            fail(nextObjective, ObjectiveError.UNKNOWN);
-            log.warn("Unknown next objective type {}", nextObjective.type());
+            case SIMPLE:
+                Collection<TrafficTreatment> treatments = nextObjective.next();
+                if (treatments.size() != 1) {
+                    log.error("Next Objectives of type Simple should only have a "
+                                      + "single Traffic Treatment. Next Objective Id:{}", nextObjective.id());
+                    fail(nextObjective, ObjectiveError.BADPARAMS);
+                    return;
+                }
+                processSimpleNextObjective(nextObjective);
+                break;
+            case HASHED:
+            case BROADCAST:
+            case FAILOVER:
+                fail(nextObjective, ObjectiveError.UNSUPPORTED);
+                log.warn("Unsupported next objective type {}", nextObjective.type());
+                break;
+            default:
+                fail(nextObjective, ObjectiveError.UNKNOWN);
+                log.warn("Unknown next objective type {}", nextObjective.type());
         }
     }
 
@@ -241,7 +249,7 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
             p = (PortCriterion) filt.key();
         } else {
             log.warn("No key defined in filtering objective from app: {}. Not"
-                    + "processing filtering objective", applicationId);
+                             + "processing filtering objective", applicationId);
             fail(filt, ObjectiveError.UNKNOWN);
             return;
         }
@@ -249,7 +257,8 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
         // convert filtering conditions for switch-intfs into flowrules
         FlowRuleOperations.Builder ops = FlowRuleOperations.builder();
         for (Criterion c : filt.conditions()) {
-            if (c.type() == Criterion.Type.ETH_DST) {
+            if (c.type() == Criterion.Type.ETH_DST ||
+                    c.type() == Criterion.Type.ETH_DST_MASKED) {
                 e = (EthCriterion) c;
             } else if (c.type() == Criterion.Type.VLAN_VID) {
                 v = (VlanIdCriterion) c;
@@ -258,17 +267,22 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
                 fail(filt, ObjectiveError.UNSUPPORTED);
                 return;
             }
+
         }
 
-        log.debug("adding Port/VLAN/MAC filtering rules in filter table: {}/{}/{}",
+        log.debug("Modifying Port/VLAN/MAC filtering rules in filter table: {}/{}/{}",
                   p.port(), v.vlanId(), e.mac());
         TrafficSelector.Builder selector = DefaultTrafficSelector.builder();
         TrafficTreatment.Builder treatment = DefaultTrafficTreatment.builder();
         selector.matchInPort(p.port());
 
-        selector.matchEthDst(e.mac());
+        //Multicast MAC
+        if (e.mask() != null) {
+            selector.matchEthDstMasked(e.mac(), e.mask());
+        } else {
+            selector.matchEthDst(e.mac());
+        }
         selector.matchVlanId(v.vlanId());
-        selector.matchEthType(Ethernet.TYPE_IPV4);
         if (!v.vlanId().equals(VlanId.NONE)) {
             treatment.popVlan();
         }
@@ -281,9 +295,9 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
                 .fromApp(applicationId)
                 .makePermanent()
                 .forTable(FILTER_TABLE).build();
-        ops =  ops.add(rule);
 
         ops = install ? ops.add(rule) : ops.remove(rule);
+
         // apply filtering flow rules
         flowRuleService.apply(ops.build(new FlowRuleOperationsContext() {
             @Override
@@ -302,13 +316,13 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
 
     private Collection<FlowRule> processForward(ForwardingObjective fwd) {
         switch (fwd.flag()) {
-        case SPECIFIC:
-            return processSpecific(fwd);
-        case VERSATILE:
-            return processVersatile(fwd);
-        default:
-            fail(fwd, ObjectiveError.UNKNOWN);
-            log.warn("Unknown forwarding flag {}", fwd.flag());
+            case SPECIFIC:
+                return processSpecific(fwd);
+            case VERSATILE:
+                return processVersatile(fwd);
+            default:
+                fail(fwd, ObjectiveError.UNKNOWN);
+                log.warn("Unknown forwarding flag {}", fwd.flag());
         }
         return Collections.emptySet();
     }
@@ -328,9 +342,20 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
         Collection<FlowRule> flowrules = new ArrayList<>();
         if (fwd.nextId() == null && fwd.treatment() == null) {
             log.error("Forwarding objective {} from {} must contain "
-                    + "nextId or Treatment", fwd.selector(), fwd.appId());
+                              + "nextId or Treatment", fwd.selector(), fwd.appId());
             return Collections.emptySet();
         }
+
+        int tableId = FILTER_TABLE;
+
+        // A punt rule for IP traffic should be directed to the FIB table
+        // so that it only takes effect if the packet misses the FIB rules
+        if (fwd.treatment() != null && containsPunt(fwd.treatment()) &&
+                fwd.selector() != null && matchesIp(fwd.selector()) &&
+                !matchesControlTraffic(fwd.selector())) {
+            tableId = FIB_TABLE;
+        }
+
         TrafficTreatment.Builder ttBuilder = DefaultTrafficTreatment.builder();
         if (fwd.treatment() != null) {
             fwd.treatment().immediate().forEach(ins -> ttBuilder.add(ins));
@@ -358,6 +383,7 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
         FlowRule rule = DefaultFlowRule.builder()
                 .withSelector(fwd.selector())
                 .withTreatment(ttBuilder.build())
+                .forTable(tableId)
                 .makePermanent()
                 .forDevice(deviceId)
                 .fromApp(fwd.appId())
@@ -367,6 +393,34 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
         flowrules.add(rule);
 
         return flowrules;
+    }
+
+    private boolean containsPunt(TrafficTreatment treatment) {
+        return treatment.immediate().stream()
+                .anyMatch(i -> i.type().equals(Instruction.Type.OUTPUT)
+                        && ((OutputInstruction) i).port().equals(PortNumber.CONTROLLER));
+    }
+
+    private boolean matchesIp(TrafficSelector selector) {
+        EthTypeCriterion c = (EthTypeCriterion) selector.getCriterion(Criterion.Type.ETH_TYPE);
+        return c != null && (c.ethType().equals(EthType.EtherType.IPV4.ethType()) ||
+                        c.ethType().equals(EthType.EtherType.IPV6.ethType()));
+    }
+
+    private boolean matchesControlTraffic(TrafficSelector selector) {
+        EthTypeCriterion c = (EthTypeCriterion) selector.getCriterion(Criterion.Type.ETH_TYPE);
+        if (c != null && c.ethType().equals(EthType.EtherType.ARP.ethType())) {
+            return true;
+        } else if (c != null && c.ethType().equals(EthType.EtherType.IPV6.ethType())) {
+            IPProtocolCriterion i = (IPProtocolCriterion) selector.getCriterion(Criterion.Type.IP_PROTO);
+            if (i != null && i.protocol() == PROTOCOL_ICMP6) {
+                Icmpv6TypeCriterion ic = (Icmpv6TypeCriterion) selector.getCriterion(Criterion.Type.ICMPV6_TYPE);
+                if (ic.icmpv6Type() != ECHO_REQUEST && ic.icmpv6Type() != ECHO_REPLY) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -386,19 +440,34 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
         EthTypeCriterion ethType =
                 (EthTypeCriterion) selector.getCriterion(Criterion.Type.ETH_TYPE);
         // XXX currently supporting only the L3 unicast table
-        if (ethType == null || ethType.ethType().toShort() != Ethernet.TYPE_IPV4) {
+        if (ethType == null || (ethType.ethType().toShort() != TYPE_IPV4
+                && ethType.ethType().toShort() != Ethernet.TYPE_IPV6)) {
             fail(fwd, ObjectiveError.UNSUPPORTED);
             return Collections.emptySet();
         }
+        //We build the selector according the eth type.
+        IpPrefix ipPrefix;
+        TrafficSelector.Builder filteredSelector;
+        if (ethType.ethType().toShort() == TYPE_IPV4) {
+            ipPrefix = ((IPCriterion)
+                    selector.getCriterion(Criterion.Type.IPV4_DST)).ip();
 
-        IpPrefix ipPrefix = ((IPCriterion)
-                selector.getCriterion(Criterion.Type.IPV4_DST)).ip();
+            filteredSelector = DefaultTrafficSelector.builder()
+                    .matchEthType(TYPE_IPV4);
+        } else {
+            ipPrefix = ((IPCriterion)
+                    selector.getCriterion(Criterion.Type.IPV6_DST)).ip();
 
-        TrafficSelector.Builder filteredSelector = DefaultTrafficSelector.builder()
-                        .matchEthType(Ethernet.TYPE_IPV4);
-
+            filteredSelector = DefaultTrafficSelector.builder()
+                    .matchEthType(Ethernet.TYPE_IPV6);
+        }
+        // If the prefix is different from the default via.
         if (ipPrefix.prefixLength() != 0) {
-            filteredSelector.matchIPDst(ipPrefix);
+            if (ethType.ethType().toShort() == TYPE_IPV4) {
+                filteredSelector.matchIPDst(ipPrefix);
+            } else {
+                filteredSelector.matchIPv6Dst(ipPrefix);
+            }
         }
 
         TrafficTreatment tt = null;
@@ -465,6 +534,12 @@ public class SoftRouterPipeline extends AbstractHandlerBehaviour implements Pipe
             return appKryo.serialize(nextActions);
         }
 
+    }
+
+    @Override
+    public List<String> getNextMappings(NextGroup nextGroup) {
+        // nextObjectives converted to flow-actions not groups
+        return Collections.emptyList();
     }
 
 }

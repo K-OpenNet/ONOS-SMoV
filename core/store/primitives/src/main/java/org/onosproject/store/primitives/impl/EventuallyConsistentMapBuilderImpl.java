@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package org.onosproject.store.primitives.impl;
 
 import org.onlab.util.KryoNamespace;
-import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.persistence.PersistenceService;
 import org.onosproject.store.Timestamp;
@@ -25,10 +24,12 @@ import org.onosproject.store.service.EventuallyConsistentMap;
 import org.onosproject.store.service.EventuallyConsistentMapBuilder;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -38,10 +39,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class EventuallyConsistentMapBuilderImpl<K, V>
         implements EventuallyConsistentMapBuilder<K, V> {
-    private final ClusterService clusterService;
     private final ClusterCommunicationService clusterCommunicator;
 
+    private NodeId localNodeId;
     private String name;
+    private KryoNamespace serializer;
     private KryoNamespace.Builder serializerBuilder;
     private ExecutorService eventExecutor;
     private ExecutorService communicationExecutor;
@@ -55,20 +57,29 @@ public class EventuallyConsistentMapBuilderImpl<K, V>
     private boolean persistent = false;
     private boolean persistentMap = false;
     private final PersistenceService persistenceService;
+    private Supplier<List<NodeId>> peersSupplier;
+    private Supplier<List<NodeId>> bootstrapPeersSupplier;
 
     /**
      * Creates a new eventually consistent map builder.
-     *
-     * @param clusterService cluster service
-     * @param clusterCommunicator cluster communication service
-     * @param persistenceService persistence service
+     * @param localNodeId               local node id
+     * @param clusterCommunicator       cluster communication service
+     * @param persistenceService        persistence service
+     * @param peersSupplier             supplier for peers
+     * @param bootstrapPeersSupplier    supplier for peers for bootstrap
      */
-    public EventuallyConsistentMapBuilderImpl(ClusterService clusterService,
-                                              ClusterCommunicationService clusterCommunicator,
-                                              PersistenceService persistenceService) {
+    public EventuallyConsistentMapBuilderImpl(
+            NodeId localNodeId,
+            ClusterCommunicationService clusterCommunicator,
+            PersistenceService persistenceService,
+            Supplier<List<NodeId>> peersSupplier,
+            Supplier<List<NodeId>> bootstrapPeersSupplier
+    ) {
+        this.localNodeId = localNodeId;
         this.persistenceService = persistenceService;
-        this.clusterService = checkNotNull(clusterService);
         this.clusterCommunicator = checkNotNull(clusterCommunicator);
+        this.peersSupplier = peersSupplier;
+        this.bootstrapPeersSupplier = bootstrapPeersSupplier;
     }
 
     @Override
@@ -81,6 +92,12 @@ public class EventuallyConsistentMapBuilderImpl<K, V>
     public EventuallyConsistentMapBuilder<K, V> withSerializer(
             KryoNamespace.Builder serializerBuilder) {
         this.serializerBuilder = checkNotNull(serializerBuilder);
+        return this;
+    }
+
+    @Override
+    public EventuallyConsistentMapBuilder<K, V> withSerializer(KryoNamespace serializer) {
+        this.serializer = checkNotNull(serializer);
         return this;
     }
 
@@ -147,23 +164,31 @@ public class EventuallyConsistentMapBuilderImpl<K, V>
     @Override
     public EventuallyConsistentMap<K, V> build() {
         checkNotNull(name, "name is a mandatory parameter");
-        checkNotNull(serializerBuilder, "serializerBuilder is a mandatory parameter");
         checkNotNull(timestampProvider, "timestampProvider is a mandatory parameter");
+        if (serializer == null && serializerBuilder != null) {
+            serializer = serializerBuilder.build(name);
+        }
+        checkNotNull(serializer, "serializer is a mandatory parameter");
+        checkNotNull(localNodeId, "local node id cannot be null");
 
-        return new EventuallyConsistentMapImpl<>(name,
-                                                 clusterService,
-                                                 clusterCommunicator,
-                                                 serializerBuilder,
-                                                 timestampProvider,
-                                                 peerUpdateFunction,
-                                                 eventExecutor,
-                                                 communicationExecutor,
-                                                 backgroundExecutor,
-                                                 tombstonesDisabled,
-                                                 antiEntropyPeriod,
-                                                 antiEntropyTimeUnit,
-                                                 convergeFaster,
-                                                 persistent,
-                                                 persistenceService);
+        return new EventuallyConsistentMapImpl<>(
+                localNodeId,
+                name,
+                clusterCommunicator,
+                serializer,
+                timestampProvider,
+                peerUpdateFunction,
+                eventExecutor,
+                communicationExecutor,
+                backgroundExecutor,
+                tombstonesDisabled,
+                antiEntropyPeriod,
+                antiEntropyTimeUnit,
+                convergeFaster,
+                persistent,
+                persistenceService,
+                peersSupplier,
+                bootstrapPeersSupplier
+        );
     }
 }

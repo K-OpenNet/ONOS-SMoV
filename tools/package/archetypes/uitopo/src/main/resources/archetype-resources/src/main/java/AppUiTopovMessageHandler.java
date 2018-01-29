@@ -2,7 +2,7 @@
 #set( $symbol_dollar = '$' )
 #set( $symbol_escape = '\' )
 /*
- * Copyright ${year} Open Networking Laboratory
+ * Copyright ${year}-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ public class AppUiTopovMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String mode = string(payload, MODE);
 
             log.debug("Start Display: mode [{}]", mode);
@@ -143,7 +143,7 @@ public class AppUiTopovMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String id = string(payload, ID);
             log.debug("Update Display: id [{}]", id);
             if (!Strings.isNullOrEmpty(id)) {
@@ -160,7 +160,7 @@ public class AppUiTopovMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             log.debug("Stop Display");
             cancelTask();
             clearState();

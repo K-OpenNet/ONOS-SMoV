@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 package org.onosproject.incubator.net.tunnel;
 
 import com.google.common.annotations.Beta;
-import org.onosproject.core.DefaultGroupId;
+import org.onosproject.core.GroupId;
 import org.onosproject.net.AbstractDescription;
+import org.onosproject.net.NetworkResource;
 import org.onosproject.net.Path;
 import org.onosproject.net.SparseAnnotations;
 import org.onosproject.net.provider.ProviderId;
@@ -35,12 +36,13 @@ public class DefaultTunnelDescription extends AbstractDescription
     private final TunnelEndPoint src;
     private final TunnelEndPoint dst;
     private final Tunnel.Type type;
-    private final DefaultGroupId groupId; // represent for a group flow table
+    private final GroupId groupId; // represent for a group flow table
     // which a tunnel match up
     // tunnel producer
     private final ProviderId producerName; // tunnel producer name
     private final TunnelName tunnelName; // name of a tunnel
     private final Path path;
+    private final NetworkResource networkRes;
 
     /**
      * Creates a tunnel description using the supplied information.
@@ -57,7 +59,7 @@ public class DefaultTunnelDescription extends AbstractDescription
      */
     public DefaultTunnelDescription(TunnelId id, TunnelEndPoint src,
                                     TunnelEndPoint dst, Tunnel.Type type,
-                                    DefaultGroupId groupId,
+                                    GroupId groupId,
                                     ProviderId producerName,
                                     TunnelName tunnelName,
                                     Path path,
@@ -71,6 +73,41 @@ public class DefaultTunnelDescription extends AbstractDescription
         this.producerName = producerName;
         this.tunnelName = tunnelName;
         this.path = path;
+        this.networkRes = null;
+    }
+
+    /**
+     * Creates a tunnel description using the supplied information.
+     *
+     * @param id TunnelId
+     * @param src TunnelPoint source
+     * @param dst TunnelPoint destination
+     * @param type tunnel type
+     * @param groupId groupId
+     * @param producerName tunnel producer
+     * @param tunnelName tunnel name
+     * @param path the path of tunnel
+     * @param networkRes network resource of tunnel
+     * @param annotations optional key/value annotations
+     */
+    public DefaultTunnelDescription(TunnelId id, TunnelEndPoint src,
+                                    TunnelEndPoint dst, Tunnel.Type type,
+                                    GroupId groupId,
+                                    ProviderId producerName,
+                                    TunnelName tunnelName,
+                                    Path path,
+                                    NetworkResource networkRes,
+                                    SparseAnnotations... annotations) {
+        super(annotations);
+        this.tunnelId = id;
+        this.src = src;
+        this.dst = dst;
+        this.type = type;
+        this.groupId = groupId;
+        this.producerName = producerName;
+        this.tunnelName = tunnelName;
+        this.path = path;
+        this.networkRes = networkRes;
     }
 
     @Override
@@ -94,7 +131,7 @@ public class DefaultTunnelDescription extends AbstractDescription
     }
 
     @Override
-    public DefaultGroupId groupId() {
+    public GroupId groupId() {
         return groupId;
     }
 
@@ -115,6 +152,11 @@ public class DefaultTunnelDescription extends AbstractDescription
     }
 
     @Override
+    public NetworkResource resource() {
+        return networkRes;
+    }
+
+    @Override
     public String toString() {
         return MoreObjects.toStringHelper(this)
                 .add("tunnelId", id())
@@ -125,6 +167,7 @@ public class DefaultTunnelDescription extends AbstractDescription
                 .add("producerName", producerName())
                 .add("groupId", groupId())
                 .add("path", path)
+                .add("resource", networkRes)
                 .toString();
     }
 }

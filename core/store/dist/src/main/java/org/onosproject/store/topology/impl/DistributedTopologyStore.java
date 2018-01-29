@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,6 @@ import org.onosproject.common.DefaultTopology;
 import org.onosproject.event.Event;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.ConnectPoint;
-import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.DisjointPath;
 import org.onosproject.net.Link;
@@ -41,6 +40,7 @@ import org.onosproject.net.topology.ClusterId;
 import org.onosproject.net.topology.DefaultGraphDescription;
 import org.onosproject.net.topology.GeoDistanceLinkWeight;
 import org.onosproject.net.topology.GraphDescription;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.LinkWeight;
 import org.onosproject.net.topology.MetricLinkWeight;
 import org.onosproject.net.topology.PathAdminService;
@@ -69,10 +69,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.isNullOrEmpty;
+import static org.onosproject.net.topology.AdapterLinkWeigher.adapt;
 import static org.onosproject.net.topology.TopologyEvent.Type.TOPOLOGY_CHANGED;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -96,8 +98,8 @@ public class DistributedTopologyStore
     private volatile DefaultTopology current =
             new DefaultTopology(ProviderId.NONE,
                                 new DefaultGraphDescription(0L, System.currentTimeMillis(),
-                                                            Collections.<Device>emptyList(),
-                                                            Collections.<Link>emptyList()));
+                                                            Collections.emptyList(),
+                                                            Collections.emptyList()));
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected StorageService storageService;
@@ -132,8 +134,9 @@ public class DistributedTopologyStore
             new InternalBroadcastPointListener();
 
     @Activate
-    protected void activate() {
+    protected void activate(ComponentContext context) {
         configService.registerProperties(getClass());
+        modified(context);
         KryoNamespace.Builder hostSerializer = KryoNamespace.newBuilder()
                 .register(KryoNamespaces.API);
 
@@ -215,7 +218,29 @@ public class DistributedTopologyStore
     @Override
     public Set<Path> getPaths(Topology topology, DeviceId src, DeviceId dst,
                               LinkWeight weight) {
-        return defaultTopology(topology).getPaths(src, dst, weight);
+        return getPaths(topology, src, dst, adapt(weight));
+    }
+
+    @Override
+    public Set<Path> getPaths(Topology topology, DeviceId src,
+                              DeviceId dst, LinkWeigher weigher) {
+        return defaultTopology(topology).getPaths(src, dst, weigher);
+    }
+
+    @Override
+    public Set<Path> getKShortestPaths(Topology topology,
+                                       DeviceId src, DeviceId dst,
+                                       LinkWeigher weigher,
+                                       int maxPaths) {
+        return defaultTopology(topology).getKShortestPaths(src, dst, weigher, maxPaths);
+    }
+
+    @Override
+    public Stream<Path> getKShortestPaths(Topology topology,
+                                          DeviceId src,
+                                          DeviceId dst,
+                                          LinkWeigher weigher) {
+        return defaultTopology(topology).getKShortestPaths(src, dst, weigher);
     }
 
     @Override
@@ -226,7 +251,13 @@ public class DistributedTopologyStore
     @Override
     public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
                                               LinkWeight weight) {
-        return defaultTopology(topology).getDisjointPaths(src, dst, weight);
+        return getDisjointPaths(topology, src, dst, adapt(weight));
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
+                                              DeviceId dst, LinkWeigher weigher) {
+        return defaultTopology(topology).getDisjointPaths(src, dst, weigher);
     }
 
     @Override
@@ -238,7 +269,14 @@ public class DistributedTopologyStore
     @Override
     public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src, DeviceId dst,
                                               LinkWeight weight, Map<Link, Object> riskProfile) {
-        return defaultTopology(topology).getDisjointPaths(src, dst, weight, riskProfile);
+        return getDisjointPaths(topology, src, dst, adapt(weight), riskProfile);
+    }
+
+    @Override
+    public Set<DisjointPath> getDisjointPaths(Topology topology, DeviceId src,
+                                              DeviceId dst, LinkWeigher weigher,
+                                              Map<Link, Object> riskProfile) {
+        return defaultTopology(topology).getDisjointPaths(src, dst, weigher, riskProfile);
     }
 
     @Override
@@ -271,12 +309,6 @@ public class DistributedTopologyStore
     public TopologyEvent updateTopology(ProviderId providerId,
                                         GraphDescription graphDescription,
                                         List<Event> reasons) {
-        // First off, make sure that what we're given is indeed newer than
-        // what we already have.
-        if (current != null && graphDescription.timestamp() < current.time()) {
-            return null;
-        }
-
         // Have the default topology construct self from the description data.
         DefaultTopology newTopology =
                 new DefaultTopology(providerId, graphDescription, this::isBroadcastPoint);
@@ -284,6 +316,11 @@ public class DistributedTopologyStore
 
         // Promote the new topology to current and return a ready-to-send event.
         synchronized (this) {
+            // Make sure that what we're given is indeed newer than what we
+            // already have.
+            if (current != null && newTopology.time() < current.time()) {
+                return null;
+            }
             current = newTopology;
             return new TopologyEvent(TOPOLOGY_CHANGED, current, reasons);
         }
@@ -316,7 +353,12 @@ public class DistributedTopologyStore
 
     @Override
     public void setDefaultLinkWeight(LinkWeight linkWeight) {
-        DefaultTopology.setDefaultLinkWeight(linkWeight);
+        DefaultTopology.setDefaultLinkWeigher(adapt(linkWeight));
+    }
+
+    @Override
+    public void setDefaultLinkWeigher(LinkWeigher linkWeigher) {
+        DefaultTopology.setDefaultLinkWeigher(linkWeigher);
     }
 
     @Override
@@ -330,7 +372,7 @@ public class DistributedTopologyStore
         public void event(EventuallyConsistentMapEvent<DeviceId, Set<ConnectPoint>> event) {
             if (event.type() == EventuallyConsistentMapEvent.Type.PUT) {
                 if (!event.value().isEmpty()) {
-                    log.info("Cluster rooted at {} has {} broadcast-points; #{}",
+                    log.debug("Cluster rooted at {} has {} broadcast-points; #{}",
                              event.key(), event.value().size(), event.value().hashCode());
                 }
             }

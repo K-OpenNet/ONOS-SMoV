@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,9 +30,9 @@ import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.onlab.junit.TestTools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.CoreService;
+import org.onosproject.net.device.DeviceServiceAdapter;
 import org.onosproject.openflow.OpenflowSwitchDriverAdapter;
 import org.onosproject.openflow.controller.Dpid;
 import org.onosproject.openflow.controller.OpenFlowSwitch;
@@ -58,6 +58,13 @@ import static org.hamcrest.Matchers.nullValue;
  * Unit tests for the open flow controller implementation test.
  */
 public class OpenFlowControllerImplTest {
+
+    /**
+     * Let system pick ephemeral port.
+     *
+     * @see InetSocketAddress#InetSocketAddress(int)
+     */
+    private static final int EPHEMERAL_PORT = 0;
 
     OpenFlowSwitch switch1;
     Dpid dpid1;
@@ -143,10 +150,12 @@ public class OpenFlowControllerImplTest {
         controller.cfgService = mockConfigService;
         replay(mockConfigService);
 
+        controller.deviceService = new DeviceServiceAdapter();
+
         ComponentContext mockContext = EasyMock.createMock(ComponentContext.class);
-        Dictionary<String, String> properties = new Hashtable<>();
+        Dictionary<String, Object> properties = new Hashtable<>();
         properties.put("openflowPorts",
-                       Integer.toString(TestTools.findAvailablePort(0)));
+                       Integer.toString(EPHEMERAL_PORT));
         expect(mockContext.getProperties()).andReturn(properties);
         replay(mockContext);
         controller.activate(mockContext);

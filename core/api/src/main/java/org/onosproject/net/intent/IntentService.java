@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,6 +70,17 @@ public interface IntentService
      * @return set of intents
      */
     Iterable<Intent> getIntents();
+
+    /**
+     * Adds an intent data object to the pending map for processing.
+     * <p>
+     * This method is intended to only be called by core components, not
+     * applications.
+     * </p>
+     *
+     * @param intentData intent data to be added to pending map
+     */
+    void addPending(IntentData intentData);
 
     /**
      * Returns an iterable of intent data objects currently in the system.

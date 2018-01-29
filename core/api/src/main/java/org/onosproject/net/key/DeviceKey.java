@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.Annotations;
 import org.onosproject.net.DefaultAnnotations;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static org.onosproject.net.DefaultAnnotations.builder;
@@ -31,6 +32,8 @@ import static org.onosproject.net.DefaultAnnotations.builder;
  */
 @Beta
 public class DeviceKey extends AbstractAnnotated {
+
+    private static final int LABEL_MAX_LENGTH = 1024;
 
     // device key identifier
     private final DeviceKeyId deviceKeyId;
@@ -66,6 +69,9 @@ public class DeviceKey extends AbstractAnnotated {
     private DeviceKey(DeviceKeyId id, String label, Type type, Annotations... annotations) {
         super(annotations);
         checkNotNull(id, "The DeviceKeyId cannot be null.");
+        if (label != null) {
+            checkArgument(label.length() <= LABEL_MAX_LENGTH, "label exceeds maximum length " + LABEL_MAX_LENGTH);
+        }
         this.deviceKeyId = id;
         this.label = label;
         this.type = type;
@@ -129,10 +135,10 @@ public class DeviceKey extends AbstractAnnotated {
     /**
      * Method to create a device key of type USERNAME_PASSWORD.
      *
-     * @param id    device key identifier
-     * @param label optional label for this device key
-     * @param username username for this device key
-     * @param password password for this device key
+     * @param id       device key identifier
+     * @param label    optional label for this device key
+     * @param username username for accessing this device
+     * @param password password for accessing this device
      * @return device key
      */
     public static DeviceKey createDeviceKeyUsingUsernamePassword(DeviceKeyId id, String label,
@@ -141,6 +147,25 @@ public class DeviceKey extends AbstractAnnotated {
                 .set(AnnotationKeys.PASSWORD, password).build();
 
         return new DeviceKey(id, label, Type.USERNAME_PASSWORD, annotations);
+    }
+
+    /**
+     * Method to create a device key of type SSL_KEY.
+     *
+     * @param id       device key identifier
+     * @param label    optional label for this device key
+     * @param username username for accessing this device
+     * @param password password for accessing this device SSH key
+     * @param sshkey   SSH key for accessing this device
+     * @return device key
+     */
+    public static DeviceKey createDeviceKeyUsingSshKey(DeviceKeyId id, String label,
+                                                       String username, String password, String sshkey) {
+        DefaultAnnotations annotations = builder().set(AnnotationKeys.USERNAME, username)
+                .set(AnnotationKeys.PASSWORD, password)
+                .set(AnnotationKeys.SSHKEY, sshkey).build();
+
+        return new DeviceKey(id, label, Type.SSL_KEY, annotations);
     }
 
     /**

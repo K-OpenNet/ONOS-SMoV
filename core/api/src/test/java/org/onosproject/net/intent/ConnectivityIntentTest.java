@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,18 @@
  */
 package org.onosproject.net.intent;
 
+import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Maps;
+import org.onlab.packet.VlanId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.TestApplicationId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.FilteredConnectPoint;
 import org.onosproject.net.PortNumber;
+import org.onosproject.net.ResourceGroup;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficSelector;
@@ -45,4 +50,41 @@ public abstract class ConnectivityIntentTest extends IntentTest {
 
     public static final Set<ConnectPoint> PS1 = itemSet(new ConnectPoint[]{P1, P3});
     public static final Set<ConnectPoint> PS2 = itemSet(new ConnectPoint[]{P2, P3});
+
+
+    public static final TrafficSelector VLANMATCH1 = DefaultTrafficSelector.builder()
+            .matchVlanId(VlanId.vlanId("2"))
+            .build();
+    public static final TrafficSelector VLANMATCH2 = DefaultTrafficSelector.builder()
+            .matchVlanId(VlanId.vlanId("3"))
+            .build();
+
+    public static final FilteredConnectPoint FP1 = new FilteredConnectPoint(P1, VLANMATCH1);
+    public static final FilteredConnectPoint FP2 = new FilteredConnectPoint(P2, VLANMATCH1);
+    public static final FilteredConnectPoint FP3 = new FilteredConnectPoint(P3, VLANMATCH2);
+
+    public static final Set<FilteredConnectPoint> FPS1 = itemSet(new FilteredConnectPoint[]{FP1, FP3});
+    public static final Set<FilteredConnectPoint> FPS2 = itemSet(new FilteredConnectPoint[]{FP2, FP3});
+
+    public static final ResourceGroup RESOURCE_GROUP = ResourceGroup.of(0L);
+
+    public static final Map<ConnectPoint, TrafficSelector> VLANMATCHES = Maps.newHashMap();
+    static {
+        VLANMATCHES.put(P1, VLANMATCH1);
+        VLANMATCHES.put(P2, VLANMATCH2);
+    }
+
+    public static final TrafficTreatment VLANACTION1 = DefaultTrafficTreatment.builder()
+            .setVlanId(VlanId.vlanId("2"))
+            .build();
+    public static final TrafficTreatment VLANACTION2 = DefaultTrafficTreatment.builder()
+            .setVlanId(VlanId.vlanId("3"))
+            .build();
+
+    public static final Map<ConnectPoint, TrafficTreatment> VLANACTIONS = Maps.newHashMap();
+    static {
+        VLANACTIONS.put(P1, VLANACTION1);
+        VLANACTIONS.put(P2, VLANACTION2);
+    }
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,14 @@
  */
 package org.onosproject.segmentrouting.config;
 
-import java.util.List;
-import java.util.Map;
-
-import org.onlab.packet.Ip4Address;
-import org.onlab.packet.Ip4Prefix;
+import org.onlab.packet.IpAddress;
+import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
-import org.onlab.packet.VlanId;
-import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * Mechanism through which group handler module retrieves
@@ -41,13 +39,22 @@ public interface DeviceProperties {
     boolean isConfigured(DeviceId deviceId);
 
     /**
-     * Returns the segment id of a device to be used in group creation.
+     * Returns the IPv4 segment id of a device to be used in group creation.
      *
      * @param deviceId device identifier
      * @throws DeviceConfigNotFoundException if the device configuration is not found
      * @return segment id of a device
      */
-    int getSegmentId(DeviceId deviceId) throws DeviceConfigNotFoundException;
+    int getIPv4SegmentId(DeviceId deviceId) throws DeviceConfigNotFoundException;
+
+    /**
+     * Returns the IPv6 segment id of a device to be used in group creation.
+     *
+     * @param deviceId device identifier
+     * @throws DeviceConfigNotFoundException if the device configuration is not found
+     * @return segment id of a device
+     */
+    int getIPv6SegmentId(DeviceId deviceId) throws DeviceConfigNotFoundException;
 
     /**
      * Returns the Mac address of a device to be used in group creation.
@@ -59,13 +66,30 @@ public interface DeviceProperties {
     MacAddress getDeviceMac(DeviceId deviceId) throws DeviceConfigNotFoundException;
 
     /**
-     * Returns the router ip address of a segment router.
+     *
+     * @param deviceId device identifier
+     * @throws DeviceConfigNotFoundException if the device configuration is not found
+     * @return the pseudowire routing label for a leaf node
+     */
+    int getPWRoutingLabel(DeviceId deviceId) throws DeviceConfigNotFoundException;
+
+    /**
+     * Returns the router ipv4 address of a segment router.
      *
      * @param deviceId device identifier
      * @throws DeviceConfigNotFoundException if the device configuration is not found
      * @return router ip address
      */
-    Ip4Address getRouterIp(DeviceId deviceId) throws DeviceConfigNotFoundException;
+    IpAddress getRouterIpv4(DeviceId deviceId) throws DeviceConfigNotFoundException;
+
+    /**
+     * Returns the router ipv6 address of a segment router.
+     *
+     * @param deviceId device identifier
+     * @throws DeviceConfigNotFoundException if the device configuration is not found
+     * @return router ip address
+     */
+    IpAddress getRouterIpv6(DeviceId deviceId) throws DeviceConfigNotFoundException;
 
     /**
      * Indicates whether a device is edge device or transit/core device.
@@ -92,14 +116,9 @@ public interface DeviceProperties {
      * Value: a list of ports, which are bound to the subnet
      *
      * @param deviceId device identifier
+     * @throws DeviceConfigNotFoundException if the device configuration is not found
      * @return a map that contains all subnet-to-ports mapping of given device
      */
-    Map<Ip4Prefix, List<PortNumber>> getSubnetPortsMap(DeviceId deviceId);
-
-    /**
-     * Returns the VLAN cross-connect configuration.
-     *
-     * @return A map of that maps VLAN ID to a list of cross-connect endpoints
-     */
-    Map<VlanId, List<ConnectPoint>> getXConnects();
+    Map<IpPrefix, List<PortNumber>> getSubnetPortsMap(DeviceId deviceId)
+            throws DeviceConfigNotFoundException;
 }

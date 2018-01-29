@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -17,12 +17,28 @@ package org.onosproject.bgp.controller;
  */
 public interface BgpConnectPeer {
     /**
-    * Initiate bgp peer connection.
-    */
+     * Initiate bgp peer connection.
+     */
     void connectPeer();
 
     /**
-    * End bgp peer connection.
-    */
+     * End bgp peer connection.
+     */
     void disconnectPeer();
+
+    /**
+     * Returns the peer port.
+     *
+     * @return PeerPort
+     */
+    int getPeerPort();
+
+    /**
+     * Returns the connect retry counter.
+     *
+     * @return connectRetryCounter
+     */
+    int getConnectRetryCounter();
+
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,9 @@ package org.onosproject.common;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.onlab.graph.DefaultEdgeWeigher;
+import org.onlab.graph.ScalarWeight;
+import org.onlab.graph.Weight;
 import org.onlab.packet.ChassisId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DefaultDevice;
@@ -29,12 +32,14 @@ import org.onosproject.net.PortNumber;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.net.topology.ClusterId;
 import org.onosproject.net.topology.DefaultGraphDescription;
+import org.onosproject.net.topology.DefaultTopologyVertex;
 import org.onosproject.net.topology.GraphDescription;
-import org.onosproject.net.topology.LinkWeight;
+import org.onosproject.net.topology.LinkWeigher;
 import org.onosproject.net.topology.TopologyCluster;
+import org.onosproject.net.topology.TopologyEdge;
+import org.onosproject.net.topology.TopologyVertex;
 
 import java.util.Set;
-
 import static com.google.common.collect.ImmutableSet.of;
 import static org.junit.Assert.*;
 import static org.onosproject.net.DeviceId.deviceId;
@@ -53,14 +58,30 @@ public class DefaultTopologyTest {
     public static final DeviceId D4 = deviceId("of:4");
     public static final DeviceId D5 = deviceId("of:5");
 
+    public static final TopologyVertex V1 = new DefaultTopologyVertex(D1);
+    public static final TopologyVertex V5 = new DefaultTopologyVertex(D5);
+
     public static final PortNumber P1 = portNumber(1);
     public static final PortNumber P2 = portNumber(2);
 
-    public static final LinkWeight WEIGHT = edge ->
-            edge.src().deviceId().equals(D4) || edge.dst().deviceId().equals(D4)
-                    ? 2.0 : 1.0;
+    public static final class TestLinkWeigher
+            extends DefaultEdgeWeigher<TopologyVertex, TopologyEdge>
+            implements LinkWeigher {
+        @Override
+        public Weight weight(TopologyEdge edge) {
+            double value = edge.src().deviceId().equals(D4) ||
+                    edge.dst().deviceId().equals(D4)
+                    ? 2.0 : HOP_WEIGHT_VALUE;
+            return new ScalarWeight(value);
+        }
+    }
+    public static final LinkWeigher WEIGHER = new TestLinkWeigher();
+
 
     private DefaultTopology dt;
+
+    public static final ClusterId C0 = ClusterId.clusterId(0);
+    public static final ClusterId C1 = ClusterId.clusterId(1);
 
     @Before
     public void setUp() {
@@ -81,8 +102,9 @@ public class DefaultTopologyTest {
         assertEquals("incorrect device count", 5, dt.deviceCount());
         assertEquals("incorrect link count", 8, dt.linkCount());
         assertEquals("incorrect cluster count", 2, dt.clusterCount());
-        assertEquals("incorrect broadcast set size", 6,
-                     dt.broadcastSetSize(ClusterId.clusterId(0)));
+        assertEquals("incorrect broadcast set size", 6, dt.broadcastSetSize(C0));
+        assertEquals("incorrect root node", V1, dt.getCluster(C0).root());
+        assertEquals("incorrect root node", V5, dt.getCluster(C1).root());
     }
 
     @Test
@@ -96,8 +118,14 @@ public class DefaultTopologyTest {
         paths = dt.getPaths(D1, D5);
         assertTrue("no paths expected", paths.isEmpty());
 
-        paths = dt.getPaths(D1, D3, WEIGHT);
+        paths = dt.getPaths(D1, D3, WEIGHER);
         assertEquals("incorrect path count", 1, paths.size());
+
+        paths = dt.getKShortestPaths(D1, D2, 42);
+        assertEquals("incorrect path count", 2, paths.size());
+
+        assertEquals("incorrect path count", 2, dt.getKShortestPaths(D1, D2).limit(42).count());
+
     }
 
     @Test

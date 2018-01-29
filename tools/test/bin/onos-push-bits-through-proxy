@@ -14,9 +14,13 @@ shift
 echo "Pushing to proxy $node..."
 onos-push-bits $node
 
-others=$(env | sort | egrep "OC[0-9]+" | cut -d= -f2 | grep -v $OCT)
+others=$(env | sort | egrep "^OC[0-9]+" | cut -d= -f2 | grep -vE "^$OCT\$")
 
-for other in $others; do
-    echo "Pushing to $other..."
-    ssh $remote "scp $ONOS_TAR $ONOS_USER@$other:$ONOS_TAR"
-done
+ssh $remote "
+  for other in ${others//$'\n'/ } ; do
+    echo \"Pushing to \$other ...\";
+    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        /tmp/\$(basename $ONOS_TAR) \
+        $ONOS_USER@\$other:/tmp/\$(basename $ONOS_TAR)
+  done
+"

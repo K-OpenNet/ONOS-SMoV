@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,16 @@ import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Host;
 import org.onosproject.net.Link;
 import org.onosproject.net.Port;
 import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.basics.BasicDeviceConfig;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.host.HostService;
 import org.onosproject.net.link.LinkService;
+import org.onosproject.net.pi.model.PiPipeconfId;
+import org.onosproject.net.pi.service.PiPipeconfService;
 import org.onosproject.ui.RequestHandler;
 import org.onosproject.ui.UiMessageHandler;
 import org.onosproject.ui.table.TableModel;
@@ -39,8 +43,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.google.common.base.Strings.emptyToNull;
@@ -56,6 +60,7 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
     private static final String DEV_DATA_REQ = "deviceDataRequest";
     private static final String DEV_DATA_RESP = "deviceDataResponse";
     private static final String DEVICES = "devices";
+    private static final String DEVICE = "device";
 
     private static final String DEV_DETAILS_REQ = "deviceDetailsRequest";
     private static final String DEV_DETAILS_RESP = "deviceDetailsResponse";
@@ -78,6 +83,7 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
     private static final String HW = "hw";
     private static final String SW = "sw";
     private static final String PROTOCOL = "protocol";
+    private static final String PIPECONF = "pipeconf";
     private static final String MASTER_ID = "masterid";
     private static final String CHASSIS_ID = "chassisid";
     private static final String SERIAL = "serial";
@@ -179,7 +185,7 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             String id = string(payload, ID, ZERO_URI);
 
             DeviceId deviceId = deviceId(id);
@@ -200,11 +206,12 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
             data.put(CHASSIS_ID, device.chassisId().toString());
             data.put(MASTER_ID, masterFor != null ? masterFor.toString() : NONE);
             data.put(PROTOCOL, deviceProtocol(device));
+            data.put(PIPECONF, devicePipeconf(device));
 
             ArrayNode ports = arrayNode();
 
             List<Port> portList = new ArrayList<>(service.getPorts(deviceId));
-            Collections.sort(portList, (p1, p2) -> {
+            portList.sort((p1, p2) -> {
                 long delta = p1.number().toLong() - p2.number().toLong();
                 return delta == 0 ? 0 : (delta < 0 ? -1 : +1);
             });
@@ -216,7 +223,12 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
 
             ObjectNode rootNode = objectNode();
             rootNode.set(DETAILS, data);
-            sendMessage(DEV_DETAILS_RESP, 0, rootNode);
+
+            // NOTE: ... an alternate way of getting all the details of an item:
+            // Use the codec context to get a JSON of the device. See ONOS-5976.
+            rootNode.set(DEVICE, getJsonCodecContext().encode(device, Device.class));
+
+            sendMessage(DEV_DETAILS_RESP, rootNode);
         }
 
         private ObjectNode portData(Port p, DeviceId id) {
@@ -230,7 +242,8 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
             port.put(ENABLED, p.isEnabled());
             port.put(NAME, name != null ? name : "");
 
-            Set<Link> links = ls.getEgressLinks(new ConnectPoint(id, p.number()));
+            ConnectPoint connectPoint = new ConnectPoint(id, p.number());
+            Set<Link> links = ls.getEgressLinks(connectPoint);
             if (!links.isEmpty()) {
                 StringBuilder egressLinks = new StringBuilder();
                 for (Link l : links) {
@@ -239,12 +252,27 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
                             .append(dest.port()).append(" ");
                 }
                 port.put(LINK_DEST, egressLinks.toString());
+            } else {
+                HostService hs = get(HostService.class);
+                Set<Host> hosts = hs.getConnectedHosts(connectPoint);
+                if (hosts != null && !hosts.isEmpty()) {
+                    port.put(LINK_DEST, hosts.iterator().next().id().toString());
+                }
             }
 
             return port;
         }
-    }
 
+        private String devicePipeconf(Device device) {
+            PiPipeconfService service = get(PiPipeconfService.class);
+            Optional<PiPipeconfId> pipeconfId = service.ofDevice(device.id());
+            if (pipeconfId.isPresent()) {
+                return pipeconfId.get().id();
+            } else {
+                return NONE;
+            }
+        }
+    }
 
     // handler for changing device friendly name
     private final class NameChangeHandler extends RequestHandler {
@@ -253,7 +281,7 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             DeviceId deviceId = deviceId(string(payload, ID, ZERO_URI));
             String name = emptyToNull(string(payload, NAME, null));
             log.debug("Name change request: {} -- '{}'", deviceId, name);
@@ -266,7 +294,7 @@ public class DeviceViewMessageHandler extends UiMessageHandler {
             // means that the friendly name should be unset.
             cfg.name(name);
             cfg.apply();
-            sendMessage(DEV_NAME_CHANGE_RESP, 0, payload);
+            sendMessage(DEV_NAME_CHANGE_RESP, payload);
         }
     }
 }

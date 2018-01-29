@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,7 @@
  */
 package org.onosproject.net.intent.impl.compiler;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-
+import com.google.common.collect.ImmutableList;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -33,17 +30,21 @@ import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flowobjective.DefaultForwardingObjective;
+import org.onosproject.net.flowobjective.DefaultNextObjective;
+import org.onosproject.net.flowobjective.FlowObjectiveService;
 import org.onosproject.net.flowobjective.ForwardingObjective;
+import org.onosproject.net.flowobjective.NextObjective;
 import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.intent.FlowObjectiveIntent;
 import org.onosproject.net.intent.Intent;
 import org.onosproject.net.intent.IntentCompiler;
 import org.onosproject.net.intent.PathIntent;
-import org.onosproject.net.newresource.ResourceService;
-import org.onosproject.net.resource.link.LinkResourceAllocations;
+import org.onosproject.net.resource.ResourceService;
+import org.onosproject.net.resource.impl.LabelAllocator;
 import org.slf4j.Logger;
 
-import com.google.common.collect.ImmutableList;
+import java.util.LinkedList;
+import java.util.List;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -64,12 +65,16 @@ public class PathIntentFlowObjectiveCompiler
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ResourceService resourceService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected FlowObjectiveService flowObjectiveService;
+
     private ApplicationId appId;
 
     @Activate
     public void activate() {
         appId = coreService.registerApplication("org.onosproject.net.intent");
         registrator.registerCompiler(PathIntent.class, this, true);
+        labelAllocator = new LabelAllocator(resourceService);
     }
 
     @Deactivate
@@ -78,14 +83,19 @@ public class PathIntentFlowObjectiveCompiler
     }
 
     @Override
-    public List<Intent> compile(PathIntent intent, List<Intent> installable,
-                                Set<LinkResourceAllocations> resources) {
+    public List<Intent> compile(PathIntent intent, List<Intent> installable) {
 
         List<Objective> objectives = new LinkedList<>();
         List<DeviceId> devices = new LinkedList<>();
         compile(this, intent, objectives, devices);
 
-        return ImmutableList.of(new FlowObjectiveIntent(appId, devices, objectives, intent.resources()));
+        return ImmutableList.of(new FlowObjectiveIntent(appId,
+                                                        intent.key(),
+                                                        devices,
+                                                        objectives,
+                                                        intent.resources(),
+                                                        intent.resourceGroup()
+        ));
     }
 
     @Override
@@ -114,16 +124,26 @@ public class PathIntentFlowObjectiveCompiler
         } else {
             treatmentBuilder = DefaultTrafficTreatment.builder();
         }
+
         TrafficTreatment treatment = treatmentBuilder.setOutput(egress.port()).build();
 
+        NextObjective nextObjective = DefaultNextObjective.builder()
+                .withId(flowObjectiveService.allocateNextId())
+                .addTreatment(treatment)
+                .withType(NextObjective.Type.SIMPLE)
+                .fromApp(appId)
+                .makePermanent().add();
+        objectives.add(nextObjective);
+        devices.add(ingress.deviceId());
+
         objectives.add(DefaultForwardingObjective.builder()
-                  .withSelector(selector)
-                  .withTreatment(treatment)
-                  .withPriority(priority)
-                  .fromApp(appId)
-                  .makePermanent()
-                  .withFlag(ForwardingObjective.Flag.SPECIFIC)
-                  .add());
+                .withSelector(selector)
+                .nextStep(nextObjective.id())
+                .withPriority(priority)
+                .fromApp(appId)
+                .makePermanent()
+                .withFlag(ForwardingObjective.Flag.SPECIFIC)
+                .add());
         devices.add(ingress.deviceId());
     }
 }

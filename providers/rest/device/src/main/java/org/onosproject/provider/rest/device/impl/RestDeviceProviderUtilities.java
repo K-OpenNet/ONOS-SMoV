@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ final class RestDeviceProviderUtilities {
      * Needs addressing for secutirty purposes.
      *
      * @throws NoSuchAlgorithmException if algorithm specified is not available
-     * @throws KeyManagementException if unable to use the key
+     * @throws KeyManagementException   if unable to use the key
      */
     //FIXME redo for security purposes.
     protected static void enableSslCert() throws NoSuchAlgorithmException, KeyManagementException {

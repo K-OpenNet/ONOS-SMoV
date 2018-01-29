@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.Port;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.PortStatistics;
 import org.onosproject.ui.RequestHandler;
@@ -29,6 +30,10 @@ import org.onosproject.ui.table.TableRequestHandler;
 import org.onosproject.ui.table.cell.NumberFormatter;
 
 import java.util.Collection;
+import java.util.List;
+
+import static org.onosproject.net.DeviceId.deviceId;
+import static org.onosproject.net.PortNumber.portNumber;
 
 
 /**
@@ -39,7 +44,15 @@ public class PortViewMessageHandler extends UiMessageHandler {
     private static final String PORT_DATA_REQ = "portDataRequest";
     private static final String PORT_DATA_RESP = "portDataResponse";
     private static final String PORTS = "ports";
+    private static final String DELTA = "showDelta";
+    private static final String NZ = "nzFilter";
 
+    private static final String PORT_DETAILS_REQ = "portDetailsRequest";
+    private static final String PORT_DETAILS_RESP = "portDetailsResponse";
+    private static final String DETAILS = "details";
+    private static final String PORT = "port";
+
+    private static final String DEV_ID = "devId";
     private static final String ID = "id";
     private static final String PKT_RX = "pkt_rx";
     private static final String PKT_TX = "pkt_tx";
@@ -48,6 +61,13 @@ public class PortViewMessageHandler extends UiMessageHandler {
     private static final String PKT_RX_DRP = "pkt_rx_drp";
     private static final String PKT_TX_DRP = "pkt_tx_drp";
     private static final String DURATION = "duration";
+    private static final String SPEED = "speed";
+    private static final String ENABLED = "enabled";
+    private static final String TYPE = "type";
+    private static final String TYPE_IID = "_iconid_type";
+    private static final String PORT_ICON_PREFIX = "portIcon_";
+
+
 
     private static final String[] COL_IDS = {
             ID, PKT_RX, PKT_TX, BYTES_RX, BYTES_TX,
@@ -56,7 +76,10 @@ public class PortViewMessageHandler extends UiMessageHandler {
 
     @Override
     protected Collection<RequestHandler> createRequestHandlers() {
-        return ImmutableSet.of(new PortDataRequest());
+        return ImmutableSet.of(
+                new PortDataRequest(),
+                new DetailRequestHandler()
+        );
     }
 
     // handler for port table requests
@@ -93,10 +116,18 @@ public class PortViewMessageHandler extends UiMessageHandler {
         @Override
         protected void populateTable(TableModel tm, ObjectNode payload) {
             String uri = string(payload, "devId");
+            boolean nz = bool(payload, NZ);
+            boolean delta = bool(payload, DELTA);
             if (!Strings.isNullOrEmpty(uri)) {
                 DeviceId deviceId = DeviceId.deviceId(uri);
                 DeviceService ds = get(DeviceService.class);
-                for (PortStatistics stat : ds.getPortStatistics(deviceId)) {
+                List<PortStatistics> stats = delta ?
+                        ds.getPortDeltaStatistics(deviceId) :
+                        ds.getPortStatistics(deviceId);
+                for (PortStatistics stat : stats) {
+                    if (nz && stat.isZero()) {
+                        continue;
+                    }
                     populateRow(tm.addRow(), stat);
                 }
             }
@@ -111,6 +142,70 @@ public class PortViewMessageHandler extends UiMessageHandler {
                 .cell(PKT_RX_DRP, stat.packetsRxDropped())
                 .cell(PKT_TX_DRP, stat.packetsTxDropped())
                 .cell(DURATION, stat.durationSec());
+        }
+    }
+
+    private final class DetailRequestHandler extends RequestHandler {
+        private DetailRequestHandler() {
+            super(PORT_DETAILS_REQ);
+        }
+
+        @Override
+        public void process(ObjectNode payload) {
+            String id = string(payload, ID);
+            String devId = string(payload, DEV_ID);
+
+            DeviceService deviceService = get(DeviceService.class);
+            Port port = deviceService.getPort(deviceId(devId), portNumber(id));
+
+            ObjectNode data = objectNode();
+
+            data.put(ID, id);
+            data.put(DEV_ID, devId);
+            data.put(TYPE, displayType(port.type()));
+            data.put(SPEED, displaySpeed(port.portSpeed()));
+            data.put(ENABLED, port.isEnabled());
+
+            data.put(TYPE_IID, getIconIdForPortType(port.type()));
+
+            ObjectNode rootNode = objectNode();
+            rootNode.set(DETAILS, data);
+
+            // NOTE: ... an alternate way of getting all the details of an item:
+            // Use the codec context to get a JSON of the port. See ONOS-5976.
+            rootNode.set(PORT, getJsonCodecContext().encode(port, Port.class));
+
+            sendMessage(PORT_DETAILS_RESP, rootNode);
+        }
+
+        private String getIconIdForPortType(Port.Type type) {
+            String typeStr = "DEFAULT";
+            // TODO: consider providing alternate icon ID for different types
+            return PORT_ICON_PREFIX + typeStr;
+            // NOTE: look in icon.js for glyphMapping structure to see which
+            //        glyph will be used for the port type.
+        }
+
+        /**
+         * Returns the port type as a displayable string.
+         *
+         * @param type the port type
+         * @return human readable port type
+         */
+        private String displayType(Port.Type type) {
+            // TODO: consider better display values?
+            return type.toString();
+        }
+
+        /**
+         * Returns port speed as a displayable string.
+         *
+         * @param portSpeed port speed in Mbps
+         * @return human readable port speed
+         */
+        private String displaySpeed(long portSpeed) {
+            // TODO: better conversion between Gbps, Mbps, Kbps, etc.
+            return "" + portSpeed + " Mbps";
         }
     }
 }

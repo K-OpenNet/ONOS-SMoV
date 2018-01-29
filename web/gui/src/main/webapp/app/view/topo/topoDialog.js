@@ -1,5 +1,5 @@
 /*
- *  Copyright 2015 Open Networking Laboratory
+ *  Copyright 2015-present Open Networking Foundation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@
     // constants
     var idDialog = 'topo-p-dialog',
         opts = {
-            cssCls: 'topo-p'
+            cssCls: 'topo-p',
         };
 
     // ==========================
@@ -38,7 +38,7 @@
             return {
                 openDialog: function () { return ds.openDialog(idDialog, opts); },
                 closeDialog: ds.closeDialog,
-                createDiv: ds.createDiv
+                createDiv: ds.createDiv,
             };
         }]);
 }());

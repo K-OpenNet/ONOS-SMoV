@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2017-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,17 @@
  */
 package org.onosproject.store.cluster.messaging.impl;
 
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import com.google.common.base.Objects;
 import com.google.common.base.Throwables;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
@@ -36,18 +47,6 @@ import org.onosproject.utils.MeteringAgent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
-
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
@@ -55,8 +54,7 @@ import static org.onosproject.security.AppPermission.Type.CLUSTER_WRITE;
 
 @Component(immediate = true)
 @Service
-public class ClusterCommunicationManager
-        implements ClusterCommunicationService {
+public class ClusterCommunicationManager implements ClusterCommunicationService {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -74,7 +72,7 @@ public class ClusterCommunicationManager
     private static final String ONE_WAY_SUFFIX = ".oneway";
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    private ClusterService clusterService;
+    protected ClusterService clusterService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected MessagingService messagingService;
@@ -178,7 +176,7 @@ public class ClusterCommunicationManager
         checkArgument(node != null, "Unknown nodeId: %s", toNodeId);
         Endpoint nodeEp = new Endpoint(node.ip(), node.tcpPort());
         MeteringAgent.Context context = subjectMeteringAgent.startTimer(subject.toString() + ONE_WAY_SUFFIX);
-        return messagingService.sendAsync(nodeEp, subject.value(), payload).whenComplete((r, e) -> context.stop(e));
+        return messagingService.sendAsync(nodeEp, subject.toString(), payload).whenComplete((r, e) -> context.stop(e));
     }
 
     private CompletableFuture<byte[]> sendAndReceive(MessageSubject subject, byte[] payload, NodeId toNodeId) {
@@ -189,7 +187,7 @@ public class ClusterCommunicationManager
                 startTimer(NODE_PREFIX + toNodeId.toString() + ROUND_TRIP_SUFFIX);
         MeteringAgent.Context subjectContext = subjectMeteringAgent.
                 startTimer(subject.toString() + ROUND_TRIP_SUFFIX);
-        return messagingService.sendAndReceive(nodeEp, subject.value(), payload).
+        return messagingService.sendAndReceive(nodeEp, subject.toString(), payload).
                 whenComplete((bytes, throwable) -> {
                     subjectContext.stop(throwable);
                     epContext.stop(throwable);
@@ -201,7 +199,7 @@ public class ClusterCommunicationManager
                               ClusterMessageHandler subscriber,
                               ExecutorService executor) {
         checkPermission(CLUSTER_WRITE);
-        messagingService.registerHandler(subject.value(),
+        messagingService.registerHandler(subject.toString(),
                 new InternalClusterMessageHandler(subscriber),
                 executor);
     }
@@ -209,7 +207,7 @@ public class ClusterCommunicationManager
     @Override
     public void removeSubscriber(MessageSubject subject) {
         checkPermission(CLUSTER_WRITE);
-        messagingService.unregisterHandler(subject.value());
+        messagingService.unregisterHandler(subject.toString());
     }
 
     @Override
@@ -219,7 +217,7 @@ public class ClusterCommunicationManager
             Function<R, byte[]> encoder,
             Executor executor) {
         checkPermission(CLUSTER_WRITE);
-        messagingService.registerHandler(subject.value(),
+        messagingService.registerHandler(subject.toString(),
                 new InternalMessageResponder<M, R>(decoder, encoder, m -> {
                     CompletableFuture<R> responseFuture = new CompletableFuture<>();
                     executor.execute(() -> {
@@ -239,7 +237,7 @@ public class ClusterCommunicationManager
             Function<M, CompletableFuture<R>> handler,
             Function<R, byte[]> encoder) {
         checkPermission(CLUSTER_WRITE);
-        messagingService.registerHandler(subject.value(),
+        messagingService.registerHandler(subject.toString(),
                 new InternalMessageResponder<>(decoder, encoder, handler));
     }
 
@@ -249,7 +247,7 @@ public class ClusterCommunicationManager
             Consumer<M> handler,
             Executor executor) {
         checkPermission(CLUSTER_WRITE);
-        messagingService.registerHandler(subject.value(),
+        messagingService.registerHandler(subject.toString(),
                 new InternalMessageConsumer<>(decoder, handler),
                 executor);
     }

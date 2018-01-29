@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.util.List;
 public interface DeviceDescriptionDiscovery extends HandlerBehaviour {
 
     /**
-     * Returns device description appropriately annotated to support
+     * Returns a device description appropriately annotated to support
      * downstream model extension via projections of the resulting device,
      * as in the following example.
      * <pre>
@@ -40,7 +40,7 @@ public interface DeviceDescriptionDiscovery extends HandlerBehaviour {
     DeviceDescription discoverDeviceDetails();
 
     /**
-     * Returns list of port descriptions appropriately annotated to support
+     * Returns a list of port descriptions appropriately annotated to support
      * downstream model extension via projections of their parent device,
      * as in the following example.
      * <pre>

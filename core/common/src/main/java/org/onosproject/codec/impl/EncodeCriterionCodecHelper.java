@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import org.onosproject.net.flow.criteria.IcmpTypeCriterion;
 import org.onosproject.net.flow.criteria.Icmpv6CodeCriterion;
 import org.onosproject.net.flow.criteria.Icmpv6TypeCriterion;
 import org.onosproject.net.flow.criteria.MetadataCriterion;
+import org.onosproject.net.flow.criteria.MplsBosCriterion;
 import org.onosproject.net.flow.criteria.MplsCriterion;
 import org.onosproject.net.flow.criteria.OchSignalCriterion;
 import org.onosproject.net.flow.criteria.OchSignalTypeCriterion;
@@ -108,6 +109,7 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.IPV6_ND_SLL, new FormatV6NDTll());
         formatMap.put(Criterion.Type.IPV6_ND_TLL, new FormatV6NDTll());
         formatMap.put(Criterion.Type.MPLS_LABEL, new FormatMplsLabel());
+        formatMap.put(Criterion.Type.MPLS_BOS, new FormatMplsBos());
         formatMap.put(Criterion.Type.IPV6_EXTHDR, new FormatIpV6Exthdr());
         formatMap.put(Criterion.Type.OCH_SIGID, new FormatOchSigId());
         formatMap.put(Criterion.Type.OCH_SIGTYPE, new FormatOchSigType());
@@ -122,7 +124,6 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.ARP_SHA, new FormatUnknown());
         formatMap.put(Criterion.Type.ARP_THA, new FormatUnknown());
         formatMap.put(Criterion.Type.MPLS_TC, new FormatUnknown());
-        formatMap.put(Criterion.Type.MPLS_BOS, new FormatUnknown());
         formatMap.put(Criterion.Type.PBB_ISID, new FormatUnknown());
         formatMap.put(Criterion.Type.UNASSIGNED_40, new FormatUnknown());
         formatMap.put(Criterion.Type.PBB_UCA, new FormatUnknown());
@@ -132,6 +133,13 @@ public final class EncodeCriterionCodecHelper {
         formatMap.put(Criterion.Type.EXTENSION, new FormatUnknown());
         formatMap.put(Criterion.Type.ETH_DST_MASKED, new FormatUnknown());
         formatMap.put(Criterion.Type.ETH_SRC_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.TCP_SRC_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.TCP_DST_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.UDP_SRC_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.UDP_DST_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.SCTP_SRC_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.SCTP_DST_MASKED, new FormatUnknown());
+        formatMap.put(Criterion.Type.PROTOCOL_INDEPENDENT, new FormatUnknown());
 
     }
 
@@ -348,6 +356,15 @@ public final class EncodeCriterionCodecHelper {
             final MplsCriterion mplsCriterion =
                     (MplsCriterion) criterion;
             return root.put(CriterionCodec.LABEL, mplsCriterion.label().toInt());
+        }
+    }
+
+    private static class FormatMplsBos implements CriterionTypeFormatter {
+        @Override
+        public ObjectNode encodeCriterion(ObjectNode root, Criterion criterion) {
+            final MplsBosCriterion mplsBosCriterion =
+                    (MplsBosCriterion) criterion;
+            return root.put(CriterionCodec.BOS, mplsBosCriterion.mplsBos());
         }
     }
 

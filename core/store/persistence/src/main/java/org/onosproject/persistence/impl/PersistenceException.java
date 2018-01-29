@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ package org.onosproject.persistence.impl;
 /**
  * An exception defined for failures of the local persistent store system.
  */
-
-/**
- * Throws an exception with the specified message.
- */
 public class PersistenceException extends RuntimeException {
+    /**
+     * Throws an exception with the specified message.
+     *
+     * @param s message for exception
+     */
     public PersistenceException(String s) {
         super(s);
     }

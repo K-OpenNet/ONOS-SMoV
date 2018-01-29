@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,12 @@ package org.onosproject.store.service;
 /**
  * Distributed version of com.google.common.util.concurrent.AtomicLongMap.
  */
-public interface AtomicCounterMap<K> {
+public interface AtomicCounterMap<K> extends DistributedPrimitive {
+
+    @Override
+    default DistributedPrimitive.Type primitiveType() {
+        return DistributedPrimitive.Type.COUNTER_MAP;
+    }
 
     /**
      * Increments by one the value currently associated with key, and returns the new value.
@@ -88,7 +93,6 @@ public interface AtomicCounterMap<K> {
      */
     long put(K key, long newValue);
 
-
     /**
      * If key is not already associated with a value or if key is associated with
      * zero, associate it with newValue. Returns the previous value associated with
@@ -132,4 +136,23 @@ public interface AtomicCounterMap<K> {
      * @return true if the value was removed, false otherwise
      */
     boolean remove(K key, long value);
+
+    /**
+     * Returns the number of entries in the map.
+     *
+     * @return the number of entries in the map, including {@code 0} values
+     */
+    int size();
+
+    /**
+     * If the map is empty, returns true, otherwise false.
+     *
+     * @return true if the map is empty.
+     */
+    boolean isEmpty();
+
+    /**
+     * Clears all entries from the map.
+     */
+    void clear();
 }

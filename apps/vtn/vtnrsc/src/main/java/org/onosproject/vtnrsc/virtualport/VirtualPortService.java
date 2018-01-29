@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package org.onosproject.vtnrsc.virtualport;
 import java.util.Collection;
 
 import org.onlab.packet.IpAddress;
+import org.onlab.packet.MacAddress;
+import org.onosproject.event.ListenerService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.vtnrsc.FixedIp;
 import org.onosproject.vtnrsc.TenantId;
@@ -28,7 +30,7 @@ import org.onosproject.vtnrsc.VirtualPortId;
 /**
  * Service for interacting with the inventory of virtualPort.
  */
-public interface VirtualPortService {
+public interface VirtualPortService extends ListenerService<VirtualPortEvent, VirtualPortListener> {
     /**
      * Returns if the virtualPort is existed.
      *
@@ -52,6 +54,14 @@ public interface VirtualPortService {
      * @return virtualPort.
      */
     VirtualPort getPort(FixedIp fixedIP);
+
+    /**
+     * Returns the virtualPort associated with the mac address.
+     *
+     * @param mac the mac address
+     * @return virtualPort.
+     */
+    VirtualPort getPort(MacAddress mac);
 
     /**
      * Returns the virtualPort associated with the networkId and ip.

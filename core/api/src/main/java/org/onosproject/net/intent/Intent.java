@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,15 @@
  */
 package org.onosproject.net.intent;
 
-import java.util.Collection;
-import java.util.Objects;
-
 import com.google.common.annotations.Beta;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.net.NetworkResource;
+import org.onosproject.net.ResourceGroup;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
+import java.util.Collection;
+
+import static com.google.common.base.Preconditions.*;
 
 /**
  * Abstraction of an application level intent.
@@ -47,6 +45,7 @@ public abstract class Intent {
     public static final int MIN_PRIORITY = 1;
 
     private final Collection<NetworkResource> resources;
+    private final ResourceGroup resourceGroup;
 
     private static IdGenerator idGenerator;
 
@@ -59,16 +58,18 @@ public abstract class Intent {
         this.key = null;
         this.resources = null;
         this.priority = DEFAULT_INTENT_PRIORITY;
+        this.resourceGroup = null;
     }
 
     /**
      * Creates a new intent.
-     *
      * @param appId     application identifier
      * @param key       optional key
      * @param resources required network resources (optional)
      * @param priority  flow rule priority
+     * @deprecated 1.9.1
      */
+    @Deprecated
     protected Intent(ApplicationId appId,
                      Key key,
                      Collection<NetworkResource> resources,
@@ -80,6 +81,30 @@ public abstract class Intent {
         this.key = (key != null) ? key : Key.of(id.fingerprint(), appId);
         this.priority = priority;
         this.resources = checkNotNull(resources);
+        this.resourceGroup = null;
+    }
+
+    /**
+     * Creates a new intent.
+     * @param appId     application identifier
+     * @param key       optional key
+     * @param resources required network resources (optional)
+     * @param priority  flow rule priority
+     * @param resourceGroup the resource group for intent
+     */
+    protected Intent(ApplicationId appId,
+                     Key key,
+                     Collection<NetworkResource> resources,
+                     int priority,
+                     ResourceGroup resourceGroup) {
+        checkState(idGenerator != null, "Id generator is not bound.");
+        checkArgument(priority <= MAX_PRIORITY && priority >= MIN_PRIORITY);
+        this.id = IntentId.valueOf(idGenerator.getNewId());
+        this.appId = checkNotNull(appId, "Application ID cannot be null");
+        this.key = (key != null) ? key : Key.of(id.fingerprint(), appId);
+        this.priority = priority;
+        this.resources = checkNotNull(resources);
+        this.resourceGroup = resourceGroup;
     }
 
     /**
@@ -89,6 +114,27 @@ public abstract class Intent {
         protected ApplicationId appId;
         protected Key key;
         protected int priority = Intent.DEFAULT_INTENT_PRIORITY;
+        protected Collection<NetworkResource> resources;
+        protected ResourceGroup resourceGroup;
+
+        /**
+         * Creates a new empty builder.
+         */
+        protected Builder() {
+        }
+
+        /**
+         * Creates a new builder pre-populated with the information in the given
+         * intent.
+         *
+         * @param intent initial intent
+         */
+        protected Builder(Intent intent) {
+            this.appId(intent.appId())
+                    .key(intent.key())
+                    .priority(intent.priority())
+                    .resourceGroup(intent.resourceGroup());
+        }
 
         /**
          * Sets the application id for the intent that will be built.
@@ -123,10 +169,31 @@ public abstract class Intent {
             return this;
         }
 
+        /**
+         * Sets the collection of resources required for this intent.
+         *
+         * @param resources collection of resources
+         * @return this builder
+         */
+        public Builder resources(Collection<NetworkResource> resources) {
+            this.resources = resources;
+            return this;
+        }
+
+        /**
+         * Sets the resource group for this intent.
+         *
+         * @param resourceGroup the resource group
+         * @return this builder
+         */
+        public Builder resourceGroup(ResourceGroup resourceGroup) {
+            this.resourceGroup = resourceGroup;
+            return this;
+        }
     }
 
     /**
-     * Returns the intent identifier.
+     * Returns the intent object identifier.
      *
      * @return intent fingerprint
      */
@@ -159,6 +226,15 @@ public abstract class Intent {
      */
     public Collection<NetworkResource> resources() {
         return resources;
+    }
+
+    /**
+     * Returns the resource group for this intent.
+     *
+     * @return the resource group; may be null
+     */
+    public ResourceGroup resourceGroup() {
+        return resourceGroup;
     }
 
     /**
@@ -207,11 +283,21 @@ public abstract class Intent {
      * @param oldIdGenerator the current id generator
      */
     public static void unbindIdGenerator(IdGenerator oldIdGenerator) {
-        if (Objects.equals(idGenerator, oldIdGenerator)) {
+        if (idGenerator == oldIdGenerator) {
             idGenerator = null;
         }
     }
 
+    /**
+     * Returns the key to identify an "Intent".
+     * <p>
+     * When an Intent is updated,
+     * (e.g., flow is re-routed in reaction to network topology change)
+     * related Intent object's {@link IntentId} may change,
+     * but the key will remain unchanged.
+     *
+     * @return key
+     */
     public Key key() {
         return key;
     }

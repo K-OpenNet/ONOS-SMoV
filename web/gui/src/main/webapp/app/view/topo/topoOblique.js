@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
     'use strict';
 
     // injected refs
-    var $log, fs, sus, flash;
+    var sus, flash;
 
     // api to topoForce
     var api;
@@ -43,14 +43,14 @@
      */
 
     // configuration
-    var xsky = -.7,     // x skew y factor
-        xsk = -35,      // x skew angle
-        ysc = .5,       // y scale
+    var xsky = -.7, // x skew y factor
+        xsk = -35, // x skew angle
+        ysc = .5, // y scale
         pad = 50,
         time = 1500,
         fill = {
-            pkt: 'rgba(130,130,170,0.3)',   // blue-ish
-            opt: 'rgba(170,130,170,0.3)'    // magenta-ish
+            pkt: 'rgba(130,130,170,0.3)', // blue-ish
+            opt: 'rgba(170,130,170,0.3)', // magenta-ish
         };
 
     // internal state
@@ -59,6 +59,10 @@
         plane = {},
         oldNodeLock;
 
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#tobq#' + x + '#';
+    };
 
     function planeId(tag) {
         return 'topo-obview-' + tag + 'Plane';
@@ -74,7 +78,7 @@
     }
 
     function noXform() {
-        return sus.skewX(0) + sus.translate(0,0) + sus.scale(1,1);
+        return sus.skewX(0) + sus.translate(0, 0) + sus.scale(1, 1);
     }
 
     function padBox(box, p) {
@@ -105,7 +109,7 @@
                 ay = xy.y - oy,
                 x = ax + ay * xsky,
                 y = (ay + yt) * ysc;
-            return {x: ox + x, y: oy + y};
+            return { x: ox + x, y: oy + y };
         };
 
         showPlane('pkt', box, -1);
@@ -136,7 +140,7 @@
 
         if (xffn) {
             api.nodes().forEach(function (d) {
-                var oldxy = {x: d.x, y: d.y},
+                var oldxy = { x: d.x, y: d.y },
                     coords = xffn(oldxy, dir(d));
                 d.oldxy = oldxy;
                 d.px = d.x = coords.x;
@@ -144,7 +148,7 @@
             });
         } else {
             api.nodes().forEach(function (d) {
-                var old = d.oldxy || {x: d.x, y: d.y};
+                var old = d.oldxy || { x: d.x, y: d.y };
                 d.px = d.x = old.x;
                 d.py = d.y = old.y;
                 delete d.oldxy;
@@ -191,7 +195,7 @@
             var id = planeId(tag),
                 g = api.zoomLayer().insert('g', '#topo-G')
                     .attr('id', id)
-                    .attr('transform', sus.translate(ox,oy));
+                    .attr('transform', sus.translate(ox, oy));
             g.append('rect')
                 .attr('fill', fill[tag])
                 .attr('opacity', 0);
@@ -214,17 +218,19 @@
         rem('pkt');
     }
 
+    // invoked after the localization bundle has been received from the server
+    function setLionBundle(bundle) {
+        topoLion = bundle;
+    }
 
 // === -----------------------------------------------------
 // === MODULE DEFINITION ===
 
 angular.module('ovTopo')
     .factory('TopoObliqueService',
-    ['$log', 'FnService', 'SvgUtilService', 'FlashService',
+    ['SvgUtilService', 'FlashService',
 
-    function (_$log_, _fs_, _sus_, _flash_) {
-        $log = _$log_;
-        fs = _fs_;
+    function (_sus_, _flash_) {
         sus = _sus_;
         flash = _flash_;
 
@@ -238,10 +244,10 @@ angular.module('ovTopo')
             oblique = !oblique;
             if (oblique) {
                 api.force().stop();
-                flash.flash('Oblique view');
+                flash.flash(topoLion('fl_oblique_view'));
                 toObliqueView();
             } else {
-                flash.flash('Normal view');
+                flash.flash(topoLion('fl_normal_view'));
                 toNormalView();
             }
         }
@@ -251,7 +257,8 @@ angular.module('ovTopo')
             destroyOblique: destroyOblique,
 
             isOblique: function () { return oblique; },
-            toggleOblique: toggleOblique
+            toggleOblique: toggleOblique,
+            setLionBundle: setLionBundle,
         };
     }]);
 }());

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 describe('factory: fw/util/theme.js', function() {
     var ts, $log, fs;
 
-    beforeEach(module('onosUtil'));
+    beforeEach(module('onosUtil', 'onosRemote'));
 
     beforeEach(inject(function (ThemeService, _$log_, FnService) {
         ts = ThemeService;
@@ -35,7 +35,8 @@ describe('factory: fw/util/theme.js', function() {
 
     it('should define api functions', function () {
         expect(fs.areFunctions(ts, [
-            'init', 'theme', 'toggleTheme', 'addListener', 'removeListener'
+            'init', 'theme', 'toggleTheme', 'addListener', 'removeListener',
+            'spriteColor'
         ])).toBeTruthy();
     });
 
@@ -82,6 +83,9 @@ describe('factory: fw/util/theme.js', function() {
         // Note: re-work this once theme-change listeners are implemented
         spyOn($log, 'debug');
 
+        ts.theme('light'); // setting theme lo light (was set to dark by the previous test)
+        $log.debug.calls.reset(); // resetting the spy
+
         expect(ts.theme()).toEqual('light');
         verifyBodyClass('light', 'dark');
 
@@ -93,24 +97,6 @@ describe('factory: fw/util/theme.js', function() {
 
 
     // === Unit Tests for listeners
-
-    it('should report lack of callback', function () {
-        spyOn($log, 'error');
-        var list = ts.addListener();
-        expect($log.error).toHaveBeenCalledWith(
-            'ThemeService.addListener(): callback not a function'
-        );
-        expect(list.error).toEqual('No callback defined');
-    });
-
-    it('should report non-functional callback', function () {
-        spyOn($log, 'error');
-        var list = ts.addListener(['some array']);
-        expect($log.error).toHaveBeenCalledWith(
-            'ThemeService.addListener(): callback not a function'
-        );
-        expect(list.error).toEqual('No callback defined');
-    });
 
     it('should invoke our callback with an event', function () {
         var event;
@@ -129,34 +115,48 @@ describe('factory: fw/util/theme.js', function() {
     });
 
     it('should invoke our callback at appropriate times', function () {
-        var calls = [],
-            phase,
-            listener;
+        var cb = jasmine.createSpy('cb');
+        expect(cb.calls.count()).toEqual(0);
 
-        function cb() {
-            calls.push(phase);
-        }
+        // make sure previous tests don't affect our theme state...
+        ts.theme('light');
+        expect(ts.theme()).toEqual('light');
 
-        expect(calls).toEqual([]);
-
-        phase = 'pre';
         ts.toggleTheme(); // -> dark
+        expect(cb.calls.count()).toEqual(0);
 
-        phase = 'added';
-        listener = ts.addListener(cb);
+        ts.addListener(cb);
+        expect(cb.calls.count()).toEqual(0);
+
         ts.toggleTheme(); // -> light
+        expect(cb.calls.count()).toEqual(1);
 
-        phase = 'same';
         ts.theme('light');  // (still light - no event)
+        expect(cb.calls.count()).toEqual(1);
 
-        phase = 'diff';
         ts.theme('dark');   // -> dark
+        expect(cb.calls.count()).toEqual(2);
 
-        phase = 'post';
-        ts.removeListener(listener);
-        ts.toggleTheme();   // -> light
+        ts.removeListener(cb);
+        expect(cb.calls.count()).toEqual(2);
 
-        expect(calls).toEqual(['added', 'diff']);
+        ts.toggleTheme();   // -> light (but we weren't registered to hear it)
+        expect(cb.calls.count()).toEqual(2);
+    });
+
+    it('should return a color', function () {
+        ts.theme('light');
+        var color = ts.spriteColor('gray1', 'stroke');
+        expect(color).toEqual('#cccccc');
+
+        color = ts.spriteColor('gray1');
+        expect(color).toEqual('#cccccc');
+
+        color = ts.spriteColor('gray1', 'fill');
+        expect(color).toEqual('#eeeeee');
+
+        color = ts.spriteColor(null, 'stroke');
+        expect(color).toEqual('none');
     });
 
 });

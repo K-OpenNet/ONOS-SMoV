@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,7 +136,6 @@ public class CriteriaTest {
     Criterion sameAsMatchUdpPort1 = Criteria.matchUdpSrc(tpPort1);
     Criterion matchUdpPort2 = Criteria.matchUdpDst(tpPort2);
 
-
     int tcpFlags1 =
         Criterion.TcpFlags.NS.getValue() |
         Criterion.TcpFlags.CWR.getValue() |
@@ -256,10 +255,6 @@ public class CriteriaTest {
     Criterion sameAsMatchOchSignalType1 = Criteria.matchOchSignalType(OchSignalType.FIXED_GRID);
     Criterion matchOchSignalType2 = Criteria.matchOchSignalType(OchSignalType.FLEX_GRID);
 
-    Criterion matchIndexedLambda1 = Criteria.matchLambda(Lambda.indexedLambda(1));
-    Criterion sameAsMatchIndexedLambda1 = Criteria.matchLambda(Lambda.indexedLambda(1));
-    Criterion matchIndexedLambda2 = Criteria.matchLambda(Lambda.indexedLambda(2));
-
     Criterion matchOchSignal1 =
             Criteria.matchLambda(Lambda.ochSignal(GridType.DWDM, ChannelSpacing.CHL_100GHZ, 4, 8));
     Criterion sameAsMatchOchSignal1 =
@@ -344,6 +339,7 @@ public class CriteriaTest {
         assertThatClassIsImmutable(OduSignalIdCriterion.class);
         assertThatClassIsImmutable(OduSignalTypeCriterion.class);
         assertThatClassIsImmutable(PbbIsidCriterion.class);
+        assertThatClassIsImmutable(PiCriterion.class);
     }
 
     // PortCriterion class
@@ -1143,14 +1139,6 @@ public class CriteriaTest {
                 .addEqualityGroup(matchIpv6ExthdrFlags1,
                                   sameAsMatchIpv6ExthdrFlags1)
                 .addEqualityGroup(matchIpv6ExthdrFlags2)
-                .testEquals();
-    }
-
-    @Test
-    public void testIndexedLambdaCriterionEquals() {
-        new EqualsTester()
-                .addEqualityGroup(matchIndexedLambda1, sameAsMatchIndexedLambda1)
-                .addEqualityGroup(matchIndexedLambda2)
                 .testEquals();
     }
 

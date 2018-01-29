@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,6 +91,11 @@ public class PIMHello extends BasePacket {
 
     /**
      * XXX: This is deprecated, DO NOT USE, use the deserializer() function instead.
+     *
+     * @param data bytes to deserialize
+     * @param offset offset to start deserializing from
+     * @param length length of the data to deserialize
+     * @return nothing
      */
     public IPacket deserialize(final byte[] data, final int offset,
                                final int length) {

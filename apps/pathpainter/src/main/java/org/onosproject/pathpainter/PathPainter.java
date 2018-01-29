@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * Skeletal ONOS UI Topology-Overlay application component.
+ * ONOS UI PathPainter Topology-Overlay application component.
  */
 @Component(immediate = true)
 public class PathPainter {

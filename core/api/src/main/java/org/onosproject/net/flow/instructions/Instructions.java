@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.onosproject.net.flow.instructions;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableMap;
 import org.onlab.packet.EthType;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
@@ -24,13 +25,12 @@ import org.onlab.packet.TpPort;
 import org.onlab.packet.VlanId;
 import org.onosproject.core.GroupId;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.IndexedLambda;
 import org.onosproject.net.Lambda;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.OduSignalId;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.flow.instructions.L0ModificationInstruction.L0SubType;
-import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModLambdaInstruction;
+import org.onosproject.net.flow.StatTriggerField;
+import org.onosproject.net.flow.StatTriggerFlag;
 import org.onosproject.net.flow.instructions.L0ModificationInstruction.ModOchSignalInstruction;
 import org.onosproject.net.flow.instructions.L1ModificationInstruction.ModOduSignalIdInstruction;
 import org.onosproject.net.flow.instructions.L3ModificationInstruction.L3SubType;
@@ -43,7 +43,9 @@ import org.onosproject.net.flow.instructions.L3ModificationInstruction.ModTtlIns
 import org.onosproject.net.flow.instructions.L4ModificationInstruction.L4SubType;
 import org.onosproject.net.flow.instructions.L4ModificationInstruction.ModTransportPortInstruction;
 import org.onosproject.net.meter.MeterId;
+import org.onosproject.net.pi.runtime.PiTableAction;
 
+import java.util.Map;
 import java.util.Objects;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -123,9 +125,7 @@ public final class Instructions {
     public static L0ModificationInstruction modL0Lambda(Lambda lambda) {
         checkNotNull(lambda, "L0 OCh signal cannot be null");
 
-        if (lambda instanceof IndexedLambda) {
-            return new ModLambdaInstruction(L0SubType.LAMBDA, (short) ((IndexedLambda) lambda).index());
-        } else if (lambda instanceof OchSignal) {
+        if (lambda instanceof OchSignal) {
             return new ModOchSignalInstruction((OchSignal) lambda);
         } else {
             throw new UnsupportedOperationException(String.format("Unsupported type: %s", lambda));
@@ -338,7 +338,7 @@ public final class Instructions {
      * @return a L2 modification.
      */
     public static Instruction pushMpls() {
-        return new L2ModificationInstruction.PushHeaderInstructions(
+        return new L2ModificationInstruction.ModMplsHeaderInstruction(
                 L2ModificationInstruction.L2SubType.MPLS_PUSH,
                                           EthType.EtherType.MPLS_UNICAST.ethType());
     }
@@ -349,7 +349,7 @@ public final class Instructions {
      * @return a L2 modification.
      */
     public static Instruction popMpls() {
-        return new L2ModificationInstruction.PushHeaderInstructions(
+        return new L2ModificationInstruction.ModMplsHeaderInstruction(
                 L2ModificationInstruction.L2SubType.MPLS_POP,
                 EthType.EtherType.MPLS_UNICAST.ethType());
     }
@@ -362,7 +362,7 @@ public final class Instructions {
      */
     public static Instruction popMpls(EthType etherType) {
         checkNotNull(etherType, "Ethernet type cannot be null");
-        return new L2ModificationInstruction.PushHeaderInstructions(
+        return new L2ModificationInstruction.ModMplsHeaderInstruction(
                 L2ModificationInstruction.L2SubType.MPLS_POP, etherType);
     }
 
@@ -372,7 +372,7 @@ public final class Instructions {
      * @return a L2 modification
      */
     public static Instruction popVlan() {
-        return new L2ModificationInstruction.PopVlanInstruction(
+        return new L2ModificationInstruction.ModVlanHeaderInstruction(
                 L2ModificationInstruction.L2SubType.VLAN_POP);
     }
 
@@ -382,9 +382,21 @@ public final class Instructions {
      * @return a L2 modification
      */
     public static Instruction pushVlan() {
-        return new L2ModificationInstruction.PushHeaderInstructions(
+        return new L2ModificationInstruction.ModVlanHeaderInstruction(
                 L2ModificationInstruction.L2SubType.VLAN_PUSH,
                 EthType.EtherType.VLAN.ethType());
+    }
+
+    /**
+     * Creates a push VLAN header instruction using the supplied Ethernet type.
+     *
+     * @param ethType the Ethernet type to use
+     * @return a L2 modification
+     */
+    public static Instruction pushVlan(EthType ethType) {
+        return new L2ModificationInstruction.ModVlanHeaderInstruction(
+                L2ModificationInstruction.L2SubType.VLAN_PUSH,
+                ethType);
     }
 
     /**
@@ -465,6 +477,17 @@ public final class Instructions {
     }
 
     /**
+     * Creates a protocol independent instruction.
+     *
+     * @param piTableAction protocol independent instruction
+     * @return extension instruction
+     */
+    public static PiInstruction piTableAction(PiTableAction piTableAction) {
+        checkNotNull(piTableAction, "PiTableAction instruction cannot be null");
+        return new PiInstruction(piTableAction);
+    }
+
+    /**
      * Creates an extension instruction.
      *
      * @param extension extension instruction
@@ -476,6 +499,20 @@ public final class Instructions {
         checkNotNull(extension, "Extension instruction cannot be null");
         checkNotNull(deviceId, "Device ID cannot be null");
         return new ExtensionInstructionWrapper(extension, deviceId);
+    }
+
+    /**
+     * Creates a stat trigger instruction.
+     *
+     * @param statTriggerMap map keeps stat trigger threshold
+     * @param flag stat trigger flag
+     * @return stat trigger instruction
+     */
+    public static StatTriggerInstruction statTrigger(Map<StatTriggerField, Long> statTriggerMap,
+                                                     StatTriggerFlag flag) {
+        checkNotNull(statTriggerMap, "Stat trigger map cannot be null");
+        checkNotNull(flag, "Stat trigger flag  cannot be null");
+        return new StatTriggerInstruction(statTriggerMap, flag);
     }
 
     /**
@@ -843,6 +880,68 @@ public final class Instructions {
 
             }
             return false;
+        }
+    }
+
+    public static class StatTriggerInstruction implements Instruction {
+        private Map<StatTriggerField, Long> statTriggerFieldMap;
+        private StatTriggerFlag statTriggerFlag;
+
+
+        StatTriggerInstruction(Map<StatTriggerField, Long> statTriggerMap,
+                                      StatTriggerFlag flag) {
+            this.statTriggerFieldMap = ImmutableMap.copyOf(statTriggerMap);
+            this.statTriggerFlag = flag;
+        }
+
+        public Map<StatTriggerField, Long> getStatTriggerFieldMap() {
+            return statTriggerFieldMap;
+        }
+
+        public StatTriggerFlag getStatTriggerFlag() {
+            return statTriggerFlag;
+        }
+
+        public Long getStatValue(StatTriggerField field) {
+            return statTriggerFieldMap.get(field);
+        }
+
+        @Override
+        public Type type() {
+            return Type.STAT_TRIGGER;
+        }
+
+        @Override
+        public String toString() {
+            return "StatTriggerInstruction{" +
+                    "statTriggerFieldMap=" + statTriggerFieldMap +
+                    ", statTriggerFlag=" + statTriggerFlag +
+                    '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            StatTriggerInstruction that = (StatTriggerInstruction) o;
+
+            if (!Objects.equals(statTriggerFieldMap, that.statTriggerFieldMap)) {
+                return false;
+            }
+
+            return statTriggerFlag == that.statTriggerFlag;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = statTriggerFieldMap != null ? statTriggerFieldMap.hashCode() : 0;
+            result = 31 * result + (statTriggerFlag != null ? statTriggerFlag.hashCode() : 0);
+            return result;
         }
     }
 

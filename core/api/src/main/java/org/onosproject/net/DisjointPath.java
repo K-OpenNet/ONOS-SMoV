@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,10 @@ public interface DisjointPath extends Path {
      *
      * @return boolean corresponding to whether request to use
      *          backup was successful.
+     *
+     * @deprecated in 1.11.0
      */
+    @Deprecated
     boolean useBackup();
 
     /**
@@ -43,7 +46,7 @@ public interface DisjointPath extends Path {
     /**
      * Gets secondary path.
      *
-     * @return secondary path
+     * @return secondary path, or null if there is no secondary path available.
      */
     Path backup();
 }

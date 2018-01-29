@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.apache.felix.scr.annotations.Modified;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.ICMP;
 import org.onlab.packet.ICMP6;
@@ -35,11 +36,15 @@ import org.onlab.packet.TCP;
 import org.onlab.packet.TpPort;
 import org.onlab.packet.UDP;
 import org.onlab.packet.VlanId;
+import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.event.Event;
+import org.onosproject.incubator.net.virtual.NetworkId;
+import org.onosproject.incubator.net.virtual.VirtualNetwork;
+import org.onosproject.incubator.net.virtual.VirtualNetworkService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
@@ -71,6 +76,11 @@ import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.topology.TopologyEvent;
 import org.onosproject.net.topology.TopologyListener;
 import org.onosproject.net.topology.TopologyService;
+import org.onosproject.store.serializers.KryoNamespaces;
+import org.onosproject.store.service.EventuallyConsistentMap;
+import org.onosproject.store.service.MultiValuedTimestamp;
+import org.onosproject.store.service.StorageService;
+import org.onosproject.store.service.WallClockTimestamp;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 
@@ -80,14 +90,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 
-import static com.google.common.base.Strings.isNullOrEmpty;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Sample reactive forwarding application.
  */
 @Component(immediate = true)
+@Service(value = ReactiveForwarding.class)
 public class ReactiveForwarding {
 
     private static final int DEFAULT_TIMEOUT = 10;
@@ -116,7 +129,15 @@ public class ReactiveForwarding {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ComponentConfigService cfgService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected StorageService storageService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected VirtualNetworkService vnetService;
+
     private ReactivePacketProcessor processor = new ReactivePacketProcessor();
+
+    private  EventuallyConsistentMap<MacAddress, ReactiveForwardMetrics> metrics;
 
     private ApplicationId appId;
 
@@ -181,11 +202,32 @@ public class ReactiveForwarding {
             label = "Ignore (do not forward) IPv4 multicast packets; default is false")
     private boolean ignoreIpv4McastPackets = false;
 
+    @Property(name = "recordMetrics", boolValue = false,
+            label = "Enable record metrics for reactive forwarding")
+    private boolean recordMetrics = false;
+
     private final TopologyListener topologyListener = new InternalTopologyListener();
+
+    private ExecutorService blackHoleExecutor;
 
 
     @Activate
     public void activate(ComponentContext context) {
+        KryoNamespace.Builder metricSerializer = KryoNamespace.newBuilder()
+                .register(KryoNamespaces.API)
+                .register(ReactiveForwardMetrics.class)
+                .register(MultiValuedTimestamp.class);
+        metrics =  storageService.<MacAddress, ReactiveForwardMetrics>eventuallyConsistentMapBuilder()
+                .withName("metrics-fwd")
+                .withSerializer(metricSerializer)
+                .withTimestampProvider((key, metricsData) -> new
+                        MultiValuedTimestamp<>(new WallClockTimestamp(), System.nanoTime()))
+                .build();
+
+        blackHoleExecutor = newSingleThreadExecutor(groupedThreads("onos/app/fwd",
+                                                                   "black-hole-fixer",
+                                                                   log));
+
         cfgService.registerProperties(getClass());
         appId = coreService.registerApplication("org.onosproject.fwd");
 
@@ -204,6 +246,8 @@ public class ReactiveForwarding {
         flowRuleService.removeFlowRulesById(appId);
         packetService.removeProcessor(processor);
         topologyService.removeListener(topologyListener);
+        blackHoleExecutor.shutdown();
+        blackHoleExecutor = null;
         processor = null;
         log.info("Stopped");
     }
@@ -252,153 +296,154 @@ public class ReactiveForwarding {
      */
     private void readComponentConfiguration(ComponentContext context) {
         Dictionary<?, ?> properties = context.getProperties();
-        boolean packetOutOnlyEnabled =
-                isPropertyEnabled(properties, "packetOutOnly");
-        if (packetOutOnly != packetOutOnlyEnabled) {
+
+        Boolean packetOutOnlyEnabled =
+                Tools.isPropertyEnabled(properties, "packetOutOnly");
+        if (packetOutOnlyEnabled == null) {
+            log.info("Packet-out is not configured, " +
+                     "using current value of {}", packetOutOnly);
+        } else {
             packetOutOnly = packetOutOnlyEnabled;
             log.info("Configured. Packet-out only forwarding is {}",
-                     packetOutOnly ? "enabled" : "disabled");
+                    packetOutOnly ? "enabled" : "disabled");
         }
-        boolean packetOutOfppTableEnabled =
-                isPropertyEnabled(properties, "packetOutOfppTable");
-        if (packetOutOfppTable != packetOutOfppTableEnabled) {
+
+        Boolean packetOutOfppTableEnabled =
+                Tools.isPropertyEnabled(properties, "packetOutOfppTable");
+        if (packetOutOfppTableEnabled == null) {
+            log.info("OFPP_TABLE port is not configured, " +
+                     "using current value of {}", packetOutOfppTable);
+        } else {
             packetOutOfppTable = packetOutOfppTableEnabled;
             log.info("Configured. Forwarding using OFPP_TABLE port is {}",
-                     packetOutOfppTable ? "enabled" : "disabled");
+                    packetOutOfppTable ? "enabled" : "disabled");
         }
-        boolean ipv6ForwardingEnabled =
-                isPropertyEnabled(properties, "ipv6Forwarding");
-        if (ipv6Forwarding != ipv6ForwardingEnabled) {
+
+        Boolean ipv6ForwardingEnabled =
+                Tools.isPropertyEnabled(properties, "ipv6Forwarding");
+        if (ipv6ForwardingEnabled == null) {
+            log.info("IPv6 forwarding is not configured, " +
+                     "using current value of {}", ipv6Forwarding);
+        } else {
             ipv6Forwarding = ipv6ForwardingEnabled;
             log.info("Configured. IPv6 forwarding is {}",
-                     ipv6Forwarding ? "enabled" : "disabled");
+                    ipv6Forwarding ? "enabled" : "disabled");
         }
-        boolean matchDstMacOnlyEnabled =
-                isPropertyEnabled(properties, "matchDstMacOnly");
-        if (matchDstMacOnly != matchDstMacOnlyEnabled) {
+
+        Boolean matchDstMacOnlyEnabled =
+                Tools.isPropertyEnabled(properties, "matchDstMacOnly");
+        if (matchDstMacOnlyEnabled == null) {
+            log.info("Match Dst MAC is not configured, " +
+                     "using current value of {}", matchDstMacOnly);
+        } else {
             matchDstMacOnly = matchDstMacOnlyEnabled;
             log.info("Configured. Match Dst MAC Only is {}",
-                     matchDstMacOnly ? "enabled" : "disabled");
+                    matchDstMacOnly ? "enabled" : "disabled");
         }
-        boolean matchVlanIdEnabled =
-                isPropertyEnabled(properties, "matchVlanId");
-        if (matchVlanId != matchVlanIdEnabled) {
+
+        Boolean matchVlanIdEnabled =
+                Tools.isPropertyEnabled(properties, "matchVlanId");
+        if (matchVlanIdEnabled == null) {
+            log.info("Matching Vlan ID is not configured, " +
+                     "using current value of {}", matchVlanId);
+        } else {
             matchVlanId = matchVlanIdEnabled;
             log.info("Configured. Matching Vlan ID is {}",
-                     matchVlanId ? "enabled" : "disabled");
+                    matchVlanId ? "enabled" : "disabled");
         }
-        boolean matchIpv4AddressEnabled =
-                isPropertyEnabled(properties, "matchIpv4Address");
-        if (matchIpv4Address != matchIpv4AddressEnabled) {
+
+        Boolean matchIpv4AddressEnabled =
+                Tools.isPropertyEnabled(properties, "matchIpv4Address");
+        if (matchIpv4AddressEnabled == null) {
+            log.info("Matching IPv4 Address is not configured, " +
+                     "using current value of {}", matchIpv4Address);
+        } else {
             matchIpv4Address = matchIpv4AddressEnabled;
             log.info("Configured. Matching IPv4 Addresses is {}",
-                     matchIpv4Address ? "enabled" : "disabled");
+                    matchIpv4Address ? "enabled" : "disabled");
         }
-        boolean matchIpv4DscpEnabled =
-                isPropertyEnabled(properties, "matchIpv4Dscp");
-        if (matchIpv4Dscp != matchIpv4DscpEnabled) {
+
+        Boolean matchIpv4DscpEnabled =
+                Tools.isPropertyEnabled(properties, "matchIpv4Dscp");
+        if (matchIpv4DscpEnabled == null) {
+            log.info("Matching IPv4 DSCP and ECN is not configured, " +
+                     "using current value of {}", matchIpv4Dscp);
+        } else {
             matchIpv4Dscp = matchIpv4DscpEnabled;
             log.info("Configured. Matching IPv4 DSCP and ECN is {}",
-                     matchIpv4Dscp ? "enabled" : "disabled");
+                    matchIpv4Dscp ? "enabled" : "disabled");
         }
-        boolean matchIpv6AddressEnabled =
-                isPropertyEnabled(properties, "matchIpv6Address");
-        if (matchIpv6Address != matchIpv6AddressEnabled) {
+
+        Boolean matchIpv6AddressEnabled =
+                Tools.isPropertyEnabled(properties, "matchIpv6Address");
+        if (matchIpv6AddressEnabled == null) {
+            log.info("Matching IPv6 Address is not configured, " +
+                     "using current value of {}", matchIpv6Address);
+        } else {
             matchIpv6Address = matchIpv6AddressEnabled;
             log.info("Configured. Matching IPv6 Addresses is {}",
-                     matchIpv6Address ? "enabled" : "disabled");
+                    matchIpv6Address ? "enabled" : "disabled");
         }
-        boolean matchIpv6FlowLabelEnabled =
-                isPropertyEnabled(properties, "matchIpv6FlowLabel");
-        if (matchIpv6FlowLabel != matchIpv6FlowLabelEnabled) {
+
+        Boolean matchIpv6FlowLabelEnabled =
+                Tools.isPropertyEnabled(properties, "matchIpv6FlowLabel");
+        if (matchIpv6FlowLabelEnabled == null) {
+            log.info("Matching IPv6 FlowLabel is not configured, " +
+                     "using current value of {}", matchIpv6FlowLabel);
+        } else {
             matchIpv6FlowLabel = matchIpv6FlowLabelEnabled;
             log.info("Configured. Matching IPv6 FlowLabel is {}",
-                     matchIpv6FlowLabel ? "enabled" : "disabled");
+                    matchIpv6FlowLabel ? "enabled" : "disabled");
         }
-        boolean matchTcpUdpPortsEnabled =
-                isPropertyEnabled(properties, "matchTcpUdpPorts");
-        if (matchTcpUdpPorts != matchTcpUdpPortsEnabled) {
+
+        Boolean matchTcpUdpPortsEnabled =
+                Tools.isPropertyEnabled(properties, "matchTcpUdpPorts");
+        if (matchTcpUdpPortsEnabled == null) {
+            log.info("Matching TCP/UDP fields is not configured, " +
+                     "using current value of {}", matchTcpUdpPorts);
+        } else {
             matchTcpUdpPorts = matchTcpUdpPortsEnabled;
             log.info("Configured. Matching TCP/UDP fields is {}",
-                     matchTcpUdpPorts ? "enabled" : "disabled");
+                    matchTcpUdpPorts ? "enabled" : "disabled");
         }
-        boolean matchIcmpFieldsEnabled =
-                isPropertyEnabled(properties, "matchIcmpFields");
-        if (matchIcmpFields != matchIcmpFieldsEnabled) {
+
+        Boolean matchIcmpFieldsEnabled =
+                Tools.isPropertyEnabled(properties, "matchIcmpFields");
+        if (matchIcmpFieldsEnabled == null) {
+            log.info("Matching ICMP (v4 and v6) fields is not configured, " +
+                     "using current value of {}", matchIcmpFields);
+        } else {
             matchIcmpFields = matchIcmpFieldsEnabled;
             log.info("Configured. Matching ICMP (v4 and v6) fields is {}",
-                     matchIcmpFields ? "enabled" : "disabled");
-        }
-        Integer flowTimeoutConfigured =
-                getIntegerProperty(properties, "flowTimeout");
-        if (flowTimeoutConfigured == null) {
-            flowTimeout = DEFAULT_TIMEOUT;
-            log.info("Flow Timeout is not configured, default value is {}",
-                     flowTimeout);
-        } else {
-            flowTimeout = flowTimeoutConfigured;
-            log.info("Configured. Flow Timeout is configured to {}",
-                     flowTimeout, " seconds");
-        }
-        Integer flowPriorityConfigured =
-                getIntegerProperty(properties, "flowPriority");
-        if (flowPriorityConfigured == null) {
-            flowPriority = DEFAULT_PRIORITY;
-            log.info("Flow Priority is not configured, default value is {}",
-                     flowPriority);
-        } else {
-            flowPriority = flowPriorityConfigured;
-            log.info("Configured. Flow Priority is configured to {}",
-                     flowPriority);
+                    matchIcmpFields ? "enabled" : "disabled");
         }
 
-        boolean ignoreIpv4McastPacketsEnabled =
-                isPropertyEnabled(properties, "ignoreIpv4McastPackets");
-        if (ignoreIpv4McastPackets != ignoreIpv4McastPacketsEnabled) {
+        Boolean ignoreIpv4McastPacketsEnabled =
+                Tools.isPropertyEnabled(properties, "ignoreIpv4McastPackets");
+        if (ignoreIpv4McastPacketsEnabled == null) {
+            log.info("Ignore IPv4 multi-cast packet is not configured, " +
+                     "using current value of {}", ignoreIpv4McastPackets);
+        } else {
             ignoreIpv4McastPackets = ignoreIpv4McastPacketsEnabled;
             log.info("Configured. Ignore IPv4 multicast packets is {}",
-                     ignoreIpv4McastPackets ? "enabled" : "disabled");
+                    ignoreIpv4McastPackets ? "enabled" : "disabled");
         }
-    }
+        Boolean recordMetricsEnabled =
+                Tools.isPropertyEnabled(properties, "recordMetrics");
+        if (recordMetricsEnabled == null) {
+            log.info("IConfigured. Ignore record metrics  is {} ," +
+                    "using current value of {}", recordMetrics);
+        } else {
+            recordMetrics = recordMetricsEnabled;
+            log.info("Configured. record metrics  is {}",
+                    recordMetrics ? "enabled" : "disabled");
+        }
 
-    /**
-     * Get Integer property from the propertyName
-     * Return null if propertyName is not found.
-     *
-     * @param properties   properties to be looked up
-     * @param propertyName the name of the property to look up
-     * @return value when the propertyName is defined or return null
-     */
-    private static Integer getIntegerProperty(Dictionary<?, ?> properties,
-                                              String propertyName) {
-        Integer value = null;
-        try {
-            String s = Tools.get(properties, propertyName);
-            value = isNullOrEmpty(s) ? value : Integer.parseInt(s);
-        } catch (NumberFormatException | ClassCastException e) {
-            value = null;
-        }
-        return value;
-    }
+        flowTimeout = Tools.getIntegerProperty(properties, "flowTimeout", DEFAULT_TIMEOUT);
+        log.info("Configured. Flow Timeout is configured to {} seconds", flowTimeout);
 
-    /**
-     * Check property name is defined and set to true.
-     *
-     * @param properties   properties to be looked up
-     * @param propertyName the name of the property to look up
-     * @return true when the propertyName is defined and set to true
-     */
-    private static boolean isPropertyEnabled(Dictionary<?, ?> properties,
-                                             String propertyName) {
-        boolean enabled = false;
-        try {
-            String flag = Tools.get(properties, propertyName);
-            enabled = isNullOrEmpty(flag) ? enabled : flag.equals("true");
-        } catch (ClassCastException e) {
-            // No propertyName defined.
-            enabled = false;
-        }
-        return enabled;
+        flowPriority = Tools.getIntegerProperty(properties, "flowPriority", DEFAULT_PRIORITY);
+        log.info("Configured. Flow Priority is configured to {}", flowPriority);
     }
 
     /**
@@ -422,20 +467,28 @@ public class ReactiveForwarding {
                 return;
             }
 
+            MacAddress macAddress = ethPkt.getSourceMAC();
+            ReactiveForwardMetrics macMetrics = null;
+            macMetrics = createCounter(macAddress);
+            inPacket(macMetrics);
+
             // Bail if this is deemed to be a control packet.
             if (isControlPacket(ethPkt)) {
+                droppedPacket(macMetrics);
                 return;
             }
 
             // Skip IPv6 multicast packet when IPv6 forward is disabled.
             if (!ipv6Forwarding && isIpv6Multicast(ethPkt)) {
+                droppedPacket(macMetrics);
                 return;
             }
 
             HostId id = HostId.hostId(ethPkt.getDestinationMAC());
 
-            // Do not process link-local addresses in any way.
-            if (id.mac().isLinkLocal()) {
+            // Do not process LLDP MAC address in any way.
+            if (id.mac().isLldp()) {
+                droppedPacket(macMetrics);
                 return;
             }
 
@@ -449,7 +502,7 @@ public class ReactiveForwarding {
             // Do we know who this is for? If not, flood and bail.
             Host dst = hostService.getHost(id);
             if (dst == null) {
-                flood(context);
+                flood(context, macMetrics);
                 return;
             }
 
@@ -457,7 +510,7 @@ public class ReactiveForwarding {
             // simply forward out to the destination and bail.
             if (pkt.receivedFrom().deviceId().equals(dst.location().deviceId())) {
                 if (!context.inPacket().receivedFrom().port().equals(dst.location().port())) {
-                    installRule(context, dst.location().port());
+                    installRule(context, dst.location().port(), macMetrics);
                 }
                 return;
             }
@@ -470,7 +523,7 @@ public class ReactiveForwarding {
                                              dst.location().deviceId());
             if (paths.isEmpty()) {
                 // If there are no paths, flood and bail.
-                flood(context);
+                flood(context, macMetrics);
                 return;
             }
 
@@ -480,12 +533,12 @@ public class ReactiveForwarding {
             if (path == null) {
                 log.warn("Don't know where to go from here {} for {} -> {}",
                          pkt.receivedFrom(), ethPkt.getSourceMAC(), ethPkt.getDestinationMAC());
-                flood(context);
+                flood(context, macMetrics);
                 return;
             }
 
             // Otherwise forward and be done with it.
-            installRule(context, path.src().port());
+            installRule(context, path.src().port(), macMetrics);
         }
 
     }
@@ -504,34 +557,36 @@ public class ReactiveForwarding {
     // Selects a path from the given set that does not lead back to the
     // specified port if possible.
     private Path pickForwardPathIfPossible(Set<Path> paths, PortNumber notToPort) {
-        Path lastPath = null;
         for (Path path : paths) {
-            lastPath = path;
             if (!path.src().port().equals(notToPort)) {
                 return path;
             }
         }
-        return lastPath;
+        return null;
     }
 
     // Floods the specified packet if permissible.
-    private void flood(PacketContext context) {
+    private void flood(PacketContext context, ReactiveForwardMetrics macMetrics) {
         if (topologyService.isBroadcastPoint(topologyService.currentTopology(),
                                              context.inPacket().receivedFrom())) {
-            packetOut(context, PortNumber.FLOOD);
+            packetOut(context, PortNumber.FLOOD, macMetrics);
         } else {
             context.block();
         }
     }
 
     // Sends a packet out the specified port.
-    private void packetOut(PacketContext context, PortNumber portNumber) {
+    private void packetOut(PacketContext context, PortNumber portNumber, ReactiveForwardMetrics macMetrics) {
+        replyPacket(macMetrics);
         context.treatmentBuilder().setOutput(portNumber);
         context.send();
     }
 
     // Install a rule forwarding the packet to the specified port.
-    private void installRule(PacketContext context, PortNumber portNumber) {
+    private void installRule(PacketContext context, PortNumber portNumber, ReactiveForwardMetrics macMetrics) {
+        VirtualNetwork vnet = null;
+
+        vnet = vnetService.getVirtualNetwork(NetworkId.networkId(Long.valueOf(1).longValue()));
         //
         // We don't support (yet) buffer IDs in the Flow Service so
         // packet out first.
@@ -541,7 +596,7 @@ public class ReactiveForwarding {
 
         // If PacketOutOnly or ARP packet than forward directly to output port
         if (packetOutOnly || inPkt.getEtherType() == Ethernet.TYPE_ARP) {
-            packetOut(context, portNumber);
+            packetOut(context, portNumber, macMetrics);
             return;
         }
 
@@ -662,7 +717,7 @@ public class ReactiveForwarding {
 
         flowObjectiveService.forward(context.inPacket().receivedFrom().deviceId(),
                                      forwardingObjective);
-
+        forwardPacket(macMetrics);
         //
         // If packetOutOfppTable
         //  Send packet back to the OpenFlow pipeline to match installed flow
@@ -670,11 +725,12 @@ public class ReactiveForwarding {
         //  Send packet direction on the appropriate port
         //
         if (packetOutOfppTable) {
-            packetOut(context, PortNumber.TABLE);
+            packetOut(context, PortNumber.TABLE, macMetrics);
         } else {
-            packetOut(context, portNumber);
+            packetOut(context, portNumber, macMetrics);
         }
     }
+
 
     private class InternalTopologyListener implements TopologyListener {
         @Override
@@ -684,8 +740,8 @@ public class ReactiveForwarding {
                 reasons.forEach(re -> {
                     if (re instanceof LinkEvent) {
                         LinkEvent le = (LinkEvent) re;
-                        if (le.type() == LinkEvent.Type.LINK_REMOVED) {
-                            fixBlackhole(le.subject().src());
+                        if (le.type() == LinkEvent.Type.LINK_REMOVED && blackHoleExecutor != null) {
+                            blackHoleExecutor.submit(() -> fixBlackhole(le.subject().src()));
                         }
                     }
                 });
@@ -706,7 +762,7 @@ public class ReactiveForwarding {
             if (srcHost != null && dstHost != null) {
                 DeviceId srcId = srcHost.location().deviceId();
                 DeviceId dstId = dstHost.location().deviceId();
-                log.trace("SRC ID is " + srcId + ", DST ID is " + dstId);
+                log.trace("SRC ID is {}, DST ID is {}", srcId, dstId);
 
                 cleanFlowRules(sd, egress.deviceId());
 
@@ -750,8 +806,8 @@ public class ReactiveForwarding {
 
     // Removes flow rules off specified device with specific SrcDstPair
     private void cleanFlowRules(SrcDstPair pair, DeviceId id) {
-        log.trace("Searching for flow rules to remove from: " + id);
-        log.trace("Removing flows w/ SRC=" + pair.src + ", DST=" + pair.dst);
+        log.trace("Searching for flow rules to remove from: {}", id);
+        log.trace("Removing flows w/ SRC={}, DST={}", pair.src, pair.dst);
         for (FlowEntry r : flowRuleService.getFlowEntries(id)) {
             boolean matchesSrc = false, matchesDst = false;
             for (Instruction i : r.treatment().allInstructions()) {
@@ -771,7 +827,7 @@ public class ReactiveForwarding {
                 }
             }
             if (matchesDst && matchesSrc) {
-                log.trace("Removed flow rule from device: " + id);
+                log.trace("Removed flow rule from device: {}", id);
                 flowRuleService.removeFlowRules((FlowRule) r);
             }
         }
@@ -795,8 +851,64 @@ public class ReactiveForwarding {
         return builder.build();
     }
 
-    // Returns set of flow entries which were created by this application and
-    // which egress from the specified connection port
+    private ReactiveForwardMetrics createCounter(MacAddress macAddress) {
+        ReactiveForwardMetrics macMetrics = null;
+        if (recordMetrics) {
+            macMetrics = metrics.compute(macAddress, (key, existingValue) -> {
+                if (existingValue == null) {
+                    return new ReactiveForwardMetrics(0L, 0L, 0L, 0L, macAddress);
+                } else {
+                    return existingValue;
+                }
+            });
+        }
+        return macMetrics;
+    }
+
+    private void  forwardPacket(ReactiveForwardMetrics macmetrics) {
+        if (recordMetrics) {
+            macmetrics.incrementForwardedPacket();
+            metrics.put(macmetrics.getMacAddress(), macmetrics);
+        }
+    }
+
+    private void inPacket(ReactiveForwardMetrics macmetrics) {
+        if (recordMetrics) {
+            macmetrics.incrementInPacket();
+            metrics.put(macmetrics.getMacAddress(), macmetrics);
+        }
+    }
+
+    private void replyPacket(ReactiveForwardMetrics macmetrics) {
+        if (recordMetrics) {
+            macmetrics.incremnetReplyPacket();
+            metrics.put(macmetrics.getMacAddress(), macmetrics);
+        }
+    }
+
+    private void droppedPacket(ReactiveForwardMetrics macmetrics) {
+        if (recordMetrics) {
+            macmetrics.incrementDroppedPacket();
+            metrics.put(macmetrics.getMacAddress(), macmetrics);
+        }
+    }
+
+    public EventuallyConsistentMap<MacAddress, ReactiveForwardMetrics> getMacAddress() {
+        return metrics;
+    }
+
+    public void printMetric(MacAddress mac) {
+        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.println(" MACADDRESS \t\t\t\t\t\t Metrics");
+        if (mac != null) {
+            System.out.println(" " + mac + " \t\t\t " + metrics.get(mac));
+        } else {
+            for (MacAddress key : metrics.keySet()) {
+                System.out.println(" " + key + " \t\t\t " + metrics.get(key));
+            }
+        }
+    }
+
     private Set<FlowEntry> getFlowRulesFrom(ConnectPoint egress) {
         ImmutableSet.Builder<FlowEntry> builder = ImmutableSet.builder();
         flowRuleService.getFlowEntries(egress.deviceId()).forEach(r -> {

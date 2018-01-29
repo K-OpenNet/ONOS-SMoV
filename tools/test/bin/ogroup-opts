@@ -12,15 +12,17 @@ function _ogroup-opts () {
 complete -F _ogroup-opts onos-group
 
 
-# Tab completion settings for stc
+# Tab completion settings for stc & stw
 function _stc-opts () {
   local cur=${COMP_WORDS[COMP_CWORD]}
-  if [ $COMP_CWORD -eq 1 ]; then
+  if [ $COMP_CWORD -ge 1 ]; then
     COMPREPLY=( $( compgen -W "$(cd $ONOS_ROOT/tools/test/scenarios && ls -1 | sed 's/.xml//g')" -- $cur ) )
   fi
 }
 
 complete -F _stc-opts stc
+complete -F _stc-opts stw
+complete -F _stc-opts stcs
 
 
 # Tab completion settings for stl
@@ -40,11 +42,21 @@ complete -F _stl-opts stl
 function _cell-opts () {
   local cur=${COMP_WORDS[COMP_CWORD]}
   if [ $COMP_CWORD -eq 1 ]; then
-    COMPREPLY=( $( compgen -W "$(cd $ONOS_ROOT/tools/test/cells && ls -1)" -- $cur ) )
+    COMPREPLY=( $( compgen -W "$(cd $ONOS_ROOT/tools/test/cells && ls -1) borrow return status" -- $cur ) )
   fi
 }
 
 complete -F _cell-opts cell vicell
+
+# Tab completion settings for topo recipes
+function _topo-opts () {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  if [ $COMP_CWORD -eq 1 ]; then
+    COMPREPLY=( $( compgen -W "$(cd $ONOS_ROOT/tools/test/topos && ls -1 *.recipe | sed 's/\.recipe//g')" -- $cur ) )
+  fi
+}
+
+complete -F _topo-opts topo
 
 
 # Tab completion settings for onos-create-app.

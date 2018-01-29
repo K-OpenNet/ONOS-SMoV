@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,10 @@ import org.onosproject.dhcp.DhcpService;
 @Command(scope = "onos", name = "dhcp-lease",
         description = "Lists all the default lease parameters offered by the DHCP Server")
 public class DhcpLeaseDetails extends AbstractShellCommand {
-
     private static final String DHCP_LEASE_FORMAT = "Lease Time: %ds\nRenewal Time: %ds\nRebinding Time: %ds";
 
     @Override
     protected void execute() {
-
         DhcpService dhcpService = AbstractShellCommand.get(DhcpService.class);
         int leaseTime = dhcpService.getLeaseTime();
         int renewTime = dhcpService.getRenewalTime();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import com.google.common.collect.Ordering;
 import com.google.common.collect.TreeMultimap;
 import org.onlab.metrics.MetricsService;
 import org.onosproject.rest.AbstractWebResource;
+import org.onlab.util.ItemNotFoundException;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -44,14 +45,16 @@ import java.util.Map;
 @Path("metrics")
 public class MetricsWebResource extends AbstractWebResource {
 
-    final MetricsService service = get(MetricsService.class);
-    final ObjectNode root = mapper().createObjectNode();
+    private static final String E_METRIC_NAME_NOT_FOUND = "Metric Name is not found";
+
+    private final MetricsService service = get(MetricsService.class);
+    private final ObjectNode root = mapper().createObjectNode();
 
     /**
-     * Get stats information of all metrics. Returns array of all information for
+     * Gets stats information of all metrics. Returns array of all information for
      * all metrics.
      *
-     * @return metric information as array
+     * @return 200 OK with metric information as array
      * @onos.rsModel Metrics
      */
     @GET
@@ -69,11 +72,11 @@ public class MetricsWebResource extends AbstractWebResource {
     }
 
     /**
-     * Get stats information of a metric. Returns array of all information for the
+     * Gets stats information of a metric. Returns array of all information for the
      * specified metric.
      *
      * @param metricName metric name
-     * @return metric information as array
+     * @return 200 OK with metric information as array
      * @onos.rsModel Metric
      */
     @GET
@@ -83,6 +86,10 @@ public class MetricsWebResource extends AbstractWebResource {
         ObjectNode metricNode = root.putObject("metric");
         MetricFilter filter = metricName != null ? (name, metric) -> name.equals(metricName) : MetricFilter.ALL;
         TreeMultimap<String, Metric> matched = listMetrics(service, filter);
+
+        if (matched.isEmpty()) {
+            throw new ItemNotFoundException(E_METRIC_NAME_NOT_FOUND);
+        }
 
         matched.asMap().get(metricName).forEach(m -> {
             metricNode.set(metricName, codec(Metric.class).encode(m, this));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,14 @@ package org.onosproject.faultmanagement.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import java.io.IOException;
 import java.io.InputStream;
+
 import org.onosproject.rest.AbstractWebResource;
 
 import javax.ws.rs.core.Response;
+
 import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
 import org.onosproject.incubator.net.faultmanagement.alarm.AlarmId;
 
@@ -34,10 +37,12 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+
 import org.apache.commons.lang.StringUtils;
 import org.onosproject.incubator.net.faultmanagement.alarm.AlarmService;
 import org.onosproject.net.DeviceId;
 import org.slf4j.Logger;
+
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -46,7 +51,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 @Path("alarms")
 public class AlarmsWebResource extends AbstractWebResource {
 
-    public static final String ALARM_NOT_FOUND = "Alarm is not found";
+    private static final String ALARM_NOT_FOUND = "Alarm is not found";
 
     private final Logger log = getLogger(getClass());
 
@@ -54,16 +59,16 @@ public class AlarmsWebResource extends AbstractWebResource {
      * Get alarms. Returns a list of alarms
      *
      * @param includeCleared (optional) include recently cleared alarms in response
-     * @param devId (optional) include only for specified device
+     * @param devId          (optional) include only for specified device
      * @return JSON encoded set of alarms
      */
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response getAlarms(@DefaultValue("false") @QueryParam("includeCleared") boolean includeCleared,
-            @DefaultValue("") @QueryParam("devId") String devId
+                              @DefaultValue("") @QueryParam("devId") String devId
     ) {
 
-        log.info("Requesting all alarms, includeCleared={}", includeCleared);
+        log.debug("Requesting all alarms, includeCleared={}", includeCleared);
         AlarmService service = get(AlarmService.class);
 
         Iterable<Alarm> alarms;
@@ -90,9 +95,9 @@ public class AlarmsWebResource extends AbstractWebResource {
     @Path("{id}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response getAlarm(@PathParam("id") String id) {
-        log.info("HTTP GET alarm for id={}", id);
+        log.debug("HTTP GET alarm for id={}", id);
 
-        AlarmId alarmId = toAlarmId(id);
+        AlarmId alarmId = AlarmId.alarmId(id);
         Alarm alarm = get(AlarmService.class).getAlarm(alarmId);
 
         ObjectNode result = new ObjectMapper().createObjectNode();
@@ -105,7 +110,7 @@ public class AlarmsWebResource extends AbstractWebResource {
      * been updated since the REST client last retrieved the alarm being updated.
      *
      * @param alarmIdPath alarm id path
-     * @param stream input JSON
+     * @param stream      input JSON
      * @return updated JSON encoded alarm
      */
     @PUT
@@ -113,19 +118,19 @@ public class AlarmsWebResource extends AbstractWebResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response update(@PathParam("alarm_id") String alarmIdPath, InputStream stream) {
-        log.info("PUT NEW ALARM at /{}", alarmIdPath);
+        log.debug("PUT NEW ALARM at /{}", alarmIdPath);
 
         try {
             ObjectNode jsonTree = (ObjectNode) mapper().readTree(stream);
-            log.info("jsonTree={}", jsonTree);
+            log.debug("jsonTree={}", jsonTree);
 
             Alarm alarm = new AlarmCodec().decode(jsonTree, this);
 
             AlarmService service = get(AlarmService.class);
 
-            if (Long.parseLong(alarmIdPath) != alarm.id().fingerprint()) {
-                throw new IllegalArgumentException("id in path is " + Long.parseLong(alarmIdPath)
-                        + " but payload uses id=" + alarm.id().fingerprint());
+            if (!alarmIdPath.equals(alarm.id().toString())) {
+                throw new IllegalArgumentException("id in path is " + alarmIdPath
+                                                           + " but payload uses id=" + alarm.id().toString());
 
             }
             Alarm updated = service.updateBookkeepingFields(
@@ -137,15 +142,6 @@ public class AlarmsWebResource extends AbstractWebResource {
         } catch (IOException ioe) {
             throw new IllegalArgumentException(ioe);
         }
-    }
-
-    private static AlarmId toAlarmId(String id) {
-        try {
-            return AlarmId.alarmId(Long.parseLong(id));
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException("Alarm id should be numeric", ex);
-        }
-
     }
 
 }

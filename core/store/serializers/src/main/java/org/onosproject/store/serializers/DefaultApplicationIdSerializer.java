@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,14 +36,14 @@ public final class DefaultApplicationIdSerializer extends Serializer<DefaultAppl
 
     @Override
     public void write(Kryo kryo, Output output, DefaultApplicationId object) {
-        kryo.writeObject(output, object.id());
-        kryo.writeObject(output, object.name());
+        output.writeShort(object.id());
+        output.writeString(object.name());
     }
 
     @Override
     public DefaultApplicationId read(Kryo kryo, Input input, Class<DefaultApplicationId> type) {
-        short id = kryo.readObject(input, Short.class);
-        String name = kryo.readObject(input, String.class);
+        short id = input.readShort();
+        String name = input.readString();
         return new DefaultApplicationId(id, name);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ describe('factory: view/topo/topoForce.js', function() {
     var $log, fs, tfs, bns;
 
     beforeEach(module('ovTopo', 'onosUtil', 'onosLayer', 'ngRoute', 'onosNav',
-        'onosWidget'));
+        'onosWidget', 'onosMast'));
 
     beforeEach(inject(function (_$log_, FnService,
                                 TopoForceService, ButtonService) {
@@ -41,11 +41,14 @@ describe('factory: view/topo/topoForce.js', function() {
 
             'updateDeviceColors', 'toggleHosts',
             'togglePorts', 'toggleOffline',
-            'cycleDeviceLabels', 'unpin', 'showMastership', 'showBadLinks',
+            'cycleDeviceLabels', 'cycleHostLabels', 'unpin',
+            'showMastership', 'showBadLinks', 'setNodeScale',
 
-            'addDevice', 'updateDevice', 'removeDevice',
-            'addHost', 'updateHost', 'removeHost',
-            'addLink', 'updateLink', 'removeLink'
+            'resetAllLocations', 'addDevice', 'updateDevice', 'removeDevice',
+            'addHost', 'updateHost', 'moveHost', 'removeHost',
+            'addLink', 'updateLink', 'removeLink', 'topoStartDone',
+
+            'setLionBundle',
         ])).toBeTruthy();
     });
 

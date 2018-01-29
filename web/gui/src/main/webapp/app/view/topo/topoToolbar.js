@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,11 @@
     //  getActionEntry
     //  setUpKeys
 
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#ttbar#' + x + '#';
+    };
+
     // internal state
     var toolbar, keyData, cachedState, thirdRow, ovRset, ovIndex;
 
@@ -36,49 +41,51 @@
     var name = 'topo-tbar',
         cooktag = 'topo_prefs',
         soa = 'switchOverlayActions: ',
-        selOver = 'Select overlay here &#x21e7;',
+        selOver = '************',
         defaultOverlay = 'traffic';
 
 
     // key to button mapping data
     var k2b = {
-        O: { id: 'summary-tog', gid: 'summary', isel: true},
-        I: { id: 'instance-tog', gid: 'uiAttached', isel: true },
-        D: { id: 'details-tog', gid: 'details', isel: true },
-        H: { id: 'hosts-tog', gid: 'endstation', isel: false },
-        M: { id: 'offline-tog', gid: 'switch', isel: true },
-        P: { id: 'ports-tog', gid: 'ports', isel: true },
-        B: { id: 'bkgrnd-tog', gid: 'map', isel: false },
-        S: { id: 'sprite-tog', gid: 'cloud', isel: false },
+        O: { id: 'summary-tog', gid: 'm_summary', isel: true },
+        I: { id: 'instance-tog', gid: 'm_uiAttached', isel: true },
+        D: { id: 'details-tog', gid: 'm_details', isel: true },
+        H: { id: 'hosts-tog', gid: 'm_endstation', isel: false },
+        M: { id: 'offline-tog', gid: 'm_switch', isel: true },
+        P: { id: 'ports-tog', gid: 'm_ports', isel: true },
+        B: { id: 'bkgrnd-tog', gid: 'm_map', isel: false },
+        G: { id: 'bkgrnd-sel', gid: 'm_selectMap' },
+        S: { id: 'sprite-tog', gid: 'm_cloud', isel: false },
 
-        // TODO: add reset-node-locations button to toolbar
-        //X: { id: 'nodelock-tog', gid: 'lock', isel: false },
-        Z: { id: 'oblique-tog', gid: 'oblique', isel: false },
-        N: { id: 'filters-btn', gid: 'filters' },
-        L: { id: 'cycleLabels-btn', gid: 'cycleLabels' },
-        R: { id: 'resetZoom-btn', gid: 'resetZoom' },
+        Z: { id: 'oblique-tog', gid: 'm_oblique', isel: false },
+        N: { id: 'filters-btn', gid: 'm_filters' },
+        L: { id: 'cycleLabels-btn', gid: 'm_cycleLabels' },
+        R: { id: 'resetZoom-btn', gid: 'm_resetZoom' },
 
-        E: { id: 'eqMaster-btn', gid: 'eqMaster' }
+        E: { id: 'eqMaster-btn', gid: 'm_eqMaster' },
     };
 
     var prohibited = [
         'T', 'backSlash', 'slash',
-        'X' // needed until we re-instate X above.
+        'X', // needed until we re-instate X above.
     ];
     prohibited = prohibited.concat(d3.map(k2b).keys());
 
 
     // initial toggle state: default settings and tag to key mapping
     var defaultPrefsState = {
-            summary: 1,
             insts: 1,
+            summary: 1,
             detail: 1,
             hosts: 0,
             offdev: 1,
+            dlbls: 0,
+            hlbls: 0,
             porthl: 1,
             bg: 0,
             spr: 0,
-            toolbar: 0
+            ovid: 'traffic', // default to traffic overlay
+            toolbar: 0,
         },
         prefsMap = {
             summary: 'O',
@@ -88,13 +95,12 @@
             offdev: 'M',
             porthl: 'P',
             bg: 'B',
-            spr: 'S'
+            spr: 'S',
             // NOTE: toolbar state is handled separately
         };
 
     function init(_api_) {
         api = _api_;
-
         // retrieve initial toggle button settings from user prefs
         setInitToggleState();
     }
@@ -104,7 +110,9 @@
     }
 
     function setInitToggleState() {
-        cachedState = ps.asNumbers(ps.getPrefs(cooktag));
+        cachedState = ps.asNumbers(
+            ps.getPrefs(cooktag, defaultPrefsState), ['ovid'], true
+        );
         $log.debug('TOOLBAR---- read prefs state:', cachedState);
 
         if (!cachedState) {
@@ -122,22 +130,37 @@
     function initKeyData() {
         // TODO: use angular forEach instead of d3.map
         keyData = d3.map(k2b);
-        keyData.forEach(function(key, value) {
-            var data = api.getActionEntry(key);
-            value.cb = data[0];                     // on-click callback
-            value.tt = data[1] + ' (' + key + ')';  // tooltip
+        keyData.forEach(function (key, value) {
+            var data = api.getActionEntry(key),
+                ttfn = data[1]; // tooltip-possibly-a-function
+
+            value.key = key;
+            value.cb = data[0]; // on-click callback
+
+            // tooltip function invoked at the time the tooltip is displayed
+            value.tt = function () {
+                return fs.isF(ttfn) ? ttfn() : '' + ttfn;
+            };
         });
+    }
+
+    // returns a no-args function that returns the tooltip text
+    function deferredText(v) {
+        // this function will get invoked at the time the tooltip is displayed:
+        return function () {
+            return (fs.isF(v.tt) ? v.tt() : v.tt) + ' (' + v.key + ')';
+        };
     }
 
     function addButton(key) {
         var v = keyData.get(key);
-        v.btn = toolbar.addButton(v.id, v.gid, v.cb, v.tt);
+        v.btn = toolbar.addButton(v.id, v.gid, v.cb, deferredText(v));
     }
 
     function addToggle(key, suppressIfMobile) {
         var v = keyData.get(key);
         if (suppressIfMobile && fs.isMobile()) { return; }
-        v.tog = toolbar.addToggle(v.id, v.gid, v.isel, v.cb, v.tt);
+        v.tog = toolbar.addToggle(v.id, v.gid, v.isel, v.cb, deferredText(v));
     }
 
     function addFirstRow() {
@@ -150,11 +173,12 @@
         addToggle('M');
         addToggle('P', true);
         addToggle('B');
+        addButton('G');
         addToggle('S', true);
     }
 
     function addSecondRow() {
-        //addToggle('X');
+        // addToggle('X');
         addToggle('Z');
         addButton('N');
         addButton('L');
@@ -168,11 +192,11 @@
 
         // generate radio button set for overlays; start with 'none'
         var rset = [{
-                gid: 'unknown',
-                tooltip: 'No Overlay',
+                gid: 'm_unknown',
+                tooltip: topoLion('ov_tt_none'),
                 cb: function () {
                     tov.tbSelection(null, switchOverlayActions);
-                }
+                },
             }];
         ovIndex = tov.augmentRbset(rset, switchOverlayActions);
         ovRset = toolbar.addRadioSet('topo-overlays', rset);
@@ -197,6 +221,9 @@
         tds.closeDialog();
         thirdRow.clear();
 
+        // persist our choice of overlay...
+        persistTopoPrefs('ovid', oid);
+
         if (!order.length) {
             thirdRow.setText(selOver);
             thirdRow.classed('right', true);
@@ -214,7 +241,11 @@
                     value = keyBindings[key];
                     bid = oid + '-' + key;
                     gid = tov.mkGlyphId(oid, value.gid);
-                    tt = value.tt + ' (' + key + ')';
+                    tt = function () {
+                        var ttfn = value.tt,
+                            txt = fs.isF(ttfn) ? ttfn() : ttfn;
+                        return txt + ' (' + key + ')';
+                    };
                     thirdRow.addButton(bid, gid, value.cb, tt);
                 }
             });
@@ -262,12 +293,23 @@
         }
     }
 
-    function toggleToolbar() {
-        toolbar.toggle();
+    function persistTopoPrefs(key, val) {
+        var prefs = ps.getPrefs(cooktag, defaultPrefsState);
+        prefs[key] = val === undefined ? !prefs[key] : val;
+        ps.setPrefs('topo_prefs', prefs);
     }
 
-    function setDefaultOverlay() {
-        var idx = ovIndex[defaultOverlay] || 0;
+    function toggleToolbar() {
+        toolbar.toggle();
+        persistTopoPrefs('toolbar');
+    }
+
+    function selectOverlay(ovid) {
+        var idx = ovIndex[defaultOverlay] || 0,
+            pidx = (ovid === null) ? 0 : ovIndex[ovid] || -1;
+        if (pidx >= 0 && pidx < ovRset.size()) {
+            idx = pidx;
+        }
         ovRset.selectedIndex(idx);
     }
 
@@ -297,8 +339,10 @@
                 destroyToolbar: destroyToolbar,
                 keyListener: keyListener,
                 toggleToolbar: toggleToolbar,
-                setDefaultOverlay: setDefaultOverlay,
-                fnkey: fnkey
+                selectOverlay: selectOverlay,
+                defaultPrefs: defaultPrefsState,
+                fnkey: fnkey,
+                setLionBundle: function (bundle) { topoLion = bundle; },
             };
         }]);
 }());

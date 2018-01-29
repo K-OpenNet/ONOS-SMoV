@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,13 @@ public interface PortDescription extends Description {
      * @return true if the port is active and has carrier signal
      */
     boolean isEnabled();
+
+    /**
+     * Indicates whether or not the port was removed.
+     *
+     * @return true if the port is removed.
+     */
+    boolean isRemoved();
 
     /**
      * Returns the port type.

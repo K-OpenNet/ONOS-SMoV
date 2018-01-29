@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import org.onosproject.ospf.protocol.lsa.tlvtypes.RouterTlv;
 import org.onosproject.ospf.protocol.util.OspfParameters;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -192,11 +193,11 @@ public class OpaqueLsa10 extends OpaqueLsaHeader {
         }
         OpaqueLsa10 that = (OpaqueLsa10) o;
         return Objects.equal(topLevelValues, that.topLevelValues) &&
-                Objects.equal(opaqueInfo, that.opaqueInfo);
+                Arrays.equals(opaqueInfo, that.opaqueInfo);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(opaqueInfo, topLevelValues);
+        return Objects.hashCode(Arrays.hashCode(opaqueInfo), topLevelValues);
     }
 }

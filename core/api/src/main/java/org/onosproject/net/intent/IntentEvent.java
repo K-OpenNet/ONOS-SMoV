@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,12 @@ public class IntentEvent extends AbstractEvent<IntentEvent.Type, Intent> {
         /**
          * Signifies that an intent has been purged from the system.
          */
-        PURGED
+        PURGED,
+
+        /**
+         * Signifies that an intent is being reallocated.
+         */
+        REALLOCATING
     }
 
     /**
@@ -117,6 +122,9 @@ public class IntentEvent extends AbstractEvent<IntentEvent.Type, Intent> {
                 break;
             case INSTALLED:
                 type = Type.INSTALLED;
+                break;
+            case REALLOCATING:
+                type = Type.REALLOCATING;
                 break;
             case WITHDRAW_REQ:
                 type = Type.WITHDRAW_REQ;

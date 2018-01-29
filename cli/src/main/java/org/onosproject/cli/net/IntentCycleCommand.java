@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package org.onosproject.cli.net;
 
 import java.util.EnumSet;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.karaf.shell.commands.Argument;
@@ -75,8 +74,7 @@ public class IntentCycleCommand extends AbstractShellCommand
     String keyOffsetStr = null;
 
     private IntentService service;
-    private CountDownLatch latch;
-    private volatile long start, end;
+    private volatile long start;
     private int count;
     private int keyOffset;
     private long submitCounter = 0;
@@ -154,10 +152,7 @@ public class IntentCycleCommand extends AbstractShellCommand
     }
 
     private void printResults() {
-        //long delta = end - start;
-        //String text = add ? "install" : "withdraw";
         print("count: %s / %s", eventCounter, Long.valueOf(submitCounter));
-        //print("Time to %s %d intents: %d ms", text, count, delta);
     }
 
     /**

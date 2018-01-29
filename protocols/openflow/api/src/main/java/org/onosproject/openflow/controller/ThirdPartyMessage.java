@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  */
 package org.onosproject.openflow.controller;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 import org.projectfloodlight.openflow.protocol.OFMessage;
 import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.OFVersion;
 
 import com.google.common.hash.PrimitiveSink;
+
+import java.util.Arrays;
+
 /**
  * Used to support for the third party privacy flow rule.
  * it implements OFMessage interface to use exist adapter API.
@@ -61,8 +64,18 @@ public class ThirdPartyMessage implements OFMessage {
     }
 
     @Override
-    public void writeTo(ChannelBuffer channelBuffer) {
+    public void writeTo(ByteBuf byteBuf) {
      // Do nothing here for now.
+    }
+
+    @Override
+    public boolean equalsIgnoreXid(Object obj) {
+        return Arrays.equals(payLoad, ((ThirdPartyMessage) obj).payLoad());
+    }
+
+    @Override
+    public int hashCodeIgnoreXid() {
+        return payLoad.hashCode();
     }
 
     @Override

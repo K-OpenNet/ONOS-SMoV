@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -128,7 +128,7 @@ public final class VtnData {
                                       FixedIp fixedIP) {
         if (vPortStore != null) {
             List<VirtualPort> vPorts = new ArrayList<>();
-            vPortStore.values().stream().forEach(p -> {
+            vPortStore.values().forEach(p -> {
                 Iterator<FixedIp> fixedIps = p.fixedIps().iterator();
                 while (fixedIps.hasNext()) {
                     if (fixedIps.next().equals(fixedIP)) {
@@ -137,7 +137,7 @@ public final class VtnData {
                     }
                 }
             });
-            if (vPorts.size() == 0) {
+            if (vPorts.isEmpty()) {
                 return null;
             }
             return vPorts.get(0);
@@ -168,7 +168,7 @@ public final class VtnData {
                             }
                         }
                     });
-            if (vPorts.size() == 0) {
+            if (vPorts.isEmpty()) {
                 return null;
             }
             return vPorts.get(0);

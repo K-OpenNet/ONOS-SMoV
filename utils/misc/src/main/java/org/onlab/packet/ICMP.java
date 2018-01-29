@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -134,21 +134,6 @@ public class ICMP extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.icmpType = bb.get();
-        this.icmpCode = bb.get();
-        this.checksum = bb.getShort();
-
-        this.payload = new Data();
-        this.payload = this.payload.deserialize(data, bb.position(), bb.limit()
-                - bb.position());
-        this.payload.setParent(this);
-        return this;
-    }
-
     /*
      * (non-Javadoc)
      *
@@ -224,5 +209,53 @@ public class ICMP extends BasePacket {
                 .add("icmpCode", Byte.toString(icmpCode))
                 .add("checksum", Short.toString(checksum))
                 .toString();
+    }
+
+    /**
+     * Builds an ICMP reply using the supplied ICMP request.
+     *
+     * @param ethRequest the Ethernet packet containing the ICMP ECHO request
+     * @return the Ethernet packet containing the ICMP ECHO reply
+     */
+    public static Ethernet buildIcmpReply(Ethernet ethRequest) {
+
+        if (ethRequest.getEtherType() != Ethernet.TYPE_IPV4) {
+            return null;
+        }
+
+        IPv4 ipRequest = (IPv4) ethRequest.getPayload();
+
+        if (ipRequest.getProtocol() != IPv4.PROTOCOL_ICMP) {
+            return null;
+        }
+
+        Ethernet ethReply = new Ethernet();
+        IPv4 ipReply = new IPv4();
+
+        int destAddress = ipRequest.getDestinationAddress();
+        ipReply.setDestinationAddress(ipRequest.getSourceAddress());
+        ipReply.setSourceAddress(destAddress);
+        ipReply.setTtl((byte) 64);
+        ipReply.setDiffServ(ipRequest.getDiffServ());
+        ipReply.setChecksum((short) 0);
+        ipReply.setProtocol(IPv4.PROTOCOL_ICMP);
+
+        ICMP icmpRequest = (ICMP) ipRequest.getPayload();
+        ICMP icmpReply = new ICMP();
+
+        icmpReply.setPayload(icmpRequest.getPayload());
+        icmpReply.setIcmpType(ICMP.TYPE_ECHO_REPLY);
+        icmpReply.setIcmpCode(ICMP.SUBTYPE_ECHO_REPLY);
+        icmpReply.setChecksum((short) 0);
+        ipReply.setPayload(icmpReply);
+
+        ethReply.setEtherType(Ethernet.TYPE_IPV4);
+        ethReply.setVlanID(ethRequest.getVlanID());
+        ethReply.setDestinationMACAddress(ethRequest.getSourceMACAddress());
+        ethReply.setSourceMACAddress(ethRequest.getDestinationMACAddress());
+        ethReply.setPayload(ipReply);
+
+
+        return ethReply;
     }
 }

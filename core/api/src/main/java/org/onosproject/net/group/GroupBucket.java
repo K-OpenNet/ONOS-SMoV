@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,4 +77,13 @@ public interface GroupBucket {
      * @return number of bytes
      */
     long bytes();
+
+    /**
+     * Returns whether the given group bucket has the same parameters (weight,
+     * watchPort and watchGroup) as this.
+     *
+     * @param other group bucket to compare
+     * @return true if this bucket has the same parameters as other, false otherwise
+     */
+    boolean hasSameParameters(GroupBucket other);
 }

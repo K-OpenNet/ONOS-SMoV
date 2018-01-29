@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,15 @@ import java.util.stream.IntStream;
 
 import org.onlab.util.Bandwidth;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.IndexedLambda;
 import org.onosproject.net.Link;
 import org.onosproject.net.intent.Constraint;
 import org.onosproject.net.intent.constraint.AnnotationConstraint;
 import org.onosproject.net.intent.constraint.AsymmetricPathConstraint;
 import org.onosproject.net.intent.constraint.BandwidthConstraint;
-import org.onosproject.net.intent.constraint.LambdaConstraint;
+import org.onosproject.net.intent.constraint.DomainConstraint;
 import org.onosproject.net.intent.constraint.LatencyConstraint;
 import org.onosproject.net.intent.constraint.LinkTypeConstraint;
+import org.onosproject.net.intent.constraint.NonDisruptiveConstraint;
 import org.onosproject.net.intent.constraint.ObstacleConstraint;
 import org.onosproject.net.intent.constraint.WaypointConstraint;
 
@@ -37,6 +37,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import static org.onlab.util.Tools.nullIsIllegal;
+import static org.onosproject.net.intent.constraint.NonDisruptiveConstraint.nonDisruptive;
 
 /**
  * Constraint JSON decoder.
@@ -92,19 +93,6 @@ public final class DecodeConstraintCodecHelper {
                 .asDouble();
 
         return new AnnotationConstraint(key, threshold);
-    }
-
-    /**
-     * Decodes a lambda constraint.
-     *
-     * @return lambda constraint object.
-     */
-    private Constraint decodeLambdaConstraint() {
-        long lambda = nullIsIllegal(json.get(ConstraintCodec.LAMBDA),
-                ConstraintCodec.LAMBDA + ConstraintCodec.MISSING_MEMBER_MESSAGE)
-                .asLong();
-
-        return new LambdaConstraint(new IndexedLambda(lambda));
     }
 
     /**
@@ -174,6 +162,16 @@ public final class DecodeConstraintCodecHelper {
     }
 
     /**
+     * Decodes a domain constraint.
+     *
+     * @return domain constraint object.
+     */
+    private Constraint decodeDomainConstraint() {
+        return DomainConstraint.domain();
+    }
+
+
+    /**
      * Decodes a bandwidth constraint.
      *
      * @return bandwidth constraint object.
@@ -184,6 +182,15 @@ public final class DecodeConstraintCodecHelper {
                 .asDouble();
 
         return new BandwidthConstraint(Bandwidth.bps(bandwidth));
+    }
+
+    /**
+     * Decodes a non-disruptive reallocation constraint.
+     *
+     * @return non-disruptive reallocation constraint object.
+     */
+    private Constraint decodeNonDisruptiveConstraint() {
+        return nonDisruptive();
     }
 
     /**
@@ -198,8 +205,6 @@ public final class DecodeConstraintCodecHelper {
 
         if (type.equals(BandwidthConstraint.class.getSimpleName())) {
             return decodeBandwidthConstraint();
-        } else if (type.equals(LambdaConstraint.class.getSimpleName())) {
-            return decodeLambdaConstraint();
         } else if (type.equals(LinkTypeConstraint.class.getSimpleName())) {
             return decodeLinkTypeConstraint();
         } else if (type.equals(AnnotationConstraint.class.getSimpleName())) {
@@ -212,10 +217,10 @@ public final class DecodeConstraintCodecHelper {
             return decodeWaypointConstraint();
         } else if (type.equals(AsymmetricPathConstraint.class.getSimpleName())) {
             return decodeAsymmetricPathConstraint();
-        } else if (type.equals(LinkTypeConstraint.class.getSimpleName())) {
-            return decodeLinkTypeConstraint();
-        } else if (type.equals(AnnotationConstraint.class.getSimpleName())) {
-            return decodeAnnotationConstraint();
+        } else if (type.equals(DomainConstraint.class.getSimpleName())) {
+            return decodeDomainConstraint();
+        } else if (type.equals(NonDisruptiveConstraint.class.getSimpleName())) {
+            return decodeNonDisruptiveConstraint();
         }
         throw new IllegalArgumentException("Instruction type "
                 + type + " is not supported");

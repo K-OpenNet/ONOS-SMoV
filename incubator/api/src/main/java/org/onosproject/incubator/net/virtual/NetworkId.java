@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package org.onosproject.incubator.net.virtual;
 import com.google.common.annotations.Beta;
 import org.onlab.util.Identifier;
 
+import java.util.Objects;
+
 /**
  * Representation of network identity.
  */
@@ -33,6 +35,15 @@ public final class NetworkId extends Identifier<Long> {
      * Represents the underlying physical network.
      */
     public static final NetworkId PHYSICAL = networkId(0L);
+
+    /**
+     * Checks if the id is for virtual network.
+     *
+     * @return true if the id is for virtual network.
+     */
+    public final boolean isVirtualNetworkId() {
+        return (!Objects.equals(this, NONE) && !Objects.equals(this, PHYSICAL));
+    }
 
     // Public construction is prohibited
     private NetworkId(long id) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Implementation of device key services.
  */
-@Component(immediate = true, enabled = true)
+@Component(immediate = true)
 @Service
 public class DeviceKeyManager extends AbstractListenerManager<DeviceKeyEvent, DeviceKeyListener>
         implements DeviceKeyService, DeviceKeyAdminService {

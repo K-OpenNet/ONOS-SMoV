@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableList.Builder;
 
 /**
  * Creates {@link ImmutableList} serializer instance.
@@ -44,12 +43,19 @@ public class ImmutableListSerializer extends Serializer<ImmutableList<?>> {
 
     @Override
     public ImmutableList<?> read(Kryo kryo, Input input,
-            Class<ImmutableList<?>> type) {
+                                 Class<ImmutableList<?>> type) {
         final int size = input.readInt();
-        Builder<Object> builder = ImmutableList.builder();
-        for (int i = 0; i < size; ++i) {
-            builder.add(kryo.readClassAndObject(input));
+        switch (size) {
+        case 0:
+            return ImmutableList.of();
+        case 1:
+            return ImmutableList.of(kryo.readClassAndObject(input));
+        default:
+            Object[] elms = new Object[size];
+            for (int i = 0; i < size; ++i) {
+                elms[i] = kryo.readClassAndObject(input);
+            }
+            return ImmutableList.copyOf(elms);
         }
-        return builder.build();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
     'use strict';
 
     // injected references
-    var $log, $rootScope, fs;
+    var $rootScope, fs;
 
     // constants
     var hoverHeight = 35,
@@ -36,7 +36,7 @@
 
     function init() {
         tooltip = d3.select('#tooltip');
-        tooltip.html('');
+        tooltip.text('');
     }
 
     function tipStyle(mouseX, mouseY) {
@@ -45,7 +45,7 @@
             style = {
                 display: 'inline-block',
                 left: 'auto',
-                right: 'auto'
+                right: 'auto',
             };
 
         if (mouseX <= (winWidth / 2)) {
@@ -82,7 +82,9 @@
         var elem = d3.select(el),
             mouseX = d3.event.pageX,
             mouseY = d3.event.pageY,
-            style = tipStyle(mouseX, mouseY);
+            style = tipStyle(mouseX, mouseY),
+            ttMsg = fs.isF(msg) ? msg() : msg;
+
         currElemId = elem.attr('id');
 
         tooltip.transition()
@@ -92,7 +94,7 @@
             })
             .each('end', function () {
                 d3.select(this).style(style)
-                    .text(msg);
+                    .text(ttMsg);
             });
     }
 
@@ -106,7 +108,7 @@
             tooltip.transition()
                 .delay(exitDelay)
                 .style({
-                    display: 'none'
+                    display: 'none',
                 })
                 .text('');
         }
@@ -125,13 +127,12 @@
                     restrict: 'A',
                     link: function (scope, elem, attrs) {
                         addTooltip(d3.select(elem[0]), scope[attrs.ttMsg]);
-                    }
+                    },
                 };
         }])
 
-        .factory('TooltipService', ['$log', '$rootScope', 'FnService',
-            function (_$log_, _$rootScope_, _fs_) {
-                $log = _$log_;
+        .factory('TooltipService', ['$rootScope', 'FnService',
+            function (_$rootScope_, _fs_) {
                 $rootScope = _$rootScope_;
                 fs = _fs_;
 
@@ -140,7 +141,7 @@
                 return {
                     addTooltip: addTooltip,
                     showTooltip: showTooltip,
-                    cancelTooltip: cancelTooltip
+                    cancelTooltip: cancelTooltip,
                 };
             }]);
 }());

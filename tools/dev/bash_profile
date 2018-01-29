@@ -4,6 +4,9 @@
 
 # Root of the ONOS source tree
 export ONOS_ROOT=${ONOS_ROOT:-~/onos}
+# This is a hack to remove symlinks from the ONOS_ROOT path. To be removed when
+# the protobuf buck rules can handle symlinks
+ONOS_ROOT=$(pushd $ONOS_ROOT >/dev/null && pwd -P && popd >/dev/null)
 
 # Setup some environmental context for developers
 if [ -z "${JAVA_HOME}" ]; then
@@ -18,13 +21,15 @@ fi
 
 export MAVEN=${MAVEN:-~/Applications/apache-maven-3.3.9}
 
-export KARAF_VERSION=${KARAF_VERSION:-3.0.5}
+export KARAF_VERSION=${KARAF_VERSION:-3.0.8}
 export KARAF_ROOT=${KARAF_ROOT:-~/Applications/apache-karaf-$KARAF_VERSION}
 export KARAF_LOG=$KARAF_ROOT/data/log/karaf.log
 
 # Setup a path
 export PATH="$PATH:$ONOS_ROOT/tools/dev/bin"
 export PATH="$PATH:$ONOS_ROOT/tools/test/bin:$ONOS_ROOT/tools/test/scenarios/bin"
+export RUN_PACK_PATH=${RUN_PACK_PATH:-$ONOS_ROOT/tools/package/runtime/bin}
+export PATH="$RUN_PACK_PATH:$PATH"
 export PATH="$PATH:$ONOS_ROOT/tools/build"
 export PATH="$PATH:$MAVEN/bin:$KARAF_ROOT/bin"
 
@@ -38,32 +43,38 @@ export ONOS_WEB_PASS=rocks
 # Setup default location of test scenarios
 export ONOS_SCENARIOS=$ONOS_ROOT/tools/test/scenarios
 
+# Setup path to Mininet custom scripts
+export ONOS_MN_PY=$ONOS_ROOT/tools/dev/mininet/onos.py
+export BMV2_MN_PY=$ONOS_ROOT/tools/dev/mininet/bmv2.py
+
 # Convenience utility to warp to various ONOS source projects
 # e.g. 'o api', 'o dev', 'o'
 function o {
-    cd $(find $ONOS_ROOT/ -type d | egrep -v '\.git|target|gen-src' | \
-        egrep "${1:-$ONOS_ROOT}" | egrep -v "$ONOS_ROOT/.+/src/" | head -n 1)
+    cd $(find $ONOS_ROOT/ -type d -and \( -name 'buck-out' -o -name '.git' -o -name 'target' -o -name 'gen-src' -o -name 'src' \) -prune -o -type d | \
+        egrep "${1:-$ONOS_ROOT}" | awk '{print length($1)"\t"$1}'  | sort -n | cut -f2 | head -n 1)
 }
 
-# Short-hand for 'mvn clean install' for us lazy folk
-alias mci='mvn clean install'
-alias mcis='mvn clean install -DskipTests -Dcheckstyle.skip -U -T 1C'
-alias mis='mvn install -DskipTests -Dcheckstyle.skip -U -T 1C'
+# Buck (if "buck" is not on the PATH)
+[ -z "$(which buck)" ] && alias buck="onos-buck"
 
 # Short-hand for ONOS build, package and test.
 alias ob='onos-build'
-alias obf='ob -DskipTests -Dcheckstyle.skip'
-alias obi='onos-build -Dmaven.test.failure.ignore=true'
-alias obs='onos-build-selective'
+alias obf='(cd $ONOS_ROOT && onos-buck build onos)'
 alias obd='onos-build-docs'
 alias op='onos-package'
-alias ok='onos-karaf'
 alias ot='onos-test'
+
+alias deprecatedAlias='echo "This alias has been deprecated."'
+alias obi=deprecatedAlias
+alias obs=deprecatedAlias
+
+alias ok='NO_BUCKD=1 onos-buck run onos-local --'
+alias oh='onos localhost halt'
+
 alias ol='onos-log'
 alias ow='onos-watch'
 alias ocl='onos-check-logs'
 alias oi='setPrimaryInstance'
-alias pub='onos-push-update-bundle'
 
 # Short-hand for tailing and searching the ONOS (karaf) log
 alias tl='$ONOS_ROOT/tools/dev/bin/onos-local-log'
@@ -89,6 +100,13 @@ alias docs='open $ONOS_ROOT/docs/target/site/apidocs/index.html'
 alias rsdocs='onos-rsdocs'
 alias gui='onos-gui'
 
+# Short-hand for 'mvn clean install' for us lazy folk
+alias mci='mvn clean install'
+alias mcis='mvn clean install -DskipTests -Dcheckstyle.skip'
+alias mis='mvn install -DskipTests -Dcheckstyle.skip'
+
+# Git annotated one-line log
+alias gil='git log --oneline --decorate=short'
 
 # Test related conveniences
 
@@ -96,47 +114,160 @@ alias gui='onos-gui'
 alias sshctl='onos-ssh'
 alias sshnet='onos-ssh $OCN'
 
+# Runs a sequence of STC scenarios until the first failure.
+function stcs {
+    for s in "$@"; do
+        if [[ $s =~ ^[0-9]*$ ]]; then
+            printf "Waiting %d seconds...\n" $s
+            sleep $s
+        else
+            printf "Running scenario %s...\n" $s
+            stc $s || return 1
+        fi
+    done
+}
+
+# Applies the settings in the specified topology recipe file or lists current
+# topo recipe definition if no topo recipe file is given.
+function topo {
+    topo=${1:-""}
+    case "$topo" in
+    "")
+        env | egrep "ONOS_TOPO"
+        env | egrep "(OTD|OTL|OTH)="
+        ;;
+
+    *)
+        [ ! -f $ONOS_ROOT/tools/test/topos/$1.recipe ] && echo "No such topo recipe: $1" >&2 && return 1
+        unset ONOS_TOPO OTD OTL OTH ONOS_DEVICES ONOS_HOSTS
+        unset $(env | sed -n 's:\(^OT[DLH][0-9]\{1,\}\)=.*:\1 :g p')
+        export ONOS_TOPO=$1
+        . $ONOS_ROOT/tools/test/topos/$1.recipe
+        let d=1; while [ $d -le $OTD ]; do
+            dev="$(printf 'of:%016x' $d)"
+            export OTD$d=$dev; export ONOS_DEVICES="$ONOS_DEVICES $dev"
+            let d=d+1;
+        done
+        let h=1; while [ $h -le $OTH ]; do
+            host="$(printf '00:00:00:00:00:%02x/-1' $h)"
+            export OTH$h=$host; export ONOS_HOSTS="$ONOS_HOSTS $host"
+            let h=h+1
+        done
+        topo
+    esac
+}
+
+# Lists available topo recipes
+function topos {
+    for topo in $(ls -1 $ONOS_ROOT/tools/test/topos/*.recipe); do
+        name=$(basename $topo .recipe)
+        printf "%-16s  %s\n" \
+            "$([ $name = $ONOS_TOPO ] && echo $name '*' || echo $name)" \
+            "$(grep '^#' $topo | head -n 1)"
+    done
+}
 
 # Sets the primary instance to the specified instance number.
 function setPrimaryInstance {
+    export ONOS_INSTANCES=$(env | grep 'OC[0-9]*=' | sort | cut -d= -f2)
     export OCI=$(env | egrep "OC[0-9]+" | sort | egrep OC${1:-1} | cut -d= -f2)
     echo $OCI
+}
+
+# Sets minority (OCMI) and majority (OCMA) variables
+function setMinorityMajority {
+    nodes=($(env | grep 'OC[0-9]*=' | sort | cut -d= -f2))
+    middle=$(expr "${#nodes[@]}" / "2")
+    index=0
+    min=1
+    maj=1
+    for node in "${nodes[@]}"; do
+        if [ "$index" -gt "$middle" ]; then
+            export OCMI${min}=${node}
+            min=$(expr $min + 1)
+        else
+            export OCMA${maj}=${node}
+            maj=$(expr $maj + 1)
+        fi
+        index=$(expr $index + 1)
+    done
+}
+
+# ON.Lab shared test cell warden address
+export CELL_WARDEN="10.254.1.19"
+export CELL_SLAVES="$CELL_WARDEN 10.254.1.18 10.254.1.17"
+
+# Clears cell environment
+function clearCell {
+    unset ONOS_CELL ONOS_NIC ONOS_IP ONOS_APPS ONOS_BOOT_FEATURES
+    unset OCI OCN OCT ONOS_INSTANCES ONOS_FEATURES
+    unset ONOS_USER ONOS_GROUP ONOS_WEB_USER ONOS_WEB_PASS
+    unset $(env | sed -n 's:\(^OC[0-9]\{1,\}\)=.*:\1 :g p')
+    unset $(env | sed -n 's:\(^OCMI[0-9]\{1,\}\)=.*:\1 :g p')
+    unset $(env | sed -n 's:\(^OCMA[0-9]\{1,\}\)=.*:\1 :g p')
 }
 
 # Applies the settings in the specified cell file or lists current cell definition
 # if no cell file is given.
 function cell {
-    if [ -n "$1" ]; then
-        [ ! -f $ONOS_ROOT/tools/test/cells/$1 ] && \
-            echo "No such cell: $1" >&2 && return 1
-        unset ONOS_CELL ONOS_NIC ONOS_IP ONOS_APPS ONOS_BOOT_FEATURES
-        unset OCI OCN OCT ONOS_INSTANCES ONOS_FEATURES ONOS_USER ONOS_GROUP
-        unset $(env | sed -n 's:\(^OC[0-9]\{1,\}\)=.*:\1 :g p')
-        export ONOS_USER=${ONOS_USER:-sdn}
-        export ONOS_GROUP=${ONOS_GROUP:-sdn}
+    cell=${1:-""}
+    case "$cell" in
+    "borrow")
+        clearCell
+        aux="/tmp/cell-$$"
+        duration=${2:-0}
+        spec=${3:-3+1}
+        spec=${spec/+/%2B}
+        user=${4:-$(id -un)}
+        hint=${5}
+        query="duration=$duration&spec=$spec&user=$user&cellNameHint=$hint"
+        curl -sS -X POST "http://$CELL_WARDEN:4321/?$query" -d "$(cat ~/.ssh/id_rsa.pub)" > $aux
+        . $aux
+        rm -f $aux
+        setPrimaryInstance 1 >/dev/null
+        setMinorityMajority >/dev/null
+        onos-verify-cell
+        topo default >/dev/null
+        ;;
+    "return")
+        curl -sS -X DELETE "http://$CELL_WARDEN:4321/?user=${2:-$(id -un)}"
+        clearCell
+        ;;
+
+    "status")
+        curl -sS "http://$CELL_WARDEN:4321/" | sort
+        ;;
+
+    "")
+        env | egrep "^ONOS_CELL"
+        env | egrep "^OCI"
+        env | egrep "^OC[0-9]+" | sort
+        env | egrep "^OC[NT]"
+        env | egrep "^ONOS_" | egrep -v 'ONOS_ROOT|ONOS_CELL|ONOS_INSTANCES|ONOS_DEVICES|ONOS_HOSTS' | sort
+        ;;
+
+    *)
+        [ ! -f $ONOS_ROOT/tools/test/cells/$1 ] && echo "No such cell: $1" >&2 && return 1
+        clearCell
+        export ONOS_USER=sdn
+        export ONOS_GROUP=sdn
         export ONOS_WEB_USER=onos
         export ONOS_WEB_PASS=rocks
         export ONOS_CELL=$1
         . $ONOS_ROOT/tools/test/cells/$1
-        export ONOS_INSTANCES=$(env | grep 'OC[0-9]*=' | sort | cut -d= -f2)
         setPrimaryInstance 1 >/dev/null
         cell
-    else
-        env | egrep "ONOS_CELL"
-        env | egrep "OCI"
-        env | egrep "OC[0-9]+" | sort
-        env | egrep "OC[NT]"
-        env | egrep "ONOS_" | egrep -v 'ONOS_ROOT|ONOS_CELL|ONOS_INSTANCES' | sort
-    fi
+        topo default >/dev/null
+    esac
 }
 
-cell $ONOS_CELL > /dev/null
+[ -n "$ONOS_CELL" -a "$ONOS_CELL" != "borrow" ] && cell $ONOS_CELL > /dev/null
 
 # Lists available cells
 function cells {
     for cell in $(ls -1 $ONOS_ROOT/tools/test/cells); do
         printf "%-16s  %s\n" \
-            "$([ $cell = $ONOS_CELL ] && echo $cell '*' || echo $cell)" \
+            "$([ ! -z $ONOS_CELL ] && [ $cell = $ONOS_CELL ] && echo $cell '*' || echo $cell)" \
             "$(grep '^#' $ONOS_ROOT/tools/test/cells/$cell | head -n 1)"
     done
 }

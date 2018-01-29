@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,6 +55,13 @@ public class GroupEvent extends AbstractEvent<GroupEvent.Type, Group> {
          * Signifies that a request to update Group has failed.
          */
         GROUP_UPDATE_FAILED,
+
+        /**
+         * Signifies change in the first live bucket in failover group
+         * (i.e. change in which bucket is in use).
+         * Only to be used with failover Group.
+         */
+        GROUP_BUCKET_FAILOVER,
 
         // internal event between Manager <-> Store
 

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2014 Open Networking Laboratory
+  ~ Copyright 2014-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -22,14 +22,17 @@
     <parent>
         <groupId>org.onosproject</groupId>
         <artifactId>onlab-utils</artifactId>
-        <version>1.5.1</version>
-        <relativePath>../pom.xml</relativePath>
+        <version>1.13.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>onlab-misc</artifactId>
     <packaging>bundle</packaging>
 
     <description>Miscellaneous ON.Lab utilities</description>
+
+    <properties>
+        <metrics.version>3.1.2</metrics.version>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -46,10 +49,18 @@
             <artifactId>easymock</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- for HashedWheelTimer -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>commons-lang</groupId>
             <artifactId>commons-lang</artifactId>
@@ -59,11 +70,6 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
 
-        <!-- TODO: do we still need this here? -->
-        <dependency>
-            <groupId>com.eclipsesource.minimal-json</groupId>
-            <artifactId>minimal-json</artifactId>
-        </dependency>
         <dependency>
           <groupId>com.esotericsoftware</groupId>
           <artifactId>kryo</artifactId>
@@ -71,12 +77,12 @@
         <dependency>
             <groupId>io.dropwizard.metrics</groupId>
             <artifactId>metrics-core</artifactId>
-            <version>3.1.0</version>
+            <version>${metrics.version}</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard.metrics</groupId>
             <artifactId>metrics-json</artifactId>
-            <version>3.1.0</version>
+            <version>${metrics.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.felix</groupId>

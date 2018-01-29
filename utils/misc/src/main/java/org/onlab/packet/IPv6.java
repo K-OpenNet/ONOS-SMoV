@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-
-
 package org.onlab.packet;
 
 import org.onlab.packet.ipv6.Authentication;
@@ -26,18 +24,20 @@ import org.onlab.packet.ipv6.HopByHopOptions;
 import org.onlab.packet.ipv6.IExtensionHeader;
 import org.onlab.packet.ipv6.Routing;
 
+import com.google.common.collect.ImmutableMap;
+
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.onlab.packet.PacketUtils.checkInput;
 
 /**
  * Implements IPv6 packet format. (RFC 2460)
  */
-public class IPv6 extends BasePacket implements IExtensionHeader {
+public class IPv6 extends IP implements IExtensionHeader {
     public static final byte FIXED_HEADER_LENGTH = 40; // bytes
 
     public static final byte PROTOCOL_TCP = 0x6;
@@ -50,21 +50,21 @@ public class IPv6 extends BasePacket implements IExtensionHeader {
     public static final byte PROTOCOL_AH = 0x33;
     public static final byte PROTOCOL_DSTOPT = 0x3C;
 
+    public static final byte LINK_LOCAL_0 = (byte) 0xfe;
+    public static final byte LINK_LOCAL_1 = (byte) 0x80;
 
     public static final Map<Byte, Deserializer<? extends IPacket>> PROTOCOL_DESERIALIZER_MAP =
-            new HashMap<>();
-
-    static {
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_ICMP6, ICMP6.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_TCP, TCP.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_UDP, UDP.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_HOPOPT, HopByHopOptions.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_ROUTING, Routing.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_FRAG, Fragment.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_ESP, EncapSecurityPayload.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_AH, Authentication.deserializer());
-        IPv6.PROTOCOL_DESERIALIZER_MAP.put(IPv6.PROTOCOL_DSTOPT, DestinationOptions.deserializer());
-    }
+            ImmutableMap.<Byte, Deserializer<? extends IPacket>>builder()
+                .put(IPv6.PROTOCOL_ICMP6, ICMP6.deserializer())
+                .put(IPv6.PROTOCOL_TCP, TCP.deserializer())
+                .put(IPv6.PROTOCOL_UDP, UDP.deserializer())
+                .put(IPv6.PROTOCOL_HOPOPT, HopByHopOptions.deserializer())
+                .put(IPv6.PROTOCOL_ROUTING, Routing.deserializer())
+                .put(IPv6.PROTOCOL_FRAG, Fragment.deserializer())
+                .put(IPv6.PROTOCOL_ESP, EncapSecurityPayload.deserializer())
+                .put(IPv6.PROTOCOL_AH, Authentication.deserializer())
+                .put(IPv6.PROTOCOL_DSTOPT, DestinationOptions.deserializer())
+                .build();
 
     protected byte version;
     protected byte trafficClass;
@@ -83,21 +83,12 @@ public class IPv6 extends BasePacket implements IExtensionHeader {
         this.version = 6;
     }
 
-    /**
-     * Gets IP version.
-     *
-     * @return the IP version
-     */
+    @Override
     public byte getVersion() {
         return this.version;
     }
 
-    /**
-     * Sets IP version.
-     *
-     * @param version the IP version to set
-     * @return this
-     */
+    @Override
     public IPv6 setVersion(final byte version) {
         this.version = version;
         return this;
@@ -244,39 +235,6 @@ public class IPv6 extends BasePacket implements IExtensionHeader {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        int iscratch;
-
-        iscratch = bb.getInt();
-        this.version = (byte) (iscratch >> 28 & 0xf);
-        this.trafficClass = (byte) (iscratch >> 20 & 0xff);
-        this.flowLabel = iscratch & 0xfffff;
-        this.payloadLength = bb.getShort();
-        this.nextHeader = bb.get();
-        this.hopLimit = bb.get();
-        bb.get(this.sourceAddress, 0, Ip6Address.BYTE_LENGTH);
-        bb.get(this.destinationAddress, 0, Ip6Address.BYTE_LENGTH);
-
-        Deserializer<? extends IPacket> deserializer;
-        if (IPv6.PROTOCOL_DESERIALIZER_MAP.containsKey(this.nextHeader)) {
-            deserializer = IPv6.PROTOCOL_DESERIALIZER_MAP.get(this.nextHeader);
-        } else {
-            deserializer = Data.deserializer();
-        }
-        try {
-            this.payload = deserializer.deserialize(data, bb.position(),
-                                                    bb.limit() - bb.position());
-            this.payload.setParent(this);
-        } catch (DeserializationException e) {
-            return this;
-        }
-
-        return this;
-    }
-
     /*
      * (non-Javadoc)
      *
@@ -375,8 +333,12 @@ public class IPv6 extends BasePacket implements IExtensionHeader {
             } else {
                 deserializer = Data.deserializer();
             }
-            ipv6.payload = deserializer.deserialize(data, bb.position(),
-                                               bb.limit() - bb.position());
+
+            int remainingLength = bb.limit() - bb.position();
+            int payloadLength = ipv6.payloadLength;
+            int bytesToRead = (payloadLength <= remainingLength) ?
+                    payloadLength : remainingLength;
+            ipv6.payload = deserializer.deserialize(data, bb.position(), bytesToRead);
             ipv6.payload.setParent(ipv6);
 
             return ipv6;
@@ -396,4 +358,120 @@ public class IPv6 extends BasePacket implements IExtensionHeader {
                 .add("destinationAddress", Arrays.toString(destinationAddress))
                 .toString();
     }
+
+    /**
+     * According to the RFC 4291, the solicitation node addresses are
+     * formed by taking the low-order 24 bits of an address (unicast or anycast)
+     * and appending those bits to the prefix FF02:0:0:0:0:1:FF00::/104.
+     *
+     * Solicited-Node Address:  FF02:0:0:0:0:1:FFXX:XXXX
+     *
+     * @param targetIp the unicast or anycast address
+     * @return the computed solicitation node address
+     */
+    public static byte[] getSolicitNodeAddress(byte[] targetIp) {
+        checkArgument(targetIp.length == Ip6Address.BYTE_LENGTH);
+        return new byte[] {
+                (byte) 0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x01, (byte) 0xff,
+                targetIp[targetIp.length - 3],
+                targetIp[targetIp.length - 2],
+                targetIp[targetIp.length - 1]
+        };
+    }
+
+    /**
+     * According to the RFC 2464, an IPv6 packet with a multicast
+     * destination address DST, consisting of the sixteen octets DST[1]
+     * through DST[16], is transmitted to the Ethernet multicast address
+     * whose first two octets are the value 3333 hexadecimal and whose last
+     * four octets are the last four octets of DST.
+     *
+     *                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *                   |0 0 1 1 0 0 1 1|0 0 1 1 0 0 1 1|
+     *                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *                   |   DST[13]     |   DST[14]     |
+     *                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *                   |   DST[15]     |   DST[16]     |
+     *                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     *
+     * @param targetIp the multicast address.
+     * @return the multicast mac address
+     */
+    public static byte[] getMCastMacAddress(byte[] targetIp) {
+        checkArgument(targetIp.length == Ip6Address.BYTE_LENGTH);
+        return new byte[] {
+                0x33, 0x33,
+                targetIp[targetIp.length - 4],
+                targetIp[targetIp.length - 3],
+                targetIp[targetIp.length - 2],
+                targetIp[targetIp.length - 1],
+        };
+    }
+
+    /**
+     * According to the RFC 4291, an IPv6 link local address is an IPv6
+     * unicast address that can be automatically configured on any interface
+     * using the link-local prefix FE80::/10 (1111 1110 10) and the interface
+     * identifier in the modified EUI-64 format.
+     *
+     *    +----------------------------------------------------------------+
+     *    |  10 bits   |         54 bits         |          64 bits        |
+     *    +----------- +-------------------------+-------------------------+
+     *    | 1111111010 |           0             |       interface ID      |
+     *    +----------- +-------------------------+-------------------------+
+     *
+     * @param targetIp the ip address to verify
+     * @return true if the ipv6 address is link local,
+     * false otherwise
+     */
+    public static boolean isLinkLocalAddress(byte[] targetIp) {
+        checkArgument(targetIp.length == Ip6Address.BYTE_LENGTH);
+        return (targetIp[0] & 0xff) == 0xfe && (targetIp[1] & 0xc0) == 0x80;
+    }
+
+    /**
+     * Returns the auto-generated link local address using the
+     * mac address as parameter.
+     *
+     * @param macAddress the mac address to use
+     * @return the ipv6 link local address
+     */
+    public static byte[] getLinkLocalAddress(byte[] macAddress) {
+        checkArgument(macAddress.length == MacAddress.MAC_ADDRESS_LENGTH);
+        return new byte[] {
+                LINK_LOCAL_0,
+                LINK_LOCAL_1,
+                0, 0, 0, 0, 0, 0,
+                (byte) (macAddress[0] ^ (1 << 1)),
+                macAddress[1],
+                macAddress[2],
+                (byte) 0xff,
+                (byte) 0xfe,
+                macAddress[3],
+                macAddress[4],
+                macAddress[5],
+        };
+    }
+
+    /**
+     * Returns the mac address from the auto-generated
+     * link local address.
+     *
+     * @param linkLocalAddress the ipv6 to use
+     * @return the mac address
+     */
+    public static byte[] getMacAddress(byte[] linkLocalAddress) {
+        return !isLinkLocalAddress(linkLocalAddress) ? null : new byte[] {
+                (byte) (linkLocalAddress[8] ^ (1 << 1)),
+                linkLocalAddress[9],
+                linkLocalAddress[10],
+                linkLocalAddress[13],
+                linkLocalAddress[14],
+                linkLocalAddress[15],
+        };
+    }
+
+
+
 }

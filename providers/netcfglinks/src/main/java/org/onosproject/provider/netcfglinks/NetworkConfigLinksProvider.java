@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.ONOSLLDP;
+import org.onosproject.cluster.ClusterMetadataService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.mastership.MastershipService;
@@ -50,7 +51,7 @@ import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.link.DefaultLinkDescription;
-import org.onosproject.net.link.LinkProvider;
+import org.onosproject.net.link.ProbedLinkProvider;
 import org.onosproject.net.link.LinkProviderRegistry;
 import org.onosproject.net.link.LinkProviderService;
 import org.onosproject.net.packet.InboundPacket;
@@ -77,7 +78,7 @@ import static org.onosproject.net.PortNumber.portNumber;
 @Component(immediate = true)
 public class NetworkConfigLinksProvider
         extends AbstractProvider
-        implements LinkProvider {
+        implements ProbedLinkProvider {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected LinkProviderRegistry providerRegistry;
@@ -96,6 +97,9 @@ public class NetworkConfigLinksProvider
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected ClusterMetadataService metadataService;
 
     private static final String PROP_PROBE_RATE = "probeRate";
     private static final int DEFAULT_PROBE_RATE = 3000;
@@ -125,6 +129,17 @@ public class NetworkConfigLinksProvider
         super(new ProviderId("lldp", PROVIDER_NAME));
     }
 
+    private String buildSrcMac() {
+        String srcMac = ProbedLinkProvider.fingerprintMac(metadataService.getClusterMetadata());
+        String defMac = ProbedLinkProvider.defaultMac();
+        if (srcMac.equals(defMac)) {
+            log.warn("Couldn't generate fingerprint. Using default value {}", defMac);
+            return defMac;
+        }
+        log.trace("Generated MAC address {}", srcMac);
+        return srcMac;
+    }
+
     private void createLinks() {
         netCfgService.getSubjects(LinkKey.class)
                 .forEach(linkKey -> configuredLinks.add(linkKey));
@@ -147,6 +162,9 @@ public class NetworkConfigLinksProvider
     protected void deactivate() {
         withdrawIntercepts();
         providerRegistry.unregister(this);
+        deviceService.removeListener(deviceListener);
+        netCfgService.removeListener(cfgListener);
+        packetService.removeProcessor(packetProcessor);
         disable();
         log.info("Deactivated");
     }
@@ -166,7 +184,7 @@ public class NetworkConfigLinksProvider
         }
 
         LinkDiscovery ld = discoverers.computeIfAbsent(device.id(),
-                                                       did -> new LinkDiscovery(device, context));
+                did -> new LinkDiscovery(device, context));
         if (ld.isStopped()) {
             ld.start();
         }
@@ -240,7 +258,7 @@ public class NetworkConfigLinksProvider
 
         @Override
         public String fingerprint() {
-            return "";
+            return buildSrcMac();
         }
 
         @Override
@@ -446,7 +464,6 @@ public class NetworkConfigLinksProvider
 
         @Override
         public void event(NetworkConfigEvent event) {
-
             if (event.configClass().equals(BasicLinkConfig.class)) {
                 log.info("net config event of type {} for basic link {}",
                          event.type(), event.subject());
@@ -456,8 +473,8 @@ public class NetworkConfigLinksProvider
                 } else if (event.type() == NetworkConfigEvent.Type.CONFIG_REMOVED) {
                     removeLink(linkKey);
                 }
+                log.info("Link reconfigured");
             }
-            log.info("Reconfigured");
         }
     }
 

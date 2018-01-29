@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,12 @@
  */
 package org.onosproject.routing;
 
-import org.onlab.packet.IpAddress;
 import org.onosproject.routing.config.BgpConfig;
 import org.onosproject.routing.config.RouterConfig;
 
-import java.util.Collection;
-
 /**
- * Provides a way of interacting with the RIB management component.
+ * Historical interface now used only as a centralised place to define routing
+ * config related constants.
  */
 public interface RoutingService {
 
@@ -32,43 +30,8 @@ public interface RoutingService {
     Class<RouterConfig> ROUTER_CONFIG_CLASS = RouterConfig.class;
 
     /**
-     * Starts the routing service.
+     * Empty method to pacify checkstyle.
      */
-    void start();
-
-    /**
-     * Adds FIB listener.
-     *
-     * @param fibListener listener to send FIB updates to
-     */
-    void addFibListener(FibListener fibListener);
-
-    /**
-     * Stops the routing service.
-     */
-    void stop();
-
-    /**
-     * Gets all IPv4 routes from the RIB.
-     *
-     * @return the IPv4 routes
-     */
-    Collection<RouteEntry> getRoutes4();
-
-    /**
-     * Gets all IPv6 routes from the RIB.
-     *
-     * @return the IPv6 routes
-     */
-    Collection<RouteEntry> getRoutes6();
-
-    /**
-     * Finds out the route entry which has the longest matchable IP prefix.
-     *
-     * @param ipAddress IP address used to find out longest matchable IP prefix
-     * @return a route entry which has the longest matchable IP prefix if
-     * found, otherwise null
-     */
-    RouteEntry getLongestMatchableRouteEntry(IpAddress ipAddress);
-
+    default void nothing() {
+    }
 }

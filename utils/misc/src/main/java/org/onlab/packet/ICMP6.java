@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,9 @@ import org.onlab.packet.ndp.Redirect;
 import org.onlab.packet.ndp.RouterAdvertisement;
 import org.onlab.packet.ndp.RouterSolicitation;
 
+import com.google.common.collect.ImmutableMap;
+
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -101,15 +102,13 @@ public class ICMP6 extends BasePacket {
     public static final byte IPV6_OPT_ERR = (byte) 0x01;
 
     public static final Map<Byte, Deserializer<? extends IPacket>> TYPE_DESERIALIZER_MAP =
-            new HashMap<>();
-
-    static {
-        ICMP6.TYPE_DESERIALIZER_MAP.put(ICMP6.ROUTER_SOLICITATION, RouterSolicitation.deserializer());
-        ICMP6.TYPE_DESERIALIZER_MAP.put(ICMP6.ROUTER_ADVERTISEMENT, RouterAdvertisement.deserializer());
-        ICMP6.TYPE_DESERIALIZER_MAP.put(ICMP6.NEIGHBOR_SOLICITATION, NeighborSolicitation.deserializer());
-        ICMP6.TYPE_DESERIALIZER_MAP.put(ICMP6.NEIGHBOR_ADVERTISEMENT, NeighborAdvertisement.deserializer());
-        ICMP6.TYPE_DESERIALIZER_MAP.put(ICMP6.REDIRECT, Redirect.deserializer());
-    }
+            ImmutableMap.<Byte, Deserializer<? extends IPacket>>builder()
+                .put(ICMP6.ROUTER_SOLICITATION, RouterSolicitation.deserializer())
+                .put(ICMP6.ROUTER_ADVERTISEMENT, RouterAdvertisement.deserializer())
+                .put(ICMP6.NEIGHBOR_SOLICITATION, NeighborSolicitation.deserializer())
+                .put(ICMP6.NEIGHBOR_ADVERTISEMENT, NeighborAdvertisement.deserializer())
+                .put(ICMP6.REDIRECT, Redirect.deserializer())
+                .build();
 
     protected byte icmpType;
     protected byte icmpCode;
@@ -265,31 +264,6 @@ public class ICMP6 extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.icmpType = bb.get();
-        this.icmpCode = bb.get();
-        this.checksum = bb.getShort();
-
-        Deserializer<? extends IPacket> deserializer;
-        if (ICMP6.TYPE_DESERIALIZER_MAP.containsKey(icmpType)) {
-            deserializer = TYPE_DESERIALIZER_MAP.get(icmpType);
-        } else {
-            deserializer = Data.deserializer();
-        }
-        try {
-            this.payload = deserializer.deserialize(data, bb.position(),
-                                                     bb.limit() - bb.position());
-            this.payload.setParent(this);
-        } catch (DeserializationException e) {
-            return this;
-        }
-
-        return this;
-    }
-
     /*
      * (non-Javadoc)
      *
@@ -372,5 +346,50 @@ public class ICMP6 extends BasePacket {
                 .add("icmpCode", Byte.toString(icmpCode))
                 .add("checksum", Short.toString(checksum))
                 .toString();
+    }
+
+    /**
+     * Builds an ICMPv6 reply using the supplied ICMPv6 request.
+     *
+     * @param ethRequest the Ethernet packet containing the ICMPv6 ECHO request
+     * @return the Ethernet packet containing the ICMPv6 ECHO reply
+     */
+    public static Ethernet buildIcmp6Reply(Ethernet ethRequest) {
+
+        if (ethRequest.getEtherType() != Ethernet.TYPE_IPV6) {
+            return null;
+        }
+
+        IPv6 ipv6Request = (IPv6) ethRequest.getPayload();
+
+        if (ipv6Request.getNextHeader() != IPv6.PROTOCOL_ICMP6) {
+            return null;
+        }
+
+        Ethernet ethReply = new Ethernet();
+
+
+        IPv6 ipv6Reply = new IPv6();
+
+        byte[] destAddress = ipv6Request.getDestinationAddress();
+        ipv6Reply.setDestinationAddress(ipv6Request.getSourceAddress());
+        ipv6Reply.setSourceAddress(destAddress);
+        ipv6Reply.setHopLimit((byte) 64);
+        ipv6Reply.setTrafficClass(ipv6Request.getTrafficClass());
+        ipv6Reply.setNextHeader(IPv6.PROTOCOL_ICMP6);
+
+        ICMP6 icmpv6Reply = new ICMP6();
+        icmpv6Reply.setPayload(ipv6Request.getPayload().getPayload());
+        icmpv6Reply.setIcmpType(ICMP6.ECHO_REPLY);
+        icmpv6Reply.setIcmpCode((byte) 0);
+        ipv6Reply.setPayload(icmpv6Reply);
+
+        ethReply.setEtherType(Ethernet.TYPE_IPV6);
+        ethReply.setVlanID(ethRequest.getVlanID());
+        ethReply.setDestinationMACAddress(ethRequest.getSourceMACAddress());
+        ethReply.setSourceMACAddress(ethRequest.getDestinationMACAddress());
+        ethReply.setPayload(ipv6Reply);
+
+        return ethReply;
     }
 }

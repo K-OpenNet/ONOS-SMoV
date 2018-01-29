@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,5 +76,12 @@ public interface DeviceDescription extends Description {
      * @return chassis id
      */
     ChassisId chassisId();
+
+    /**
+     * Return whether device should be made available by default.
+     *
+     * @return default availability
+     */
+    boolean isDefaultAvailable();
 
 }

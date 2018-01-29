@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.onosproject.pcepio.types;
 
-import java.util.Objects;
+import java.util.Arrays;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.onosproject.pcepio.protocol.PcepVersion;
@@ -113,7 +113,7 @@ public class SymbolicPathNameTlv implements PcepValueType {
 
     @Override
     public int hashCode() {
-        return Objects.hash(rawValue);
+        return Arrays.hashCode(rawValue);
     }
 
     @Override
@@ -123,7 +123,7 @@ public class SymbolicPathNameTlv implements PcepValueType {
         }
         if (obj instanceof SymbolicPathNameTlv) {
             SymbolicPathNameTlv other = (SymbolicPathNameTlv) obj;
-            return Objects.equals(this.rawValue, other.rawValue);
+            return Arrays.equals(this.rawValue, other.rawValue);
         }
         return false;
     }

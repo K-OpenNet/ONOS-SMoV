@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,20 +61,19 @@ import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.impl.MastershipBasedTimestamp;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.onosproject.store.serializers.KryoSerializer;
 import org.onosproject.store.serializers.custom.DistributedStoreSerializers;
 import org.onosproject.store.service.EventuallyConsistentMap;
 import org.onosproject.store.service.EventuallyConsistentMapEvent;
 import org.onosproject.store.service.EventuallyConsistentMapListener;
+import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.slf4j.Logger;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onosproject.net.DefaultAnnotations.merge;
 import static org.onosproject.net.DefaultAnnotations.union;
 import static org.onosproject.net.Link.State.ACTIVE;
 import static org.onosproject.net.Link.State.INACTIVE;
@@ -92,11 +91,11 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Manages the inventory of links using a {@code EventuallyConsistentMap}.
  */
-@Component(immediate = true, enabled = true)
+@Component(immediate = true)
 @Service
 public class ECLinkStore
-    extends AbstractStore<LinkEvent, LinkStoreDelegate>
-    implements LinkStore {
+        extends AbstractStore<LinkEvent, LinkStoreDelegate>
+        implements LinkStore {
 
     /**
      * Modes for dealing with newly discovered links.
@@ -117,7 +116,9 @@ public class ECLinkStore
     private final Logger log = getLogger(getClass());
 
     private final Map<LinkKey, Link> links = Maps.newConcurrentMap();
+    private final Map<LinkKey, Set<ProviderId>> linkProviders = Maps.newConcurrentMap();
     private EventuallyConsistentMap<Provided<LinkKey>, LinkDescription> linkDescriptions;
+
 
     private ApplicationId appId;
 
@@ -152,16 +153,12 @@ public class ECLinkStore
 
     protected LinkDiscoveryMode linkDiscoveryMode = LinkDiscoveryMode.STRICT;
 
-    protected static final KryoSerializer SERIALIZER = new KryoSerializer() {
-        @Override
-        protected void setupKryoPool() {
-            serializerPool = KryoNamespace.newBuilder()
+    protected static final Serializer SERIALIZER = Serializer.using(
+            KryoNamespace.newBuilder()
                     .register(DistributedStoreSerializers.STORE_COMMON)
                     .nextId(DistributedStoreSerializers.STORE_CUSTOM_BEGIN)
                     .register(Provided.class)
-                    .build();
-        }
-    };
+                    .build("ECLink"));
 
     @Activate
     public void activate() {
@@ -188,10 +185,10 @@ public class ECLinkStore
                 }).build();
 
         clusterCommunicator.addSubscriber(LINK_INJECT_MESSAGE,
-                SERIALIZER::decode,
-                this::injectLink,
-                SERIALIZER::encode,
-                SharedExecutors.getPoolThreadExecutor());
+                                          SERIALIZER::decode,
+                                          this::injectLink,
+                                          SERIALIZER::encode,
+                                          SharedExecutors.getPoolThreadExecutor());
 
         linkDescriptions.addListener(linkTracker);
 
@@ -202,6 +199,7 @@ public class ECLinkStore
     public void deactivate() {
         linkDescriptions.removeListener(linkTracker);
         linkDescriptions.destroy();
+        linkProviders.clear();
         links.clear();
         clusterCommunicator.removeSubscriber(LINK_INJECT_MESSAGE);
         netCfgService.removeListener(cfgListener);
@@ -262,9 +260,9 @@ public class ECLinkStore
             linkDescriptions.compute(internalLinkKey, (k, v) -> createOrUpdateLinkInternal(v, linkDescription));
             return refreshLinkCache(linkKey);
         } else {
-            // Only forward for ConfigProvider
+            // Only forward for ConfigProvider or NullProvider
             // Forwarding was added as a workaround for ONOS-490
-            if (!providerId.scheme().equals("cfg")) {
+            if (!"cfg".equals(providerId.scheme()) && !"null".equals(providerId.scheme())) {
                 return null;
             }
             // Temporary hack for NPE (ONOS-1171).
@@ -273,10 +271,10 @@ public class ECLinkStore
                 return null;
             }
             return Futures.getUnchecked(clusterCommunicator.sendAndReceive(new Provided<>(linkDescription, providerId),
-                    LINK_INJECT_MESSAGE,
-                    SERIALIZER::encode,
-                    SERIALIZER::decode,
-                    dstNodeId));
+                                                                           LINK_INJECT_MESSAGE,
+                                                                           SERIALIZER::encode,
+                                                                           SERIALIZER::decode,
+                                                                           dstNodeId));
         }
     }
 
@@ -294,30 +292,47 @@ public class ECLinkStore
 
     private LinkDescription createOrUpdateLinkInternal(LinkDescription current, LinkDescription updated) {
         if (current != null) {
-            // we only allow transition from INDIRECT -> DIRECT
-            return  new DefaultLinkDescription(
-                        current.src(),
-                        current.dst(),
-                        current.type() == DIRECT ? DIRECT : updated.type(),
-                        current.isExpected(),
-                        union(current.annotations(), updated.annotations()));
+            Type type;
+            if (current.type() == DIRECT && updated.type() == Type.INDIRECT) {
+                // mask transition from DIRECT -> INDIRECT, likely to be triggered by BDDP
+                type = Type.DIRECT;
+            } else {
+                type = updated.type();
+            }
+            return new DefaultLinkDescription(
+                    current.src(),
+                    current.dst(),
+                    type,
+                    current.isExpected(),
+                    union(current.annotations(), updated.annotations()));
         }
         return updated;
+    }
+
+    private Set<ProviderId> createOrUpdateLinkProviders(Set<ProviderId> current, ProviderId providerId) {
+        if (current == null) {
+            current = Sets.newConcurrentHashSet();
+        }
+        current.add(providerId);
+        return current;
     }
 
     private LinkEvent refreshLinkCache(LinkKey linkKey) {
         AtomicReference<LinkEvent.Type> eventType = new AtomicReference<>();
         Link link = links.compute(linkKey, (key, existingLink) -> {
             Link newLink = composeLink(linkKey);
+            if (newLink == null) {
+                return null;
+            }
             if (existingLink == null) {
                 eventType.set(LINK_ADDED);
                 return newLink;
             } else if (existingLink.state() != newLink.state() ||
-                       existingLink.isExpected() != newLink.isExpected() ||
-                        (existingLink.type() == INDIRECT && newLink.type() == DIRECT) ||
-                        !AnnotationsUtil.isEqual(existingLink.annotations(), newLink.annotations())) {
-                    eventType.set(LINK_UPDATED);
-                    return newLink;
+                    existingLink.isExpected() != newLink.isExpected() ||
+                    (existingLink.type() !=  newLink.type()) ||
+                    !AnnotationsUtil.isEqual(existingLink.annotations(), newLink.annotations())) {
+                eventType.set(LINK_UPDATED);
+                return newLink;
             } else {
                 return existingLink;
             }
@@ -326,55 +341,60 @@ public class ECLinkStore
     }
 
     private Set<ProviderId> getAllProviders(LinkKey linkKey) {
-        return linkDescriptions.keySet()
-                               .stream()
-                               .filter(key -> key.key().equals(linkKey))
-                               .map(key -> key.providerId())
-                               .collect(Collectors.toSet());
+        return linkProviders.getOrDefault(linkKey, Sets.newConcurrentHashSet());
     }
 
     private ProviderId getBaseProviderId(LinkKey linkKey) {
         Set<ProviderId> allProviders = getAllProviders(linkKey);
         if (allProviders.size() > 0) {
             return allProviders.stream()
-                               .filter(p -> !p.isAncillary())
-                               .findFirst()
-                               .orElse(Iterables.getFirst(allProviders, null));
+                    .filter(p -> !p.isAncillary())
+                    .findFirst()
+                    .orElse(Iterables.getFirst(allProviders, null));
         }
         return null;
     }
 
     private Link composeLink(LinkKey linkKey) {
 
-        ProviderId baseProviderId = checkNotNull(getBaseProviderId(linkKey));
+        ProviderId baseProviderId = getBaseProviderId(linkKey);
+        if (baseProviderId == null) {
+            // provider was not found, this means it was already removed by the
+            // parent component.
+            return null;
+        }
         LinkDescription base = linkDescriptions.get(new Provided<>(linkKey, baseProviderId));
-
+        // short circuit if link description no longer exists
+        if (base == null) {
+            return null;
+        }
         ConnectPoint src = base.src();
         ConnectPoint dst = base.dst();
         Type type = base.type();
-        AtomicReference<DefaultAnnotations> annotations = new AtomicReference<>(DefaultAnnotations.builder().build());
-        annotations.set(merge(annotations.get(), base.annotations()));
+        DefaultAnnotations.Builder builder = DefaultAnnotations.builder();
+        builder.putAll(base.annotations());
 
         getAllProviders(linkKey).stream()
-                                .map(p -> new Provided<>(linkKey, p))
-                                .forEach(key -> {
-                                    annotations.set(merge(annotations.get(),
-                                                          linkDescriptions.get(key).annotations()));
-        });
+                .map(p -> new Provided<>(linkKey, p))
+                .forEach(key -> {
+                    LinkDescription linkDescription = linkDescriptions.get(key);
+                    if (linkDescription != null) {
+                        builder.putAll(linkDescription.annotations());
+                    }
+                });
 
+        DefaultAnnotations annotations = builder.build();
         Link.State initialLinkState;
 
         boolean isExpected;
         if (linkDiscoveryMode == LinkDiscoveryMode.PERMISSIVE) {
             initialLinkState = ACTIVE;
             isExpected =
-                    Objects.equals(annotations.get().value(AnnotationKeys.DURABLE), "true");
+                    Objects.equals(annotations.value(AnnotationKeys.DURABLE), "true");
         } else {
             initialLinkState = base.isExpected() ? ACTIVE : INACTIVE;
             isExpected = base.isExpected();
         }
-
-
 
 
         return DefaultLink.builder()
@@ -384,7 +404,7 @@ public class ECLinkStore
                 .type(type)
                 .state(initialLinkState)
                 .isExpected(isExpected)
-                .annotations(annotations.get())
+                .annotations(annotations)
                 .build();
     }
 
@@ -394,8 +414,8 @@ public class ECLinkStore
         // Note: INDIRECT -> DIRECT transition only
         // so that BDDP discovered Link will not overwrite LDDP Link
         if (oldLink.state() != newLink.state() ||
-            (oldLink.type() == INDIRECT && newLink.type() == DIRECT) ||
-            !AnnotationsUtil.isEqual(oldLink.annotations(), newLink.annotations())) {
+                (oldLink.type() == INDIRECT && newLink.type() == DIRECT) ||
+                !AnnotationsUtil.isEqual(oldLink.annotations(), newLink.annotations())) {
 
             links.put(key, newLink);
             return new LinkEvent(LINK_UPDATED, newLink);
@@ -447,6 +467,7 @@ public class ECLinkStore
         Link removedLink = links.remove(linkKey);
         if (removedLink != null) {
             getAllProviders(linkKey).forEach(p -> linkDescriptions.remove(new Provided<>(linkKey, p)));
+            linkProviders.remove(linkKey);
             return new LinkEvent(LINK_REMOVED, removedLink);
         }
         return null;
@@ -475,9 +496,12 @@ public class ECLinkStore
         @Override
         public void event(EventuallyConsistentMapEvent<Provided<LinkKey>, LinkDescription> event) {
             if (event.type() == PUT) {
+                linkProviders.compute(event.key().key(), (k, v) ->
+                        createOrUpdateLinkProviders(v, event.key().providerId()));
                 notifyDelegate(refreshLinkCache(event.key().key()));
             } else if (event.type() == REMOVE) {
                 notifyDelegate(purgeLinkCache(event.key().key()));
+                linkProviders.remove(event.key().key());
             }
         }
     }
@@ -521,8 +545,8 @@ public class ECLinkStore
     // Configuration properties factory
     private final ConfigFactory factory =
             new ConfigFactory<ApplicationId, CoreConfig>(APP_SUBJECT_FACTORY,
-                                                        CoreConfig.class,
-                                                        "core") {
+                                                         CoreConfig.class,
+                                                         "core") {
                 @Override
                 public CoreConfig createConfig() {
                     return new CoreConfig();

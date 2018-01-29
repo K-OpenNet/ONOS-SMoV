@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 package org.onosproject.store.trivial;
 
 import com.google.common.collect.ImmutableSet;
+
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
-import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
 import org.onosproject.cluster.ClusterEvent;
 import org.onosproject.cluster.ClusterStore;
@@ -30,16 +30,19 @@ import org.onosproject.cluster.ClusterStoreDelegate;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.DefaultControllerNode;
 import org.onosproject.cluster.NodeId;
+import org.onosproject.core.Version;
+import org.onosproject.core.VersionService;
 import org.onosproject.event.EventDeliveryService;
 import org.onosproject.event.ListenerRegistry;
-import org.onosproject.net.intent.Key;
-import org.onosproject.net.intent.IntentPartitionEvent;
-import org.onosproject.net.intent.IntentPartitionEventListener;
-import org.onosproject.net.intent.IntentPartitionService;
+import org.onosproject.net.intent.WorkPartitionEvent;
+import org.onosproject.net.intent.WorkPartitionEventListener;
+import org.onosproject.net.intent.WorkPartitionService;
 import org.onosproject.store.AbstractStore;
 import org.slf4j.Logger;
 
+import java.time.Instant;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.onosproject.security.AppPermission.Type.*;
@@ -53,7 +56,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 @Service
 public class SimpleClusterStore
         extends AbstractStore<ClusterEvent, ClusterStoreDelegate>
-        implements ClusterStore, IntentPartitionService {
+        implements ClusterStore, WorkPartitionService {
 
     public static final IpAddress LOCALHOST = IpAddress.valueOf("127.0.0.1");
 
@@ -61,26 +64,30 @@ public class SimpleClusterStore
 
     private ControllerNode instance;
 
-    private final DateTime creationTime = DateTime.now();
+    private final Instant creationTime = Instant.now();
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected EventDeliveryService eventDispatcher;
 
-    private ListenerRegistry<IntentPartitionEvent, IntentPartitionEventListener> listenerRegistry;
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected VersionService versionService;
+
+    private ListenerRegistry<WorkPartitionEvent, WorkPartitionEventListener> listenerRegistry;
+    private boolean started = false;
 
     @Activate
     public void activate() {
         instance = new DefaultControllerNode(new NodeId("local"), LOCALHOST);
 
         listenerRegistry = new ListenerRegistry<>();
-        eventDispatcher.addSink(IntentPartitionEvent.class, listenerRegistry);
+        eventDispatcher.addSink(WorkPartitionEvent.class, listenerRegistry);
 
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-        eventDispatcher.removeSink(IntentPartitionEvent.class);
+        eventDispatcher.removeSink(WorkPartitionEvent.class);
         log.info("Stopped");
     }
 
@@ -106,7 +113,17 @@ public class SimpleClusterStore
     }
 
     @Override
-    public DateTime getLastUpdated(NodeId nodeId) {
+    public Version getVersion(NodeId nodeId) {
+        return instance.id().equals(nodeId) ? versionService.version() : null;
+    }
+
+    @Override
+    public void markFullyStarted(boolean started) {
+        this.started = started;
+    }
+
+    @Override
+    public Instant getLastUpdatedInstant(NodeId nodeId) {
         return creationTime;
     }
 
@@ -120,25 +137,25 @@ public class SimpleClusterStore
     }
 
     @Override
-    public boolean isMine(Key intentKey) {
+    public <K> boolean isMine(K key, Function<K, Long> hasher) {
         checkPermission(INTENT_READ);
         return true;
     }
 
     @Override
-    public NodeId getLeader(Key intentKey) {
+    public <K> NodeId getLeader(K key, Function<K, Long> hasher) {
         checkPermission(INTENT_READ);
         return instance.id();
     }
 
     @Override
-    public void addListener(IntentPartitionEventListener listener) {
+    public void addListener(WorkPartitionEventListener listener) {
         checkPermission(INTENT_EVENT);
         listenerRegistry.addListener(listener);
     }
 
     @Override
-    public void removeListener(IntentPartitionEventListener listener) {
+    public void removeListener(WorkPartitionEventListener listener) {
         checkPermission(INTENT_EVENT);
         listenerRegistry.removeListener(listener);
     }

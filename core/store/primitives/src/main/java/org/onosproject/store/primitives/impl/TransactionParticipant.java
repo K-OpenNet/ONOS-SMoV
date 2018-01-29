@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,26 +23,38 @@ import java.util.concurrent.CompletableFuture;
 public interface TransactionParticipant {
 
     /**
-     * Returns if this participant has updates that need to be committed.
-     * @return {@code true} if yes; {@code false} otherwise
+     * Returns a boolean indicating whether the participant has pending updates.
+     *
+     * @return indicates whether the participant has pending updates
      */
     boolean hasPendingUpdates();
 
     /**
      * Executes the prepare phase.
+     *
      * @return {@code true} is successful; {@code false} otherwise
      */
     CompletableFuture<Boolean> prepare();
 
     /**
      * Attempts to execute the commit phase for previously prepared transaction.
+     *
      * @return future that is completed when the operation completes
      */
     CompletableFuture<Void> commit();
 
     /**
+     * Executes the prepare and commit phases atomically.
+     *
+     * @return {@code true} is successful; {@code false} otherwise
+     */
+    CompletableFuture<Boolean> prepareAndCommit();
+
+    /**
      * Attempts to execute the rollback phase for previously prepared transaction.
+     *
      * @return future that is completed when the operation completes
      */
     CompletableFuture<Void> rollback();
+
 }

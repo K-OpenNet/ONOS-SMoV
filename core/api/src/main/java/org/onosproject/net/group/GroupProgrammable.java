@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,11 @@
 
 package org.onosproject.net.group;
 
+import com.google.common.collect.ImmutableList;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.driver.HandlerBehaviour;
+
+import java.util.Collection;
 
 /**
  * Group programmable device behaviour.
@@ -31,4 +34,13 @@ public interface GroupProgrammable extends HandlerBehaviour {
      * @param groupOps operations to be performed
      */
     void performGroupOperation(DeviceId deviceId, GroupOperations groupOps);
+
+    /**
+     * Queries the groups from the device.
+     *
+     * @return collection of groups
+     */
+    default Collection<Group> getGroups() {
+        return ImmutableList.of();
+    }
 }

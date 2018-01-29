@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import io.netty.handler.codec.ReplayingDecoder;
 
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.IpAddress.Version;
+import org.onosproject.core.HybridLogicalTime;
 import org.onosproject.store.cluster.messaging.Endpoint;
-import org.onosproject.store.cluster.messaging.impl.InternalMessage.Status;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,20 +39,23 @@ public class MessageDecoder extends ReplayingDecoder<DecoderState> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final int correctPreamble;
-    private long messageId;
-    private int preamble;
     private Version ipVersion;
     private IpAddress senderIp;
     private int senderPort;
-    private int messageTypeLength;
-    private String messageType;
-    private Status status;
-    private int contentLength;
 
-    public MessageDecoder(int correctPreamble) {
-        super(DecoderState.READ_MESSAGE_PREAMBLE);
-        this.correctPreamble = correctPreamble;
+    private InternalMessage.Type type;
+    private int preamble;
+    private long logicalTime;
+    private long logicalCounter;
+    private long messageId;
+    private int contentLength;
+    private byte[] content;
+    private int subjectLength;
+    private String subject;
+    private InternalReply.Status status;
+
+    public MessageDecoder() {
+        super(DecoderState.READ_SENDER_IP_VERSION);
     }
 
     @Override
@@ -63,59 +66,100 @@ public class MessageDecoder extends ReplayingDecoder<DecoderState> {
             List<Object> out) throws Exception {
 
         switch (state()) {
-        case READ_MESSAGE_PREAMBLE:
-            preamble = buffer.readInt();
-            if (preamble != correctPreamble) {
-                throw new IllegalStateException("This message had an incorrect preamble.");
-            }
-            checkpoint(DecoderState.READ_MESSAGE_ID);
-        case READ_MESSAGE_ID:
-            messageId = buffer.readLong();
-            checkpoint(DecoderState.READ_SENDER_IP_VERSION);
-        case READ_SENDER_IP_VERSION:
-            ipVersion = buffer.readByte() == 0x0 ? Version.INET : Version.INET6;
-            checkpoint(DecoderState.READ_SENDER_IP);
-        case READ_SENDER_IP:
-            byte[] octets = new byte[IpAddress.byteLength(ipVersion)];
-            buffer.readBytes(octets);
-            senderIp = IpAddress.valueOf(ipVersion, octets);
-            checkpoint(DecoderState.READ_SENDER_PORT);
-        case READ_SENDER_PORT:
-            senderPort = buffer.readInt();
-            checkpoint(DecoderState.READ_MESSAGE_TYPE_LENGTH);
-        case READ_MESSAGE_TYPE_LENGTH:
-            messageTypeLength = buffer.readInt();
-            checkpoint(DecoderState.READ_MESSAGE_TYPE);
-        case READ_MESSAGE_TYPE:
-            byte[] messageTypeBytes = new byte[messageTypeLength];
-            buffer.readBytes(messageTypeBytes);
-            messageType = new String(messageTypeBytes, Charsets.UTF_8);
-            checkpoint(DecoderState.READ_MESSAGE_STATUS);
-        case READ_MESSAGE_STATUS:
-            status = Status.values()[buffer.readInt()];
-            checkpoint(DecoderState.READ_CONTENT_LENGTH);
-        case READ_CONTENT_LENGTH:
-            contentLength = buffer.readInt();
-            checkpoint(DecoderState.READ_CONTENT);
-        case READ_CONTENT:
-            byte[] payload;
-            if (contentLength > 0) {
-                //TODO Perform a sanity check on the size before allocating
-                payload = new byte[contentLength];
-                buffer.readBytes(payload);
-            } else {
-                payload = new byte[0];
-            }
-            InternalMessage message = new InternalMessage(messageId,
-                                                          new Endpoint(senderIp, senderPort),
-                                                          messageType,
-                                                          payload,
-                                                          status);
-            out.add(message);
-            checkpoint(DecoderState.READ_MESSAGE_PREAMBLE);
-            break;
-         default:
-            checkState(false, "Must not be here");
+            case READ_SENDER_IP_VERSION:
+                ipVersion = buffer.readByte() == 0x0 ? Version.INET : Version.INET6;
+                checkpoint(DecoderState.READ_SENDER_IP);
+            case READ_SENDER_IP:
+                byte[] octets = new byte[IpAddress.byteLength(ipVersion)];
+                buffer.readBytes(octets);
+                senderIp = IpAddress.valueOf(ipVersion, octets);
+                checkpoint(DecoderState.READ_SENDER_PORT);
+            case READ_SENDER_PORT:
+                senderPort = buffer.readInt();
+                checkpoint(DecoderState.READ_TYPE);
+            case READ_TYPE:
+                type = InternalMessage.Type.forId(buffer.readByte());
+                checkpoint(DecoderState.READ_PREAMBLE);
+            case READ_PREAMBLE:
+                preamble = buffer.readInt();
+                checkpoint(DecoderState.READ_LOGICAL_TIME);
+            case READ_LOGICAL_TIME:
+                logicalTime = buffer.readLong();
+                checkpoint(DecoderState.READ_LOGICAL_COUNTER);
+            case READ_LOGICAL_COUNTER:
+                logicalCounter = buffer.readLong();
+                checkpoint(DecoderState.READ_MESSAGE_ID);
+            case READ_MESSAGE_ID:
+                messageId = buffer.readLong();
+                checkpoint(DecoderState.READ_CONTENT_LENGTH);
+            case READ_CONTENT_LENGTH:
+                contentLength = buffer.readInt();
+                checkpoint(DecoderState.READ_CONTENT);
+            case READ_CONTENT:
+                if (contentLength > 0) {
+                    //TODO Perform a sanity check on the size before allocating
+                    content = new byte[contentLength];
+                    buffer.readBytes(content);
+                } else {
+                    content = new byte[0];
+                }
+
+                switch (type) {
+                    case REQUEST:
+                        checkpoint(DecoderState.READ_SUBJECT_LENGTH);
+                        break;
+                    case REPLY:
+                        checkpoint(DecoderState.READ_STATUS);
+                        break;
+                    default:
+                        checkState(false, "Must not be here");
+                }
+                break;
+            default:
+                break;
+        }
+
+        switch (type) {
+            case REQUEST:
+                switch (state()) {
+                    case READ_SUBJECT_LENGTH:
+                        subjectLength = buffer.readShort();
+                        checkpoint(DecoderState.READ_SUBJECT);
+                    case READ_SUBJECT:
+                        byte[] messageTypeBytes = new byte[subjectLength];
+                        buffer.readBytes(messageTypeBytes);
+                        subject = new String(messageTypeBytes, Charsets.UTF_8);
+                        InternalRequest message = new InternalRequest(preamble,
+                                new HybridLogicalTime(logicalTime, logicalCounter),
+                                messageId,
+                                new Endpoint(senderIp, senderPort),
+                                subject,
+                                content);
+                        out.add(message);
+                        checkpoint(DecoderState.READ_TYPE);
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case REPLY:
+                switch (state()) {
+                    case READ_STATUS:
+                        status = InternalReply.Status.forId(buffer.readByte());
+                        InternalReply message = new InternalReply(preamble,
+                                new HybridLogicalTime(logicalTime, logicalCounter),
+                                messageId,
+                                content,
+                                status);
+                        out.add(message);
+                        checkpoint(DecoderState.READ_TYPE);
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            default:
+                checkState(false, "Must not be here");
         }
     }
 

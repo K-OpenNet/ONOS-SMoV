@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -185,16 +185,28 @@ public abstract class TopologySimulator {
     /**
      * Creates simulated device.
      *
-     * @param id device identifier
+     * @param id        device identifier
      * @param chassisId chassis identifier number
      */
-    protected void createDevice(DeviceId id, int chassisId) {
+    public void createDevice(DeviceId id, int chassisId) {
+        createDevice(id, chassisId, Device.Type.SWITCH, hostCount + infrastructurePorts);
+    }
+
+    /**
+     * Creates simulated device.
+     *
+     * @param id        device identifier
+     * @param chassisId chassis identifier number
+     * @param type      device type
+     * @param portCount number of device ports
+     */
+    public void createDevice(DeviceId id, int chassisId, Device.Type type, int portCount) {
         DeviceDescription desc =
-                new DefaultDeviceDescription(id.uri(), Device.Type.SWITCH,
+                new DefaultDeviceDescription(id.uri(), type,
                                              "ON.Lab", "0.1", "0.1", "1234",
                                              new ChassisId(chassisId));
         deviceProviderService.deviceConnected(id, desc);
-        deviceProviderService.updatePorts(id, buildPorts(hostCount + infrastructurePorts));
+        deviceProviderService.updatePorts(id, buildPorts(portCount));
     }
 
     /**
@@ -205,7 +217,7 @@ public abstract class TopologySimulator {
      * @param pi port number of i-th device
      * @param pj port number of j-th device
      */
-    protected void createLink(int i, int j, int pi, int pj) {
+    public void createLink(int i, int j, int pi, int pj) {
         ConnectPoint one = new ConnectPoint(deviceIds.get(i), PortNumber.portNumber(pi));
         ConnectPoint two = new ConnectPoint(deviceIds.get(j), PortNumber.portNumber(pj));
         createLink(one, two);
@@ -214,12 +226,26 @@ public abstract class TopologySimulator {
     /**
      * Creates simulated link between two connection points.
      *
-     * @param one  one connection point
-     * @param two  another connection point
+     * @param one one connection point
+     * @param two another connection point
      */
-    protected void createLink(ConnectPoint one, ConnectPoint two) {
-        linkProviderService.linkDetected(new DefaultLinkDescription(one, two, DIRECT));
-        linkProviderService.linkDetected(new DefaultLinkDescription(two, one, DIRECT));
+    public void createLink(ConnectPoint one, ConnectPoint two) {
+        createLink(one, two, DIRECT, true);
+    }
+
+    /**
+     * Creates simulated link between two connection points.
+     *
+     * @param one             one connection point
+     * @param two             another connection point
+     * @param type            link type
+     * @param isBidirectional true if link is bidirectional
+     */
+    public void createLink(ConnectPoint one, ConnectPoint two, Link.Type type, boolean isBidirectional) {
+        linkProviderService.linkDetected(new DefaultLinkDescription(one, two, type));
+        if (isBidirectional) {
+            linkProviderService.linkDetected(new DefaultLinkDescription(two, one, type));
+        }
     }
 
     /**
@@ -228,9 +254,9 @@ public abstract class TopologySimulator {
      * @param deviceId   device identifier
      * @param portOffset port offset where to start attaching hosts
      */
-    protected void createHosts(DeviceId deviceId, int portOffset) {
+    public void createHosts(DeviceId deviceId, int portOffset) {
         String s = deviceId.toString();
-        byte dByte = Byte.parseByte(s.substring(s.length() - 1), 16);
+        byte dByte = Byte.parseByte(s.substring(s.length() - 2), 16);
         // TODO: this limits the simulation to 256 devices & 256 hosts/device.
         byte[] macBytes = new byte[]{0, 0, 0, 0, dByte, 0};
         byte[] ipBytes = new byte[]{(byte) 192, (byte) 168, dByte, 0};
@@ -361,7 +387,7 @@ public abstract class TopologySimulator {
      */
     protected List<PortDescription> buildPorts(int portCount) {
         List<PortDescription> ports = Lists.newArrayList();
-        for (int i = 0; i < portCount; i++) {
+        for (int i = 1; i <= portCount; i++) {
             ports.add(new DefaultPortDescription(PortNumber.portNumber(i), true,
                                                  Port.Type.COPPER, 0));
         }

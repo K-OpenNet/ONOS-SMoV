@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@
     <group name="Shutdown">
         <parallel var="${OC#}">
             <step name="Stop-Service-${#}" exec="onos-service ${OC#} stop"/>
-            <step name="Check-Logs-${#}" exec="onos-check-logs ${OC#}"
+            <step name="Wait-for-Stop-${#}" exec="onos-wait-for-stop ${OC#}"
                   requires="~Stop-Service-${#}"/>
+            <step name="Check-Logs-${#}" exec="onos-check-logs ${OC#}"
+                  requires="~Wait-for-Stop-${#}"/>
         </parallel>
     </group>
 </scenario>

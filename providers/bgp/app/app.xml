@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2015-2016 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -22,6 +22,16 @@
     <artifact>mvn:${project.groupId}/onos-bgpio/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/onos-bgp-api/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/onos-bgp-ctl/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-pcep-server-api/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/onos-bgp-provider-topology/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/onos-bgp-provider-cfg/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-bgp-provider-cli/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-pcepio/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-apps-pcep-api/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-pcep-server-impl/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-pcep-provider-topology/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-pcep-provider-tunnel/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-apps-pce-app/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-apps-pce-pceweb/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-apps-pce-pcerest/${project.version}</artifact>
 </app>

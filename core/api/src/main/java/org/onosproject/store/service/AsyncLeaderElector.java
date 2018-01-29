@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -142,6 +142,6 @@ public interface AsyncLeaderElector extends DistributedPrimitive {
      * @return new {@code LeaderElector} instance
      */
     default LeaderElector asLeaderElector() {
-        return asLeaderElector(Long.MAX_VALUE);
+        return asLeaderElector(DistributedPrimitive.DEFAULT_OPERATION_TIMEOUT_MILLIS);
     }
 }

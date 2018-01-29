@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@
             top: 'auto',
             bottom: '10px',
             fade: false,
-            shown: false
+            shown: false,
         };
 
     // internal state
@@ -81,8 +81,8 @@
             panel = ps.createPanel(tbid, settings),
             arrowDiv = createArrow(panel),
             currentRow = panel.append('div').classed('tbar-row', true),
-            rowButtonIds = [],          // for removable buttons
-            tbWidth = arrowSize + 2,    // empty toolbar width
+            rowButtonIds = [], // for removable buttons
+            tbWidth = arrowSize + 2, // empty toolbar width
             maxWidth = panel.width();
 
         arrowDiv.on('click', toggle);
@@ -92,7 +92,7 @@
             settings: settings,
             items: items,
             panel: panel,
-            panelId: tbid
+            panelId: tbid,
         };
 
         panel.classed('toolbar', true)
@@ -110,7 +110,8 @@
         }
 
         function adjustWidth(btnWidth) {
-            if (fs.noPxStyle(currentRow, 'width') >= maxWidth) {
+            // 0.1 fudge for rounding error
+            if (fs.noPxStyle(currentRow, 'width') + 0.1 >= maxWidth) {
                 tbWidth += btnWidth;
                 maxWidth = tbWidth;
             }
@@ -170,7 +171,7 @@
                     clear: rowClear,
                     setText: rowSetText,
                     addButton: rowAddButton,
-                    classed: rowClassed
+                    classed: rowClassed,
                 };
             }
         }
@@ -187,7 +188,7 @@
         function rowSetText(text) {
             rowClear();
             currentRow.append('div').classed('tbar-row-text', true)
-                .html(text);
+                .text(text);
         }
 
         function rowAddButton(id, gid, cb, tooltip) {
@@ -219,6 +220,10 @@
             }
         }
 
+        function isVisible() {
+            return panel.isVisible();
+        }
+
         return {
             addButton: addButton,
             addToggle: addToggle,
@@ -228,7 +233,8 @@
 
             show: show,
             hide: hide,
-            toggle: toggle
+            toggle: toggle,
+            isVisible: isVisible,
         };
     }
 
@@ -262,7 +268,7 @@
             return {
                 init: init,
                 createToolbar: createToolbar,
-                destroyToolbar: destroyToolbar
+                destroyToolbar: destroyToolbar,
             };
         }]);
 }());

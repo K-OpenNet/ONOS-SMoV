@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
  */
 package org.onosproject.cluster.impl;
 
+import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.CLUSTER_READ;
+import static org.onosproject.security.AppPermission.Type.CLUSTER_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
@@ -28,9 +28,7 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
-import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.Leadership;
 import org.onosproject.cluster.LeadershipAdminService;
 import org.onosproject.cluster.LeadershipEvent;
@@ -65,25 +63,16 @@ public class LeadershipManager
 
     private NodeId localNodeId;
 
-    private final ScheduledExecutorService deadlockDetector =
-            Executors.newSingleThreadScheduledExecutor(Tools.groupedThreads("onos/leadership", ""));
-
     @Activate
     public void activate() {
         localNodeId = clusterService.getLocalNode().id();
         store.setDelegate(delegate);
         eventDispatcher.addSink(LeadershipEvent.class, listenerRegistry);
-        deadlockDetector.scheduleWithFixedDelay(() -> clusterService.getNodes()
-                .stream()
-                .map(ControllerNode::id)
-                .filter(id -> clusterService.getState(id) != ControllerNode.State.ACTIVE)
-                .forEach(this::unregister), 0, 2, TimeUnit.SECONDS);
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-        deadlockDetector.shutdown();
         Maps.filterValues(store.getLeaderships(), v -> v.candidates().contains(localNodeId))
             .keySet()
             .forEach(this::withdraw);
@@ -94,11 +83,13 @@ public class LeadershipManager
 
     @Override
     public Leadership getLeadership(String topic) {
+        checkPermission(CLUSTER_READ);
         return store.getLeadership(topic);
     }
 
     @Override
     public Leadership runForLeadership(String topic) {
+        checkPermission(CLUSTER_WRITE);
         return store.addRegistration(topic);
     }
 

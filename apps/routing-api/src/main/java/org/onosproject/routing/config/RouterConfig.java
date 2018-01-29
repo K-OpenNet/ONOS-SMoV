@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,10 @@ import java.util.List;
 
 /**
  * Routing configuration.
+ *
+ * @deprecated in Junco release. Use RoutersConfig instead.
  */
+@Deprecated
 public class RouterConfig extends Config<ApplicationId> {
 
     private static final String CP_CONNECT_POINT = "controlPlaneConnectPoint";

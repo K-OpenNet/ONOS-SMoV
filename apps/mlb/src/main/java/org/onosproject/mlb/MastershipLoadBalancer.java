@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@
 
 package org.onosproject.mlb;
 
-import com.google.common.util.concurrent.ListenableScheduledFuture;
-import com.google.common.util.concurrent.ListeningScheduledExecutorService;
-import com.google.common.util.concurrent.MoreExecutors;
-
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Modified;
+import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.onlab.util.Tools;
+import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.LeadershipEvent;
 import org.onosproject.cluster.LeadershipEventListener;
@@ -34,14 +34,21 @@ import org.onosproject.mastership.MastershipAdminService;
 import org.onosproject.mastership.MastershipEvent;
 import org.onosproject.mastership.MastershipListener;
 import org.onosproject.mastership.MastershipService;
+import org.osgi.service.component.ComponentContext;
+import org.onosproject.net.region.RegionEvent;
+import org.onosproject.net.region.RegionListener;
+import org.onosproject.net.region.RegionService;
 import org.slf4j.Logger;
 
+import java.util.Dictionary;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -55,8 +62,11 @@ public class MastershipLoadBalancer {
 
     private final Logger log = getLogger(getClass());
 
-    // TODO: parameterize via component config
-    private static final int SCHEDULE_PERIOD = 5;
+    private static final int DEFAULT_SCHEDULE_PERIOD = 30;
+    @Property(name = "schedulePeriod", intValue = DEFAULT_SCHEDULE_PERIOD,
+            label = "Period to schedule balancing the mastership to be shared as evenly as by all online instances.")
+    private int schedulePeriod = DEFAULT_SCHEDULE_PERIOD;
+
     private static final String REBALANCE_MASTERSHIP = "rebalance/mastership";
 
     private NodeId localId;
@@ -75,37 +85,65 @@ public class MastershipLoadBalancer {
     protected LeadershipService leadershipService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected RegionService regionService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterService clusterService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected ComponentConfigService cfgService;
 
     private InnerLeadershipListener leadershipListener = new InnerLeadershipListener();
 
-    /* This listener is used to trigger balancing for any mastership event which will include switches changing state
-    between active and inactive states as well as the same variety of event occurring with ONOS nodes. Must
-    use a listenable executor to ensure events are triggered with no frequency greater than once every 30 seconds.
+    /* This listener is used to trigger balancing for any mastership event
+     * which will include switches changing state between active and inactive
+     * states as well as the same variety of event occurring with ONOS nodes.
      */
     private InnerMastershipListener mastershipListener = new InnerMastershipListener();
 
-    //Ensures that all executions do not interfere with one another (single thread)
-    private ListeningScheduledExecutorService executorService = MoreExecutors.
-            listeningDecorator(Executors.newSingleThreadScheduledExecutor());
+    /* Used to trigger balancing on region events where there was either a
+     * change on the master sets of a given region or a change on the devices
+     * that belong to a region.
+     */
+    private InnerRegionListener regionEventListener = new InnerRegionListener();
+
+    /* Ensures that all executions do not interfere with one another (single
+     * thread) and that they are apart from each other by at least what is
+     * defined as the schedulePeriod.
+     */
+    private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor(
+            groupedThreads("MastershipLoadBalancer", "%d", log));
 
     @Activate
-    public void activate() {
+    public void activate(ComponentContext context) {
+        cfgService.registerProperties(getClass());
+        modified(context);
         mastershipService.addListener(mastershipListener);
         localId = clusterService.getLocalNode().id();
         leadershipService.addListener(leadershipListener);
         leadershipService.runForLeadership(REBALANCE_MASTERSHIP);
+        regionService.addListener(regionEventListener);
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
+        cfgService.unregisterProperties(getClass(), false);
         mastershipService.removeListener(mastershipListener);
         leadershipService.withdraw(REBALANCE_MASTERSHIP);
         leadershipService.removeListener(leadershipListener);
+        regionService.removeListener(regionEventListener);
         cancelBalance();
         executorService.shutdown();
         log.info("Stopped");
+    }
+
+    @Modified
+    public void modified(ComponentContext context) {
+        readComponentConfiguration(context);
+        cancelBalance();
+        scheduleBalance();
+        log.info("modified");
     }
 
     private synchronized void processLeaderChange(NodeId newLeader) {
@@ -119,20 +157,31 @@ public class MastershipLoadBalancer {
         }
     }
 
+    // Sets flag at execution to indicate there is currently a scheduled
+    // rebalancing. As soon as it starts running, the flag is set back to
+    // null and another rebalancing can be queued.
     private void scheduleBalance() {
         if (isLeader.get() && nextTask.get() == null) {
 
-            ListenableScheduledFuture task =
-                    executorService.schedule(mastershipAdminService::balanceRoles,
-                            SCHEDULE_PERIOD, TimeUnit.SECONDS);
-            task.addListener(() -> {
-                        log.info("Completed balance roles");
-                        nextTask.set(null);
-                    }, MoreExecutors.directExecutor()
-            );
+            Future task = executorService.schedule(new BalanceTask(),
+                    schedulePeriod, TimeUnit.SECONDS);
+
             if (!nextTask.compareAndSet(null, task)) {
                 task.cancel(false);
             }
+        }
+    }
+
+    private class BalanceTask implements Runnable {
+
+        @Override
+        public void run() {
+            // nextTask is now running, free the spot so that it is possible
+            // to queue up another upcoming task.
+            nextTask.set(null);
+
+            mastershipAdminService.balanceRoles();
+            log.info("Completed balance roles");
         }
     }
 
@@ -143,11 +192,30 @@ public class MastershipLoadBalancer {
         }
     }
 
+    /**
+     * Extracts properties from the component configuration context.
+     *
+     * @param context the component context
+     */
+    private void readComponentConfiguration(ComponentContext context) {
+        Dictionary<?, ?> properties = context.getProperties();
+
+        Integer newSchedulePeriod = Tools.getIntegerProperty(properties,
+                                                             "schedulePeriod");
+        if (newSchedulePeriod == null) {
+            schedulePeriod = DEFAULT_SCHEDULE_PERIOD;
+            log.info("Schedule period is not configured, default value is {}",
+                     DEFAULT_SCHEDULE_PERIOD);
+        } else {
+            schedulePeriod = newSchedulePeriod;
+            log.info("Configured. Schedule period is configured to {}", schedulePeriod);
+        }
+    }
+
     private class InnerMastershipListener implements MastershipListener {
 
         @Override
         public void event(MastershipEvent event) {
-            //Sets flag at execution to indicate there is currently a scheduled rebalancing, reverts upon completion
             scheduleBalance();
         }
     }
@@ -161,6 +229,20 @@ public class MastershipLoadBalancer {
         @Override
         public void event(LeadershipEvent event) {
             processLeaderChange(event.subject().leaderNodeId());
+        }
+    }
+
+    private class InnerRegionListener implements RegionListener {
+        @Override
+        public void event(RegionEvent event) {
+            switch (event.type()) {
+                case REGION_MEMBERSHIP_CHANGED:
+                case REGION_UPDATED:
+                    scheduleBalance();
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }

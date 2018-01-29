@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -120,7 +120,6 @@ public class ClusterMetadataManager
         if (primaryProvider != null && primaryProvider.isAvailable()) {
             return primaryProvider;
         }
-        log.warn("Primary cluster metadata provider not available. Using default fallback.");
         return getProvider("default");
     }
 
@@ -132,7 +131,7 @@ public class ClusterMetadataManager
         String metadataUri = System.getProperty("onos.cluster.metadata.uri");
         try {
             String protocol = metadataUri == null ? null : new URL(metadataUri).getProtocol();
-            if (protocol != null && (!protocol.equals("file") && !protocol.equals("http"))) {
+            if (protocol != null && (!"file".equals(protocol) && !"http".equals(protocol))) {
                 return getProvider(protocol);
             }
             // file provider supports both "file" and "http" uris

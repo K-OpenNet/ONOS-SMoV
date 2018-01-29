@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,42 +33,60 @@ public final class DefaultAlarm implements Alarm {
     private final String description;
     private final AlarmEntityId source;
     private final long timeRaised;
-    private final long timeUpdated;
-    private final Long timeCleared;
-    private final SeverityLevel severity;
     private final boolean isServiceAffecting;
     private final boolean isAcknowledged;
     private final boolean isManuallyClearable;
     private final String assignedUser;
 
+    private final SeverityLevel severity;
+    private final long timeUpdated;
+    private final Long timeCleared;
+
+
+    //Only for Kryo
+    DefaultAlarm() {
+        id = null;
+        deviceId = null;
+        description = null;
+        source = null;
+        timeRaised = -1;
+        timeUpdated = -1;
+        timeCleared = null;
+        severity = null;
+        isServiceAffecting = false;
+        isAcknowledged = false;
+        isManuallyClearable = false;
+        assignedUser = null;
+    }
+
     /**
      * Instantiates a new Default alarm.
      *
-     * @param id the id
-     * @param deviceId the device id
-     * @param description the description
-     * @param source the source, null indicates none.
-     * @param timeRaised the time raised.
-     * @param timeUpdated the time last updated.
-     * @param timeCleared the time cleared, null indicates uncleared.
-     * @param severity the severity
-     * @param isServiceAffecting the service affecting
-     * @param isAcknowledged the acknowledged
+     * @param id                  the id
+     * @param deviceId            the device id
+     * @param description         the description
+     * @param source              the source, null indicates none.
+     * @param timeRaised          the time raised.
+     * @param timeUpdated         the time last updated.
+     * @param timeCleared         the time cleared, null indicates uncleared.
+     * @param severity            the severity
+     * @param isServiceAffecting  the service affecting
+     * @param isAcknowledged      the acknowledged
      * @param isManuallyClearable the manually clearable
-     * @param assignedUser the assigned user, `null` indicates none.
+     * @param assignedUser        the assigned user, `null` indicates none.
      */
     private DefaultAlarm(final AlarmId id,
-            final DeviceId deviceId,
-            final String description,
-            final AlarmEntityId source,
-            final long timeRaised,
-            final long timeUpdated,
-            final Long timeCleared,
-            final SeverityLevel severity,
-            final boolean isServiceAffecting,
-            final boolean isAcknowledged,
-            final boolean isManuallyClearable,
-            final String assignedUser) {
+                         final DeviceId deviceId,
+                         final String description,
+                         final AlarmEntityId source,
+                         final long timeRaised,
+                         final long timeUpdated,
+                         final Long timeCleared,
+                         final SeverityLevel severity,
+                         final boolean isServiceAffecting,
+                         final boolean isAcknowledged,
+                         final boolean isManuallyClearable,
+                         final String assignedUser) {
         this.id = id;
         this.deviceId = deviceId;
         this.description = description;
@@ -134,6 +152,11 @@ public final class DefaultAlarm implements Alarm {
     }
 
     @Override
+    public boolean cleared() {
+        return severity.equals(SeverityLevel.CLEARED);
+    }
+
+    @Override
     public boolean manuallyClearable() {
         return isManuallyClearable;
     }
@@ -147,9 +170,9 @@ public final class DefaultAlarm implements Alarm {
     public int hashCode() {
         // id or timeRaised or timeUpdated may differ
         return Objects.hash(deviceId, description,
-                source, timeCleared, severity,
-                isServiceAffecting, isAcknowledged,
-                isManuallyClearable, assignedUser);
+                            source, timeCleared, severity,
+                            isServiceAffecting, isAcknowledged,
+                            isManuallyClearable, assignedUser);
     }
 
     @Override
@@ -213,6 +236,9 @@ public final class DefaultAlarm implements Alarm {
                 .toString();
     }
 
+    /**
+     * Builder for the DefaultAlarm object.
+     */
     public static class Builder {
 
         // Manadatory fields when constructing alarm ...
@@ -231,8 +257,13 @@ public final class DefaultAlarm implements Alarm {
         private boolean isManuallyClearable = false;
         private String assignedUser = null;
 
+        /**
+         * Constructs a Builder to create a Default Alarm based on another alarm.
+         *
+         * @param alarm the other alarm
+         */
         public Builder(final Alarm alarm) {
-            this(alarm.deviceId(), alarm.description(), alarm.severity(), alarm.timeRaised());
+            this(alarm.id(), alarm.deviceId(), alarm.description(), alarm.severity(), alarm.timeRaised());
             this.source = alarm.source();
             this.timeUpdated = alarm.timeUpdated();
             this.timeCleared = alarm.timeCleared();
@@ -243,10 +274,41 @@ public final class DefaultAlarm implements Alarm {
 
         }
 
+        /**
+         * Constructs a Builder to create a Default Alarm.
+         *
+         * @param deviceId    the device ID
+         * @param description the Alarm description
+         * @param severity    the severity
+         * @param timeRaised  when the alarm was raised
+         * @deprecated 1.10.0 - Kingfisher
+         */
+        @Deprecated
         public Builder(final DeviceId deviceId,
-                final String description, final SeverityLevel severity, final long timeRaised) {
+                       final String description, final SeverityLevel severity, final long timeRaised) {
             super();
-            this.id = AlarmId.NONE;
+            this.deviceId = deviceId;
+            this.description = description;
+            this.severity = severity;
+            this.timeRaised = timeRaised;
+            // Unless specified time-updated is same as raised.
+            this.timeUpdated = timeRaised;
+            this.id = AlarmId.alarmId(deviceId, Long.toString(timeRaised));
+        }
+
+        /**
+         * Constructs a Builder to create a Default Alarm.
+         *
+         * @param id          the AlarmId
+         * @param deviceId    the device ID
+         * @param description the Alarm description
+         * @param severity    the severity
+         * @param timeRaised  when the alarm was raised
+         */
+        public Builder(final AlarmId id, final DeviceId deviceId,
+                       final String description, final SeverityLevel severity, final long timeRaised) {
+            super();
+            this.id = id;
             this.deviceId = deviceId;
             this.description = description;
             this.severity = severity;
@@ -255,52 +317,112 @@ public final class DefaultAlarm implements Alarm {
             this.timeUpdated = timeRaised;
         }
 
+        /**
+         * Sets the new alarm source.
+         *
+         * @param source the source
+         * @return self for chaining
+         */
         public Builder forSource(final AlarmEntityId source) {
             this.source = source;
             return this;
         }
 
+        /**
+         * Sets the new alarm time updated.
+         *
+         * @param timeUpdated the time
+         * @return self for chaining
+         */
         public Builder withTimeUpdated(final long timeUpdated) {
             this.timeUpdated = timeUpdated;
             return this;
         }
 
+        /**
+         * Sets the new alarm time cleared.
+         *
+         * @param timeCleared the time
+         * @return self for chaining
+         */
         public Builder withTimeCleared(final Long timeCleared) {
             this.timeCleared = timeCleared;
             return this;
         }
 
+        /**
+         * Sets the new alarm Id.
+         *
+         * @param id the id
+         * @return self for chaining
+         * @deprecated 1.10.0- Kingfisher
+         */
+        @Deprecated
         public Builder withId(final AlarmId id) {
             this.id = id;
             return this;
         }
 
+        /**
+         * Clears the alarm that is being created.
+         *
+         * @return self for chaining
+         */
         public Builder clear() {
             this.severity = SeverityLevel.CLEARED;
             final long now = System.currentTimeMillis();
             return withTimeCleared(now).withTimeUpdated(now);
         }
 
+        /**
+         * Sets the new alarm service affecting flag.
+         *
+         * @param isServiceAffecting the service affecting flag
+         * @return self for chaining
+         */
         public Builder withServiceAffecting(final boolean isServiceAffecting) {
             this.isServiceAffecting = isServiceAffecting;
             return this;
         }
 
+        /**
+         * Sets the new alarm acknowledged flag.
+         *
+         * @param isAcknowledged the acknowledged flag
+         * @return self for chaining
+         */
         public Builder withAcknowledged(final boolean isAcknowledged) {
             this.isAcknowledged = isAcknowledged;
             return this;
         }
 
+        /**
+         * Sets the new alarm the manually clearable flag.
+         *
+         * @param isManuallyClearable the manually clearable flag
+         * @return self for chaining
+         */
         public Builder withManuallyClearable(final boolean isManuallyClearable) {
             this.isManuallyClearable = isManuallyClearable;
             return this;
         }
 
+        /**
+         * Sets the new alarm assigned user.
+         *
+         * @param assignedUser the user
+         * @return self for chaining
+         */
         public Builder withAssignedUser(final String assignedUser) {
             this.assignedUser = assignedUser;
             return this;
         }
 
+        /**
+         * Builds the alarm.
+         *
+         * @return self for chaining
+         */
         public DefaultAlarm build() {
             checkNotNull(id, "Must specify an alarm id");
             checkNotNull(deviceId, "Must specify a device");
@@ -310,7 +432,7 @@ public final class DefaultAlarm implements Alarm {
             checkNotNull(severity, "Must specify a severity");
 
             return new DefaultAlarm(id, deviceId, description, source, timeRaised, timeUpdated, timeCleared,
-                    severity, isServiceAffecting, isAcknowledged, isManuallyClearable, assignedUser);
+                                    severity, isServiceAffecting, isAcknowledged, isManuallyClearable, assignedUser);
         }
     }
 }

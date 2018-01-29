@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,11 +34,11 @@ import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.TributarySlot;
-import org.onosproject.net.newresource.ContinuousResource;
-import org.onosproject.net.newresource.DiscreteResource;
-import org.onosproject.net.newresource.Resource;
-import org.onosproject.net.newresource.Resources;
-import org.onosproject.net.newresource.ResourceService;
+import org.onosproject.net.resource.ContinuousResource;
+import org.onosproject.net.resource.DiscreteResource;
+import org.onosproject.net.resource.Resource;
+import org.onosproject.net.resource.Resources;
+import org.onosproject.net.resource.ResourceQueryService;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
@@ -50,11 +50,16 @@ import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 
 /**
- * Lists available resources.
+ * Lists registered resources.
  */
 @Command(scope = "onos", name = "resources",
-         description = "Lists available resources")
+         description = "Lists registered resources")
 public class ResourcesCommand extends AbstractShellCommand {
+
+    @Option(name = "-a", aliases = "--available",
+            description = "Output available resources only",
+            required = false, multiValued = false)
+    boolean availablesOnly = false;
 
     @Option(name = "-s", aliases = "--sort", description = "Sort output",
             required = false, multiValued = false)
@@ -75,11 +80,11 @@ public class ResourcesCommand extends AbstractShellCommand {
     String portNumberStr = null;
 
 
-    private ResourceService resourceService;
+    private ResourceQueryService resourceService;
 
     @Override
     protected void execute() {
-        resourceService = get(ResourceService.class);
+        resourceService = get(ResourceQueryService.class);
 
         if (typeStrings != null) {
             typesToPrint = new HashSet<>(Arrays.asList(typeStrings));
@@ -102,7 +107,6 @@ public class ResourcesCommand extends AbstractShellCommand {
     }
 
     private void printResource(Resource resource, int level) {
-        // TODO add an option to show only available resource
         // workaround to preserve the original behavior of ResourceService#getRegisteredResources
         Set<Resource> children;
         if (resource instanceof DiscreteResource) {
@@ -116,23 +120,42 @@ public class ResourcesCommand extends AbstractShellCommand {
         } else {
             String resourceName = resource.simpleTypeName();
             if (resource instanceof ContinuousResource) {
-                print("%s%s: %f", Strings.repeat(" ", level),
-                                  resourceName,
-                                  // Note: last() does not return, what we've registered
-                                  // following does not work
-                                  //((Class<?>) resource.last()).getSimpleName(),
-                                  ((ContinuousResource) resource).value());
+                if (availablesOnly) {
+                    // Get the total resource
+                    double total = ((ContinuousResource) resource).value();
+                    // Get allocated resource
+                    double allocated = resourceService.getResourceAllocations(resource.id()).stream()
+                            .mapToDouble(rA -> ((ContinuousResource) rA.resource()).value())
+                            .sum();
+                    // Difference
+                    double difference = total - allocated;
+                    print("%s%s: %f", Strings.repeat(" ", level),
+                          resourceName, difference);
+                } else {
+                    print("%s%s: %f", Strings.repeat(" ", level),
+                          resourceName,
+                          ((ContinuousResource) resource).value());
+                }
                 // Continuous resource is terminal node, stop here
                 return;
             } else {
+                String availability = "";
+                if (availablesOnly && !children.isEmpty()) {
+                    // intermediate nodes cannot be omitted, print availability
+                    if (resourceService.isAvailable(resource)) {
+                        availability = " ✔";
+                    } else {
+                        availability = " ✘";
+                    }
+                }
                 String toString = String.valueOf(resource.valueAs(Object.class).orElse(""));
                 if (toString.startsWith(resourceName)) {
-                    print("%s%s", Strings.repeat(" ", level),
-                          toString);
+                    print("%s%s%s", Strings.repeat(" ", level),
+                          toString, availability);
                 } else {
-                    print("%s%s: %s", Strings.repeat(" ", level),
+                    print("%s%s: %s%s", Strings.repeat(" ", level),
                           resourceName,
-                          toString);
+                          toString, availability);
                 }
             }
         }
@@ -218,6 +241,10 @@ public class ResourcesCommand extends AbstractShellCommand {
             if (!resourceService.getRegisteredResources(((DiscreteResource) resource).id()).isEmpty()) {
                 // resource which has children should be printed
                 return true;
+            }
+            if (availablesOnly && !resourceService.isAvailable(resource)) {
+                // don't print unavailable discrete resource
+                return false;
             }
         } else if (!(resource instanceof ContinuousResource)) {
             log.warn("Unexpected resource class: {}", resource.getClass().getSimpleName());

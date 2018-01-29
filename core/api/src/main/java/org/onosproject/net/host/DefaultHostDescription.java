@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onosproject.net.host;
 
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.onosproject.net.AbstractDescription;
@@ -38,8 +40,9 @@ public class DefaultHostDescription extends AbstractDescription
 
     private final MacAddress mac;
     private final VlanId vlan;
-    private final HostLocation location;
+    private final Set<HostLocation> locations;
     private final Set<IpAddress> ip;
+    private final boolean configured;
 
     /**
      * Creates a host description using the supplied information.
@@ -52,8 +55,7 @@ public class DefaultHostDescription extends AbstractDescription
     public DefaultHostDescription(MacAddress mac, VlanId vlan,
                                   HostLocation location,
                                   SparseAnnotations... annotations) {
-        this(mac, vlan, location, Collections.<IpAddress>emptySet(),
-             annotations);
+        this(mac, vlan, location, Collections.emptySet(), annotations);
     }
 
     /**
@@ -83,11 +85,62 @@ public class DefaultHostDescription extends AbstractDescription
     public DefaultHostDescription(MacAddress mac, VlanId vlan,
                                   HostLocation location, Set<IpAddress> ip,
                                   SparseAnnotations... annotations) {
+        this(mac, vlan, location, ip, false, annotations);
+    }
+
+    /**
+     * Creates a host description using the supplied information.
+     *
+     * @param mac          host MAC address
+     * @param vlan         host VLAN identifier
+     * @param location     host location
+     * @param configured   true if configured via NetworkConfiguration
+     * @param annotations  optional key/value annotations map
+     */
+    public DefaultHostDescription(MacAddress mac, VlanId vlan,
+                                  HostLocation location,
+                                  boolean configured,
+                                  SparseAnnotations... annotations) {
+        this(mac, vlan, location, Collections.emptySet(), configured, annotations);
+    }
+
+    /**
+     * Creates a host description using the supplied information.
+     *
+     * @param mac          host MAC address
+     * @param vlan         host VLAN identifier
+     * @param location     host location
+     * @param ip           host IP address
+     * @param configured   true if configured via NetworkConfiguration
+     * @param annotations  optional key/value annotations map
+     */
+    public DefaultHostDescription(MacAddress mac, VlanId vlan,
+                                  HostLocation location, Set<IpAddress> ip,
+                                  boolean configured,
+                                  SparseAnnotations... annotations) {
+        this(mac, vlan, Collections.singleton(location), ip, configured, annotations);
+    }
+
+    /**
+     * Creates a host description using the supplied information.
+     *
+     * @param mac          host MAC address
+     * @param vlan         host VLAN identifier
+     * @param locations    host locations
+     * @param ip           host IP address
+     * @param configured   true if configured via NetworkConfiguration
+     * @param annotations  optional key/value annotations map
+     */
+    public DefaultHostDescription(MacAddress mac, VlanId vlan,
+                                  Set<HostLocation> locations,
+                                  Set<IpAddress> ip, boolean configured,
+                                  SparseAnnotations... annotations) {
         super(annotations);
         this.mac = mac;
         this.vlan = vlan;
-        this.location = location;
-        this.ip = ImmutableSet.copyOf(ip);
+        this.locations = new HashSet<>(locations);
+        this.ip = new HashSet<>(ip);
+        this.configured = configured;
     }
 
     @Override
@@ -102,7 +155,14 @@ public class DefaultHostDescription extends AbstractDescription
 
     @Override
     public HostLocation location() {
-        return location;
+        return locations.stream()
+                .sorted(Comparator.comparingLong(HostLocation::time).reversed())
+                .findFirst().orElse(null);
+    }
+
+    @Override
+    public Set<HostLocation> locations() {
+        return locations;
     }
 
     @Override
@@ -111,18 +171,24 @@ public class DefaultHostDescription extends AbstractDescription
     }
 
     @Override
+    public boolean configured() {
+        return configured;
+    }
+
+    @Override
     public String toString() {
         return toStringHelper(this)
                 .add("mac", mac)
                 .add("vlan", vlan)
-                .add("location", location)
+                .add("locations", locations)
                 .add("ipAddress", ip)
+                .add("configured", configured)
                 .toString();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(super.hashCode(), mac, vlan, location, ip);
+        return Objects.hashCode(super.hashCode(), mac, vlan, locations, ip);
     }
 
     @Override
@@ -134,10 +200,9 @@ public class DefaultHostDescription extends AbstractDescription
             DefaultHostDescription that = (DefaultHostDescription) object;
             return Objects.equal(this.mac, that.mac)
                     && Objects.equal(this.vlan, that.vlan)
-                    && Objects.equal(this.location, that.location)
+                    && Objects.equal(this.locations, that.locations)
                     && Objects.equal(this.ip, that.ip);
         }
         return false;
     }
-
 }

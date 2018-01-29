@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,63 +19,132 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.Sets;
 import org.onlab.util.Tools;
 import org.onosproject.store.primitives.TransactionId;
-import org.onosproject.store.service.AsyncConsistentMap;
+import org.onosproject.store.service.CommitStatus;
+import org.onosproject.store.service.Serializer;
+import org.onosproject.store.service.TransactionalMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.MoreObjects.toStringHelper;
 
 /**
- * Coordinator for a two-phase commit protocol.
+ * Transaction coordinator.
  */
 public class TransactionCoordinator {
+    private final Logger log = LoggerFactory.getLogger(getClass());
+    protected final TransactionId transactionId;
+    protected final TransactionManager transactionManager;
+    protected final Set<TransactionParticipant> transactionParticipants = Sets.newConcurrentHashSet();
 
-    private final AsyncConsistentMap<TransactionId, Transaction.State> transactions;
-
-    public TransactionCoordinator(AsyncConsistentMap<TransactionId, Transaction.State> transactions) {
-        this.transactions = transactions;
+    public TransactionCoordinator(TransactionId transactionId, TransactionManager transactionManager) {
+        this.transactionId = transactionId;
+        this.transactionManager = transactionManager;
     }
 
     /**
-     * Commits a transaction.
+     * Returns a transactional map for this transaction.
      *
-     * @param transactionId           transaction
-     * @param transactionParticipants set of transaction participants
-     * @return future for commit result
+     * @param name the transactional map name
+     * @param serializer the serializer
+     * @param <K> key type
+     * @param <V> value type
+     * @return a transactional map for this transaction
      */
-    CompletableFuture<Void> commit(TransactionId transactionId, Set<TransactionParticipant> transactionParticipants) {
-        if (!transactionParticipants.stream().anyMatch(t -> t.hasPendingUpdates())) {
-            return CompletableFuture.completedFuture(null);
-        }
+    public <K, V> TransactionalMap<K, V> getTransactionalMap(String name, Serializer serializer) {
+        PartitionedTransactionalMap<K, V> map = transactionManager.getTransactionalMap(name, serializer, this);
+        transactionParticipants.addAll(map.participants());
+        return map;
+    }
 
-       return  transactions.put(transactionId, Transaction.State.PREPARING)
-                    .thenCompose(v -> this.doPrepare(transactionParticipants))
+    /**
+     * Commits the transaction.
+     *
+     * @return the transaction commit status
+     */
+    public CompletableFuture<CommitStatus> commit() {
+        long totalParticipants = transactionParticipants.stream()
+                .filter(TransactionParticipant::hasPendingUpdates)
+                .count();
+
+        if (totalParticipants == 0) {
+            log.debug("No transaction participants, skipping commit", totalParticipants);
+            return CompletableFuture.completedFuture(CommitStatus.SUCCESS);
+        } else if (totalParticipants == 1) {
+            log.debug("Committing transaction {} via 1 participant", transactionId);
+            return transactionParticipants.stream()
+                    .filter(TransactionParticipant::hasPendingUpdates)
+                    .findFirst()
+                    .get()
+                    .prepareAndCommit()
+                    .thenApply(v -> v ? CommitStatus.SUCCESS : CommitStatus.FAILURE);
+        } else {
+            log.debug("Committing transaction {} via {} participants", transactionId, totalParticipants);
+            Set<TransactionParticipant> transactionParticipants = this.transactionParticipants.stream()
+                    .filter(TransactionParticipant::hasPendingUpdates)
+                    .collect(Collectors.toSet());
+
+            CompletableFuture<CommitStatus> status = transactionManager.updateState(
+                    transactionId, Transaction.State.PREPARING)
+                    .thenCompose(v -> prepare(transactionParticipants))
                     .thenCompose(result -> result
-                           ? transactions.put(transactionId, Transaction.State.COMMITTING)
-                                         .thenCompose(v -> doCommit(transactionParticipants))
-                                         .thenApply(v -> null)
-                           : transactions.put(transactionId, Transaction.State.ROLLINGBACK)
-                                         .thenCompose(v -> doRollback(transactionParticipants))
-                                         .thenApply(v -> null))
-                    .thenCompose(v -> transactions.remove(transactionId))
-                    .thenApply(v -> null);
+                            ? transactionManager.updateState(transactionId, Transaction.State.COMMITTING)
+                            .thenCompose(v -> commit(transactionParticipants))
+                            .thenApply(v -> CommitStatus.SUCCESS)
+                            : transactionManager.updateState(transactionId, Transaction.State.ROLLING_BACK)
+                            .thenCompose(v -> rollback(transactionParticipants))
+                            .thenApply(v -> CommitStatus.FAILURE));
+            return status.thenCompose(v -> transactionManager.remove(transactionId).thenApply(u -> v));
+        }
     }
 
-    private CompletableFuture<Boolean> doPrepare(Set<TransactionParticipant> transactionParticipants) {
-        return Tools.allOf(transactionParticipants
-                                           .stream()
-                                           .map(TransactionParticipant::prepare)
-                                           .collect(Collectors.toList()))
-                    .thenApply(list -> list.stream().reduce(Boolean::logicalAnd).orElse(true));
+    /**
+     * Performs the prepare phase of the two-phase commit protocol for the given transaction participants.
+     *
+     * @param transactionParticipants the transaction participants for which to prepare the transaction
+     * @return a completable future indicating whether <em>all</em> prepares succeeded
+     */
+    protected CompletableFuture<Boolean> prepare(Set<TransactionParticipant> transactionParticipants) {
+        log.trace("Preparing transaction {} via {}", transactionId, transactionParticipants);
+        return Tools.allOf(transactionParticipants.stream()
+                .map(TransactionParticipant::prepare)
+                .collect(Collectors.toList()))
+                .thenApply(list -> list.stream().reduce(Boolean::logicalAnd).orElse(true));
     }
 
-    private CompletableFuture<Void> doCommit(Set<TransactionParticipant> transactionParticipants) {
+    /**
+     * Performs the commit phase of the two-phase commit protocol for the given transaction participants.
+     *
+     * @param transactionParticipants the transaction participants for which to commit the transaction
+     * @return a completable future to be completed once the commits are complete
+     */
+    protected CompletableFuture<Void> commit(Set<TransactionParticipant> transactionParticipants) {
+        log.trace("Committing transaction {} via {}", transactionId, transactionParticipants);
         return CompletableFuture.allOf(transactionParticipants.stream()
-                                                              .map(p -> p.commit())
-                                                              .toArray(CompletableFuture[]::new));
+                .map(TransactionParticipant::commit)
+                .toArray(CompletableFuture[]::new));
     }
 
-    private CompletableFuture<Void> doRollback(Set<TransactionParticipant> transactionParticipants) {
+    /**
+     * Rolls back transactions for the given participants.
+     *
+     * @param transactionParticipants the transaction participants for which to roll back the transaction
+     * @return a completable future to be completed once the rollbacks are complete
+     */
+    protected CompletableFuture<Void> rollback(Set<TransactionParticipant> transactionParticipants) {
+        log.trace("Rolling back transaction {} via {}", transactionId, transactionParticipants);
         return CompletableFuture.allOf(transactionParticipants.stream()
-                                                              .map(p -> p.rollback())
-                                                              .toArray(CompletableFuture[]::new));
+                .map(TransactionParticipant::rollback)
+                .toArray(CompletableFuture[]::new));
+    }
+
+    @Override
+    public String toString() {
+        return toStringHelper(this)
+                .add("transactionId", transactionId)
+                .add("participants", transactionParticipants)
+                .toString();
     }
 }

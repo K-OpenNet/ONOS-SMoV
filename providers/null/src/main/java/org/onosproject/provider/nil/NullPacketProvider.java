@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,6 @@
  */
 package org.onosproject.provider.nil;
 
-import org.jboss.netty.util.HashedWheelTimer;
-import org.jboss.netty.util.Timeout;
-import org.jboss.netty.util.TimerTask;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.ICMP;
 import org.onlab.util.Timer;
@@ -34,12 +31,16 @@ import org.onosproject.net.packet.PacketProvider;
 import org.onosproject.net.packet.PacketProviderService;
 import org.slf4j.Logger;
 
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
+
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.copyOf;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.onosproject.net.MastershipRole.MASTER;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -68,7 +69,6 @@ class NullPacketProvider extends NullProviders.AbstractNullProvider
     private List<Device> devices;
     private int currentDevice = 0;
 
-    private HashedWheelTimer timer = Timer.getTimer();
     private Timeout timeout;
 
     /**
@@ -90,7 +90,7 @@ class NullPacketProvider extends NullProviders.AbstractNullProvider
                 .collect(Collectors.toList());
 
         adjustRate(packetRate);
-        timeout = timer.newTimeout(new PacketDriverTask(), INITIAL_DELAY, SECONDS);
+        timeout = Timer.newTimeout(new PacketDriverTask(), INITIAL_DELAY, SECONDS);
     }
 
     /**
@@ -99,7 +99,11 @@ class NullPacketProvider extends NullProviders.AbstractNullProvider
      * @param packetRate new packet rate
      */
     void adjustRate(int packetRate) {
-        delay = 1000 / packetRate;
+        boolean needsRestart = delay == 0 && packetRate > 0;
+        delay = packetRate > 0 ? 1000 / packetRate : 0;
+        if (needsRestart) {
+            timeout = Timer.newTimeout(new PacketDriverTask(), 1, MILLISECONDS);
+        }
         log.info("Settings: packetRate={}, delay={}", packetRate, delay);
     }
 
@@ -126,7 +130,7 @@ class NullPacketProvider extends NullProviders.AbstractNullProvider
         ICMP icmp;
         Ethernet eth;
 
-        public PacketDriverTask() {
+        PacketDriverTask() {
             icmp = new ICMP();
             icmp.setIcmpType((byte) 8).setIcmpCode((byte) 0).setChecksum((short) 0);
             eth = new Ethernet();
@@ -136,17 +140,17 @@ class NullPacketProvider extends NullProviders.AbstractNullProvider
 
         @Override
         public void run(Timeout to) {
-            if (!devices.isEmpty() && !to.isCancelled()) {
+            if (!devices.isEmpty() && !to.isCancelled() && delay > 0) {
                 sendEvent(devices.get(Math.min(currentDevice, devices.size() - 1)));
                 currentDevice = (currentDevice + 1) % devices.size();
-                timeout = timer.newTimeout(to.getTask(), delay, TimeUnit.MILLISECONDS);
+                timeout = to.timer().newTimeout(to.task(), delay, TimeUnit.MILLISECONDS);
             }
         }
 
         private void sendEvent(Device device) {
             // Make it look like things came from ports attached to hosts
-            eth.setSourceMACAddress("00:00:10:00:00:0" + SRC_HOST)
-                    .setDestinationMACAddress("00:00:10:00:00:0" + DST_HOST);
+            eth.setSourceMACAddress("00:00:00:10:00:0" + SRC_HOST)
+                    .setDestinationMACAddress("00:00:00:10:00:0" + DST_HOST);
             InboundPacket inPkt = new DefaultInboundPacket(
                     new ConnectPoint(device.id(), PortNumber.portNumber(SRC_HOST)),
                     eth, ByteBuffer.wrap(eth.serialize()));

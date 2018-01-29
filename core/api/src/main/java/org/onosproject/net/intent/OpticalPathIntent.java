@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import org.onosproject.net.Path;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableSet;
+import org.onosproject.net.ResourceGroup;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -48,8 +49,9 @@ public final class OpticalPathIntent extends Intent {
                               OchSignal lambda,
                               OchSignalType signalType,
                               boolean isBidirectional,
-                              int priority) {
-        super(appId, key, ImmutableSet.copyOf(path.links()), priority);
+                              int priority,
+                              ResourceGroup resourceGroup) {
+        super(appId, key, ImmutableSet.copyOf(path.links()), priority, resourceGroup);
         this.src = checkNotNull(src);
         this.dst = checkNotNull(dst);
         this.path = checkNotNull(path);
@@ -87,7 +89,7 @@ public final class OpticalPathIntent extends Intent {
         private OchSignal lambda;
         private OchSignalType signalType;
         private boolean isBidirectional;
-        Key key;
+        private Key key;
 
         @Override
         public Builder appId(ApplicationId appId) {
@@ -102,6 +104,11 @@ public final class OpticalPathIntent extends Intent {
         @Override
         public Builder priority(int priority) {
             return (Builder) super.priority(priority);
+        }
+
+        @Override
+        public Builder resourceGroup(ResourceGroup resourceGroup) {
+            return (Builder) super.resourceGroup(resourceGroup);
         }
 
         /**
@@ -186,7 +193,8 @@ public final class OpticalPathIntent extends Intent {
                     lambda,
                     signalType,
                     isBidirectional,
-                    priority
+                    priority,
+                    resourceGroup
             );
         }
     }

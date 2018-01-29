@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,16 @@
  */
 package org.onosproject.cluster.impl;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.google.common.collect.Sets;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -22,8 +32,8 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.Service;
 import org.apache.karaf.system.SystemService;
-import org.joda.time.DateTime;
 import org.onlab.packet.IpAddress;
+import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterAdminService;
 import org.onosproject.cluster.ClusterEvent;
 import org.onosproject.cluster.ClusterEventListener;
@@ -41,25 +51,16 @@ import org.onosproject.cluster.DefaultPartition;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.Partition;
 import org.onosproject.cluster.PartitionId;
+import org.onosproject.core.Version;
+import org.onosproject.core.VersionService;
 import org.onosproject.event.AbstractListenerManager;
 import org.slf4j.Logger;
-
-import com.google.common.collect.Collections2;
-import com.google.common.collect.Sets;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.security.AppGuard.checkPermission;
+import static org.onosproject.security.AppPermission.Type.CLUSTER_READ;
 import static org.slf4j.LoggerFactory.getLogger;
-import static org.onosproject.security.AppPermission.Type.*;
 
 /**
  * Implementation of the cluster service.
@@ -71,6 +72,7 @@ public class ClusterManager
         implements ClusterService, ClusterAdminService {
 
     public static final String INSTANCE_ID_NULL = "Instance ID cannot be null";
+    private static final int DEFAULT_PARTITION_SIZE = 3;
     private final Logger log = getLogger(getClass());
 
     private ClusterStoreDelegate delegate = new InternalStoreDelegate();
@@ -86,6 +88,9 @@ public class ClusterManager
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected SystemService systemService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected VersionService versionService;
 
     private final AtomicReference<ClusterMetadata> currentMetadata = new AtomicReference<>();
     private final InternalClusterMetadataListener metadataListener = new InternalClusterMetadataListener();
@@ -133,22 +138,40 @@ public class ClusterManager
         return store.getState(nodeId);
     }
 
+    @Override
+    public Version getVersion(NodeId nodeId) {
+        checkPermission(CLUSTER_READ);
+        checkNotNull(nodeId, INSTANCE_ID_NULL);
+        return store.getVersion(nodeId);
+    }
 
     @Override
-    public DateTime getLastUpdated(NodeId nodeId) {
+    public void markFullyStarted(boolean started) {
+        store.markFullyStarted(started);
+    }
+
+    @Override
+    public Instant getLastUpdatedInstant(NodeId nodeId) {
         checkPermission(CLUSTER_READ);
-        return store.getLastUpdated(nodeId);
+        return store.getLastUpdatedInstant(nodeId);
     }
 
     @Override
     public void formCluster(Set<ControllerNode> nodes) {
+        formCluster(nodes, DEFAULT_PARTITION_SIZE);
+    }
+
+    @Override
+    public void formCluster(Set<ControllerNode> nodes, int partitionSize) {
         checkNotNull(nodes, "Nodes cannot be null");
         checkArgument(!nodes.isEmpty(), "Nodes cannot be empty");
 
-        ClusterMetadata metadata = new ClusterMetadata("default", nodes, buildDefaultPartitions(nodes));
+        ClusterMetadata metadata = new ClusterMetadata("default", nodes, buildDefaultPartitions(nodes, partitionSize));
         clusterMetadataAdminService.setClusterMetadata(metadata);
         try {
             log.warn("Shutting down container for cluster reconfiguration!");
+            // Clean up persistent state associated with previous cluster configuration.
+            Tools.removeDirectory(System.getProperty("karaf.data") + "/db/partitions/");
             systemService.reboot("now", SystemService.Swipe.NONE);
         } catch (Exception e) {
             log.error("Unable to reboot container", e);
@@ -177,23 +200,20 @@ public class ClusterManager
         }
     }
 
-    private static Set<Partition> buildDefaultPartitions(Collection<ControllerNode> nodes) {
+    private Set<Partition> buildDefaultPartitions(Collection<ControllerNode> nodes, int partitionSize) {
         List<ControllerNode> sorted = new ArrayList<>(nodes);
         Collections.sort(sorted, (o1, o2) -> o1.id().toString().compareTo(o2.id().toString()));
         Set<Partition> partitions = Sets.newHashSet();
-        // add p0 partition
-        partitions.add(new DefaultPartition(PartitionId.from(0),
-                                            Sets.newHashSet(Collections2.transform(nodes, ControllerNode::id))));
-        // add extended partitions
+        // add partitions
         int length = nodes.size();
-        int count = Math.min(3, length);
+        int count = Math.min(partitionSize, length);
         for (int i = 0; i < length; i++) {
             int index = i;
             Set<NodeId> set = new HashSet<>(count);
             for (int j = 0; j < count; j++) {
                 set.add(sorted.get((i + j) % length).id());
             }
-            partitions.add(new DefaultPartition(PartitionId.from((index + 1)), set));
+            partitions.add(new DefaultPartition(PartitionId.from((index + 1)), versionService.version(), set));
         }
         return partitions;
     }

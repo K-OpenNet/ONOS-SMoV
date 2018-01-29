@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,20 +72,24 @@ public class ComponentConfigCommand extends AbstractShellCommand {
     @Override
     protected void execute() {
         service = get(ComponentConfigService.class);
-        if (isNullOrEmpty(command)) {
-            listComponents();
-        } else if (command.equals(GET) && isNullOrEmpty(component)) {
-            listAllComponentsProperties();
-        } else if (command.equals(GET) && isNullOrEmpty(name)) {
-            listComponentProperties(component);
-        } else if (command.equals(GET)) {
-            listComponentProperty(component, name);
-        } else if (command.equals(SET) && isNullOrEmpty(value)) {
-            service.unsetProperty(component, name);
-        } else if (command.equals(SET)) {
-            service.setProperty(component, name, value);
-        } else {
-            error("Illegal usage");
+        try {
+            if (isNullOrEmpty(command)) {
+                listComponents();
+            } else if (command.equals(GET) && isNullOrEmpty(component)) {
+                listAllComponentsProperties();
+            } else if (command.equals(GET) && isNullOrEmpty(name)) {
+                listComponentProperties(component);
+            } else if (command.equals(GET)) {
+                listComponentProperty(component, name);
+            } else if (command.equals(SET) && isNullOrEmpty(value)) {
+                service.unsetProperty(component, name);
+            } else if (command.equals(SET)) {
+                service.setProperty(component, name, value);
+            } else {
+                error("Illegal usage");
+            }
+        } catch (IllegalArgumentException e) {
+            error(e.getMessage());
         }
     }
 

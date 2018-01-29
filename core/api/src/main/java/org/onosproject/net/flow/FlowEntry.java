@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
 package org.onosproject.net.flow;
 
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Represents a generalized match &amp; action pair to be applied to
- * an infrastucture device.
+ * an infrastructure device.
  */
 public interface FlowEntry extends FlowRule {
 
@@ -60,11 +62,59 @@ public interface FlowEntry extends FlowRule {
     FlowEntryState state();
 
     /**
-     * Returns the number of milliseconds this flow rule has been applied.
+     * Returns the number of seconds this flow rule has been applied.
      *
-     * @return number of millis
+     * @return number of seconds
      */
     long life();
+
+    enum FlowLiveType {
+
+        /**
+         * Indicates that this rule has been submitted for addition immediately.
+         * Not necessarily collecting flow stats.
+         */
+        IMMEDIATE,
+
+        /**
+         * Indicates that this rule has been submitted for a short time.
+         * Collecting flow stats every SHORT interval, defined by the implementation.
+         */
+        SHORT,
+
+        /**
+         * Indicates that this rule has been submitted for a mid time.
+         * Collecting flow stats every MID interval, defined by the implementation.
+         */
+        MID,
+
+        /**
+         * Indicates that this rule has been submitted for a long time.
+         * Collecting flow stats every LONG interval, defined by the implementation.
+         */
+        LONG,
+
+        /**
+         * Indicates that this rule has been submitted for UNKNOWN or ERROR.
+         * Not necessarily collecting flow stats.
+         */
+        UNKNOWN
+    }
+
+    /**
+     * Gets the flow live type for this entry.
+     *
+     * @return flow live type
+     */
+    FlowLiveType liveType();
+
+    /**
+     * Returns the time this flow rule has been applied.
+     *
+     * @param unit time unit the result will be converted to
+     * @return time in the requested {@link TimeUnit}
+     */
+    long life(TimeUnit unit);
 
     /**
      * Returns the number of packets this flow rule has matched.

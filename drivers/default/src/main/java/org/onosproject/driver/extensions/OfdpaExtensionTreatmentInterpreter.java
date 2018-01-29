@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.projectfloodlight.openflow.types.OFVlanVidMatch;
 /**
  * Interpreter for OFDPA OpenFlow treatment extensions.
  */
-public class OfdpaExtensionTreatmentInterpreter  extends AbstractHandlerBehaviour
+public class OfdpaExtensionTreatmentInterpreter extends AbstractHandlerBehaviour
         implements ExtensionTreatmentInterpreter, ExtensionTreatmentResolver {
     @Override
     public boolean supported(ExtensionTreatmentType extensionTreatmentType) {
@@ -58,7 +58,7 @@ public class OfdpaExtensionTreatmentInterpreter  extends AbstractHandlerBehaviou
     }
 
     @Override
-    public ExtensionTreatment mapAction(OFAction action) {
+    public ExtensionTreatment mapAction(OFAction action) throws UnsupportedOperationException {
         if (action.getType().equals(OFActionType.SET_FIELD)) {
             OFActionSetField setFieldAction = (OFActionSetField) action;
             OFOxm<?> oxm = setFieldAction.getField();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,33 @@
  */
 package org.onosproject.cli.net;
 
+import com.google.common.collect.Sets;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
+import org.onlab.util.Tools;
 import org.onosproject.net.Device;
 import org.onosproject.net.Host;
 import org.onosproject.net.Link;
 import org.onosproject.net.device.DeviceAdminService;
+import org.onosproject.net.flow.FlowRuleService;
+import org.onosproject.net.group.GroupService;
 import org.onosproject.net.host.HostAdminService;
 import org.onosproject.net.intent.Intent;
+import org.onosproject.net.intent.IntentEvent;
+import org.onosproject.net.intent.IntentListener;
 import org.onosproject.net.intent.IntentService;
-import org.onosproject.net.intent.IntentState;
+import org.onosproject.net.intent.Key;
 import org.onosproject.net.link.LinkAdminService;
+import org.onosproject.net.region.RegionAdminService;
+import org.onosproject.ui.UiTopoLayoutService;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import static org.onosproject.net.intent.IntentState.WITHDRAWN;
 
 /**
  * Wipes-out the entire network information base, i.e. devices, links, hosts, intents.
@@ -35,9 +51,7 @@ import org.onosproject.net.link.LinkAdminService;
 public class WipeOutCommand extends ClustersListCommand {
 
     private static final String PLEASE = "please";
-
-    @Argument(index = 0, name = "please", description = "Confirmation phrase",
-            required = false, multiValued = false)
+    @Argument(name = "please", description = "Confirmation phrase")
     String please = null;
 
     @Override
@@ -49,18 +63,66 @@ public class WipeOutCommand extends ClustersListCommand {
 
         wipeOutIntents();
         wipeOutHosts();
+        wipeOutFlows();
+        wipeOutGroups();
         wipeOutDevices();
         wipeOutLinks();
+
+        wipeOutLayouts();
+        wipeOutRegions();
     }
 
     private void wipeOutIntents() {
         print("Wiping intents");
         IntentService intentService = get(IntentService.class);
-        for (Intent intent : intentService.getIntents()) {
-            if (intentService.getIntentState(intent.key()) != IntentState.WITHDRAWN) {
-                intentService.withdraw(intent);
+        Set<Key> keysToWithdrawn = Sets.newConcurrentHashSet();
+        Set<Intent> intentsToWithdrawn = Tools.stream(intentService.getIntents())
+                .filter(intent -> intentService.getIntentState(intent.key()) != WITHDRAWN)
+                .collect(Collectors.toSet());
+        intentsToWithdrawn.stream()
+                .map(Intent::key)
+                .forEach(keysToWithdrawn::add);
+        CompletableFuture<Void> completableFuture = new CompletableFuture<>();
+        IntentListener listener = e -> {
+            if (e.type() == IntentEvent.Type.WITHDRAWN) {
+                keysToWithdrawn.remove(e.subject().key());
             }
-            intentService.purge(intent);
+            if (keysToWithdrawn.isEmpty()) {
+                completableFuture.complete(null);
+            }
+        };
+        intentService.addListener(listener);
+        intentsToWithdrawn.forEach(intentService::withdraw);
+        try {
+            // Wait 1.5 seconds for each Intent
+            completableFuture.get(intentsToWithdrawn.size() * 1500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            print("Got interrupted exception while withdrawn Intents " + e.toString());
+        } catch (ExecutionException e) {
+            print("Got execution exception while withdrawn Intents " + e.toString());
+        } catch (TimeoutException e) {
+            print("Got timeout exception while withdrawn Intents " + e.toString());
+        } finally {
+            intentService.removeListener(listener);
+        }
+        intentsToWithdrawn.forEach(intentService::purge);
+    }
+
+    private void wipeOutFlows() {
+        print("Wiping Flows");
+        FlowRuleService flowRuleService = get(FlowRuleService.class);
+        DeviceAdminService deviceAdminService = get(DeviceAdminService.class);
+        for (Device device : deviceAdminService.getDevices()) {
+            flowRuleService.purgeFlowRules(device.id());
+        }
+    }
+
+    private void wipeOutGroups() {
+        print("Wiping groups");
+        GroupService groupService = get(GroupService.class);
+        DeviceAdminService deviceAdminService = get(DeviceAdminService.class);
+        for (Device device : deviceAdminService.getDevices()) {
+            groupService.purgeGroupEntries(device.id());
         }
     }
 
@@ -73,7 +135,7 @@ public class WipeOutCommand extends ClustersListCommand {
                     hostAdminService.removeHost(host.id());
                 }
             } catch (Exception e) {
-                log.warn("Unable to wipe-out hosts", e);
+                log.info("Unable to wipe-out hosts", e);
             }
         }
     }
@@ -87,7 +149,7 @@ public class WipeOutCommand extends ClustersListCommand {
                     deviceAdminService.removeDevice(device.id());
                 }
             } catch (Exception e) {
-                log.warn("Unable to wipe-out devices", e);
+                log.info("Unable to wipe-out devices", e);
             }
         }
     }
@@ -102,8 +164,25 @@ public class WipeOutCommand extends ClustersListCommand {
                     linkAdminService.removeLinks(link.dst());
                 }
             } catch (Exception e) {
-                log.warn("Unable to wipe-out links", e);
+                log.info("Unable to wipe-out links", e);
             }
         }
+    }
+
+    private void wipeOutLayouts() {
+        print("Wiping UI layouts");
+        UiTopoLayoutService service = get(UiTopoLayoutService.class);
+        // wipe out all layouts except the default, which should always be there
+        service.getLayouts().forEach(l -> {
+            if (!l.id().isDefault()) {
+                service.removeLayout(l);
+            }
+        });
+    }
+
+    private void wipeOutRegions() {
+        print("Wiping regions");
+        RegionAdminService service = get(RegionAdminService.class);
+        service.getRegions().forEach(r -> service.removeRegion(r.id()));
     }
 }

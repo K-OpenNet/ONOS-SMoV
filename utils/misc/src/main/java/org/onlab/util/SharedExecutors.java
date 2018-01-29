@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -95,9 +95,15 @@ public final class SharedExecutors {
                                                             "onos-pool-executor-%d")));
     }
 
-
-    public static void setCalculatePoolPerformance(boolean calculatePoolPerformance, MetricsService metricsService) {
-        poolThreadExecutor.setCalculatePoolPerformance(calculatePoolPerformance, metricsService);
+    /**
+     * Enables or disables calculation of the pool performance metrics. If
+     * the metrics service is not null metric collection will be enabled;
+     * otherwise it will be disabled.
+     *
+     * @param metricsService optional metric service
+     */
+    public static void setMetricsService(MetricsService metricsService) {
+        poolThreadExecutor.setMetricsService(metricsService);
     }
 
     /**

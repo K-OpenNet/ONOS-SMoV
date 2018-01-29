@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,29 @@
 /*
  ONOS GUI -- Remote -- General Functions - Unit Tests
  */
+
 describe('factory: fw/remote/urlfn.js', function () {
     var $log, $loc, ufs, fs;
 
-    var protocol, host, port;
+    var protocol, host, port, context;
 
     beforeEach(module('onosRemote'));
 
     beforeEach(module(function($provide) {
-       $provide.factory('$location', function (){
+        $provide.factory('$location', function () {
         return {
             protocol: function () { return protocol; },
             host: function () { return host; },
-            port: function () { return port; }
+            port: function () { return port; },
+            search: function() {
+                return {debug: 'true'};
+            },
+            absUrl: function () {
+                return protocol + '://' + host + ':' + port +
+                    context + '/onos/ui/';
+            }
         };
-       })
+       });
     }));
 
     beforeEach(inject(function (_$log_, $location, UrlFnService, FnService) {
@@ -41,10 +49,11 @@ describe('factory: fw/remote/urlfn.js', function () {
         fs = FnService;
     }));
 
-    function setLoc(prot, h, p) {
+    function setLoc(prot, h, p, ctx) {
         protocol = prot;
         host = h;
         port = p;
+        context = ctx || '';
     }
 
     it('should define UrlFnService', function () {
@@ -85,5 +94,10 @@ describe('factory: fw/remote/urlfn.js', function () {
     it('should allow us to define an alternate host', function () {
         setLoc('http', 'foo', '123');
         expect(ufs.wsUrl('core', 456, 'bar')).toEqual('ws://bar:456/onos/ui/websock/core');
+    });
+
+    it('should allow us to inject an app context', function () {
+        setLoc('http', 'foo', '123', '/my/app');
+        expect(ufs.wsUrl('path')).toEqual('ws://foo:123/my/app/onos/ui/websock/path');
     });
 });

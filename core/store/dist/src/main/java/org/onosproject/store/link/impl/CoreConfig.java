@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,12 @@ public class CoreConfig extends Config<ApplicationId> {
     private static final String LINK_DISCOVERY_MODE = "linkDiscoveryMode";
 
     protected static final String DEFAULT_LINK_DISCOVERY_MODE = "PERMISSIVE";
+
+    @Override
+    public boolean isValid() {
+        linkDiscoveryMode();
+        return hasOnlyFields(LINK_DISCOVERY_MODE);
+    }
 
     /**
      * Returns the link discovery mode.

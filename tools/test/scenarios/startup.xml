@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright 2015 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
             <step name="Start-Service-${#}" exec="onos-service ${OC#} start"/>
             <step name="Wait-for-Start-${#}" exec="onos-wait-for-start ${OC#}"
                   requires="Start-Service-${#}"/>
-            <step name="Check-Logs-${#}" exec="onos-check-logs ${OC#}"
+            <step name="Check-Logs-${#}" exec="onos-check-logs --ignore-store-exceptions ${OC#}"
                   requires="~Wait-for-Start-${#}"/>
         </parallel>
     </group>

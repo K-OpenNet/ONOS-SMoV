@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,11 @@
     // injected refs
     var $log, tov, tts;
 
+    // function to be replaced by the localization bundle function
+    var topoLion = function (x) {
+        return '#ttrafov#' + x + '#';
+    };
+
     // NOTE: no internal state here -- see TopoTrafficService for that
 
     // NOTE: providing button disabling requires too big a refactoring of
@@ -35,34 +40,34 @@
     // traffic overlay definition
     var overlay = {
         overlayId: 'traffic',
-        glyphId: 'allTraffic',
-        tooltip: 'Traffic Overlay',
+        glyphId: 'm_allTraffic',
+        tooltip: function () { return topoLion('ov_tt_traffic'); },
 
         // NOTE: Traffic glyphs already installed as part of the base ONOS set.
 
         activate: function () {
-            $log.debug("Traffic overlay ACTIVATED");
+            $log.debug('Traffic overlay ACTIVATED');
         },
 
         deactivate: function () {
             tts.cancelTraffic(true);
-            $log.debug("Traffic overlay DEACTIVATED");
+            $log.debug('Traffic overlay DEACTIVATED');
         },
 
         // detail panel button definitions
         // (keys match button identifiers, also defined in TrafficOverlay.java)
         buttons: {
             showDeviceFlows: {
-                gid: 'flows',
-                tt: 'Show Device Flows',
-                cb: function (data) { tts.showDeviceLinkFlows(); }
+                gid: 'm_flows',
+                tt: function () { return topoLion('tr_btn_show_device_flows'); },
+                cb: function (data) { tts.showDeviceLinkFlows(); },
             },
 
             showRelatedTraffic: {
-                gid: 'relatedIntents',
-                tt: 'Show Related Traffic',
-                cb: function (data) { tts.showRelatedIntents(); }
-            }
+                gid: 'm_relatedIntents',
+                tt: function () { return topoLion('tr_btn_show_related_traffic'); },
+                cb: function (data) { tts.showRelatedIntents(); },
+            },
         },
 
         // key bindings for traffic overlay toolbar buttons
@@ -70,49 +75,44 @@
         keyBindings: {
             0: {
                 cb: function () { tts.cancelTraffic(true); },
-                tt: 'Cancel traffic monitoring',
-                gid: 'xMark'
+                tt: function () { return topoLion('tr_btn_cancel_monitoring'); },
+                gid: 'm_xMark',
             },
 
             A: {
-                cb: function () { tts.showAllFlowTraffic(); },
-                tt: 'Monitor all traffic using flow stats',
-                gid: 'allTraffic'
-            },
-            Q: {
-                cb: function () { tts.showAllPortTraffic(); },
-                tt: 'Monitor all traffic using port stats',
-                gid: 'allTraffic'
+                cb: function () { tts.showAllTraffic(); },
+                tt: function () { return topoLion('tr_btn_monitor_all'); },
+                gid: 'm_allTraffic',
             },
             F: {
                 cb: function () { tts.showDeviceLinkFlows(); },
-                tt: 'Show device link flows',
-                gid: 'flows'
+                tt: function () { return topoLion('tr_btn_show_dev_link_flows'); },
+                gid: 'm_flows',
             },
             V: {
                 cb: function () { tts.showRelatedIntents(); },
-                tt: 'Show all related intents',
-                gid: 'relatedIntents'
+                tt: function () { return topoLion('tr_btn_show_all_rel_intents'); },
+                gid: 'm_relatedIntents',
             },
             leftArrow: {
                 cb: function () { tts.showPrevIntent(); },
-                tt: 'Show previous related intent',
-                gid: 'prevIntent'
+                tt: function () { return topoLion('tr_btn_show_prev_rel_intent'); },
+                gid: 'm_prev',
             },
             rightArrow: {
                 cb: function () { tts.showNextIntent(); },
-                tt: 'Show next related intent',
-                gid: 'nextIntent'
+                tt: function () { return topoLion('tr_btn_show_next_rel_intent'); },
+                gid: 'm_next',
             },
             W: {
                 cb: function () { tts.showSelectedIntentTraffic(); },
-                tt: 'Monitor traffic of selected intent',
-                gid: 'intentTraffic'
+                tt: function () { return topoLion('tr_btn_monitor_sel_intent'); },
+                gid: 'm_intentTraffic',
             },
 
             _keyOrder: [
-                '0', 'A', 'Q', 'F', 'V', 'leftArrow', 'rightArrow', 'W'
-            ]
+                '0', 'A', 'F', 'V', 'leftArrow', 'rightArrow', 'W',
+            ],
         },
 
         hooks: {
@@ -141,8 +141,23 @@
             },
             mouseout: function () {
                 tts.requestTrafficForMode(true);
-            }
-        }
+            },
+
+            // intent visualization hooks
+            acceptIntent: function (type) {
+                // accept any intent type except "Protected" intents
+                return (!type.startsWith('Protected'));
+            },
+            showIntent: function (info) {
+                $log.debug('^^ trafficOverlay.showintent() ^^', info);
+                tts.selectIntent(info);
+            },
+            // localization bundle injection hook
+            injectLion: function (bundle) {
+                topoLion = bundle;
+                tts.setLionBundle(bundle);
+            },
+        },
     };
 
     // invoke code to register with the overlay service

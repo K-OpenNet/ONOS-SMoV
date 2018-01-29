@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ describe('factory: view/topo/topoPanel.js', function() {
     };
 
     beforeEach(module('ovTopo', 'onosUtil', 'onosLayer', 'ngRoute', 'onosNav',
-        'onosWidget'));
+        'onosWidget', 'onosMast'));
 
     beforeEach(function () {
         module(function ($provide) {
@@ -65,19 +65,19 @@ describe('factory: view/topo/topoPanel.js', function() {
 
             'showSummary',
             'toggleSummary',
+            'hideSummary',
 
             'toggleUseDetailsFlag',
             'displaySingle',
             'displayMulti',
-            'displayLink',
             'displayNothing',
             'displaySomething',
             'addAction',
 
-            'hideSummaryPanel',
-
             'detailVisible',
-            'summaryVisible'
+            'summaryVisible',
+
+            'setLionBundle',
         ])).toBeTruthy();
     });
 
@@ -143,7 +143,7 @@ describe('factory: view/topo/topoPanel.js', function() {
         p.destroy();
     });
 
-    it('should warn if panel is not setup/defined, adjustHeight', function () {
+    xit('should warn if panel is not setup/defined, adjustHeight', function () {
         spyOn($log, 'warn');
         var p = tps.createTopoPanel('foo');
         p.adjustHeight(50);

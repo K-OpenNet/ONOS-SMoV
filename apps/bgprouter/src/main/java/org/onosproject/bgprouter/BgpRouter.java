@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.component.ComponentService;
-import org.onosproject.incubator.net.intf.InterfaceService;
+import org.onosproject.component.ComponentService;
+import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
@@ -33,7 +33,7 @@ import org.onosproject.net.flowobjective.FlowObjectiveService;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.routing.RoutingService;
 import org.onosproject.routing.config.BgpConfig;
-import org.onosproject.routing.config.RoutingConfigurationService;
+import org.onosproject.routing.config.RoutingConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,17 +54,11 @@ public class BgpRouter {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected CoreService coreService;
 
-    // We depend on the routing configuration being available before starting
-    // up. When we have dynamic configuration support this will no longer be
-    // necessary.
-    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected RoutingConfigurationService routingConfigurationService;
-
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected InterfaceService interfaceService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected NetworkConfigService networkConfigService;
+    protected NetworkConfigRegistry networkConfigService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected PacketService packetService;
@@ -94,13 +88,14 @@ public class BgpRouter {
     private static List<String> components = new ArrayList<>();
     static {
         components.add("org.onosproject.routing.bgp.BgpSessionManager");
-        components.add("org.onosproject.routing.impl.Router");
-        components.add("org.onosproject.routing.impl.SingleSwitchFibInstaller");
+        components.add("org.onosproject.routing.impl.BgpSpeakerNeighbourHandler");
     }
 
     @Activate
     protected void activate() {
         appId = coreService.registerApplication(BGP_ROUTER_APP);
+
+        RoutingConfiguration.register(networkConfigService);
 
         components.forEach(name -> componentService.activate(appId, name));
 
@@ -139,6 +134,8 @@ public class BgpRouter {
     @Deactivate
     protected void deactivate() {
         components.forEach(name -> componentService.deactivate(appId, name));
+
+        RoutingConfiguration.unregister(networkConfigService);
 
         connectivityManager.stop();
         icmpHandler.stop();

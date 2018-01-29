@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  */
 package org.onosproject.cluster;
 
+import com.google.common.base.MoreObjects;
 import org.onosproject.event.AbstractEvent;
+
+import java.util.Objects;
 
 /**
  * Describes cluster-related event.
@@ -40,6 +43,11 @@ public class ClusterEvent extends AbstractEvent<ClusterEvent.Type, ControllerNod
          * Signifies that a cluster instance became active.
          */
         INSTANCE_ACTIVATED,
+
+        /**
+         * Signifies that a cluster instance became ready.
+         */
+        INSTANCE_READY,
 
         /**
          * Signifies that a cluster instance became inactive.
@@ -67,6 +75,35 @@ public class ClusterEvent extends AbstractEvent<ClusterEvent.Type, ControllerNod
      */
     public ClusterEvent(Type type, ControllerNode instance, long time) {
         super(type, instance, time);
+    }
+
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type(), subject(), time());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj instanceof ClusterEvent) {
+            final ClusterEvent other = (ClusterEvent) obj;
+            return Objects.equals(this.type(), other.type()) &&
+                    Objects.equals(this.subject(), other.subject()) &&
+                    Objects.equals(this.time(), other.time());
+        }
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        return MoreObjects.toStringHelper(this.getClass())
+                .add("type", type())
+                .add("subject", subject())
+                .add("time", time())
+                .toString();
     }
 
 }

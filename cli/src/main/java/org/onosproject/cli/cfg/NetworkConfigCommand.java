@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,12 +21,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
+import org.apache.karaf.shell.commands.Option;
 import org.onosproject.cli.AbstractShellCommand;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.SubjectFactory;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.onlab.util.Tools.nullIsIllegal;
 
 /**
  * Manages network configuration.
@@ -34,6 +36,8 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 @Command(scope = "onos", name = "netcfg",
         description = "Manages network configuration")
 public class NetworkConfigCommand extends AbstractShellCommand {
+
+    private static final String E_CLASSKEY_NOT_REGISTERED = " is not a registered SubjectClassKey";
 
     @Argument(index = 0, name = "subjectClassKey", description = "Subject class key",
             required = false, multiValued = false)
@@ -47,6 +51,11 @@ public class NetworkConfigCommand extends AbstractShellCommand {
             required = false, multiValued = false)
     String configKey = null;
 
+    @Option(name = "--remove",
+            description = "Remove specified configuration tree",
+            required = false)
+    private boolean remove = false;
+
     private final ObjectMapper mapper = new ObjectMapper();
     private NetworkConfigService service;
 
@@ -55,16 +64,26 @@ public class NetworkConfigCommand extends AbstractShellCommand {
         service = get(NetworkConfigService.class);
         JsonNode root = mapper.createObjectNode();
         if (isNullOrEmpty(subjectClassKey)) {
+            if (remove) {
+                service.removeConfig();
+            }
             addAll((ObjectNode) root);
         } else {
-            SubjectFactory subjectFactory = service.getSubjectFactory(subjectClassKey);
+            SubjectFactory subjectFactory = nullIsIllegal(service.getSubjectFactory(subjectClassKey),
+                                subjectClassKey + E_CLASSKEY_NOT_REGISTERED);
             if (isNullOrEmpty(subjectKey)) {
                 addSubjectClass((ObjectNode) root, subjectFactory);
             } else {
                 Object s = subjectFactory.createSubject(subjectKey);
                 if (isNullOrEmpty(configKey)) {
+                    if (remove) {
+                        service.removeConfig(s);
+                    }
                     addSubject((ObjectNode) root, s);
                 } else {
+                    if (remove) {
+                        service.removeConfig(subjectClassKey, s, configKey);
+                    }
                     root = getSubjectConfig(getConfig(s, subjectClassKey, configKey));
                 }
             }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,26 +83,14 @@ public class AppPermission extends BasicPermission {
         TUNNEL_EVENT,
         UI_READ,
         UI_WRITE,
-        /**
-         * Permission to create a virtual network.
-         */
-        VN_CREATE,
-        /**
-         * Permission to remove a virtual network.
-         */
-        VN_REMOVE,
-        /**
-         * Permission to read a list of virtual networks.
-         */
-        VN_READ,
-        /**
-         * Permission to receive events from a certain virutal network.
-         */
-        VN_EVENT,
-        /**
-         * Permission to access a certain virtual network.
-         */
-        VN_WRITE
+        UPGRADE_READ,
+        UPGRADE_WRITE,
+        UPGRADE_EVENT,
+        VNET_READ_1,
+        VNET_WRITE_ALL,
+        VNET_READ_ALL,
+        VNET_WRITE_1,
+	    ADMIN
     }
 
     protected Type type;

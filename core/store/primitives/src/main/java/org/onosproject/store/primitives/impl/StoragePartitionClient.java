@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,35 +15,49 @@
  */
 package org.onosproject.store.primitives.impl;
 
-import static org.slf4j.LoggerFactory.getLogger;
-import io.atomix.Atomix;
-import io.atomix.AtomixClient;
-import io.atomix.catalyst.transport.Transport;
-import io.atomix.resource.ResourceType;
-import io.atomix.variables.DistributedLong;
-
-import java.util.Collection;
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+import com.google.common.base.Suppliers;
+import io.atomix.protocols.raft.RaftClient;
+import io.atomix.protocols.raft.ReadConsistency;
+import io.atomix.protocols.raft.cluster.MemberId;
+import io.atomix.protocols.raft.protocol.RaftClientProtocol;
+import io.atomix.protocols.raft.proxy.CommunicationStrategy;
+import io.atomix.protocols.raft.session.RaftSessionMetadata;
 import org.onlab.util.HexString;
 import org.onosproject.store.primitives.DistributedPrimitiveCreator;
+import org.onosproject.store.primitives.resources.impl.AtomixAtomicCounterMap;
 import org.onosproject.store.primitives.resources.impl.AtomixConsistentMap;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentSetMultimap;
+import org.onosproject.store.primitives.resources.impl.AtomixConsistentTreeMap;
 import org.onosproject.store.primitives.resources.impl.AtomixCounter;
+import org.onosproject.store.primitives.resources.impl.AtomixDocumentTree;
+import org.onosproject.store.primitives.resources.impl.AtomixIdGenerator;
 import org.onosproject.store.primitives.resources.impl.AtomixLeaderElector;
+import org.onosproject.store.primitives.resources.impl.AtomixWorkQueue;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.AsyncAtomicCounter;
+import org.onosproject.store.service.AsyncAtomicCounterMap;
+import org.onosproject.store.service.AsyncAtomicIdGenerator;
 import org.onosproject.store.service.AsyncAtomicValue;
 import org.onosproject.store.service.AsyncConsistentMap;
+import org.onosproject.store.service.AsyncConsistentMultimap;
+import org.onosproject.store.service.AsyncConsistentTreeMap;
 import org.onosproject.store.service.AsyncDistributedSet;
+import org.onosproject.store.service.AsyncDocumentTree;
 import org.onosproject.store.service.AsyncLeaderElector;
-import org.onosproject.store.service.DistributedQueue;
+import org.onosproject.store.service.DistributedPrimitive;
+import org.onosproject.store.service.Ordering;
+import org.onosproject.store.service.PartitionClientInfo;
 import org.onosproject.store.service.Serializer;
+import org.onosproject.store.service.WorkQueue;
 import org.slf4j.Logger;
 
-import com.google.common.base.Supplier;
-import com.google.common.base.Suppliers;
-import com.google.common.collect.ImmutableSet;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * StoragePartition client.
@@ -53,40 +67,26 @@ public class StoragePartitionClient implements DistributedPrimitiveCreator, Mana
     private final Logger log = getLogger(getClass());
 
     private final StoragePartition partition;
-    private final Transport transport;
-    private final io.atomix.catalyst.serializer.Serializer serializer;
-    private final Collection<ResourceType> resourceTypes;
-    private Atomix client;
+    private final MemberId localMemberId;
+    private final RaftClientProtocol protocol;
+    private RaftClient client;
     private static final String ATOMIC_VALUES_CONSISTENT_MAP_NAME = "onos-atomic-values";
-    private final Supplier<AsyncConsistentMap<String, byte[]>> onosAtomicValuesMap =
+    private final com.google.common.base.Supplier<AsyncConsistentMap<String, byte[]>> onosAtomicValuesMap =
             Suppliers.memoize(() -> newAsyncConsistentMap(ATOMIC_VALUES_CONSISTENT_MAP_NAME,
                                                           Serializer.using(KryoNamespaces.BASIC)));
 
-    public StoragePartitionClient(StoragePartition partition,
-            io.atomix.catalyst.serializer.Serializer serializer,
-            Transport transport,
-            Collection<ResourceType> resourceTypes) {
+    public StoragePartitionClient(StoragePartition partition, MemberId localMemberId, RaftClientProtocol protocol) {
         this.partition = partition;
-        this.serializer = serializer;
-        this.transport = transport;
-        this.resourceTypes = ImmutableSet.copyOf(resourceTypes);
+        this.localMemberId = localMemberId;
+        this.protocol = protocol;
     }
 
     @Override
     public CompletableFuture<Void> open() {
-        if (client != null && client.isOpen()) {
-            return CompletableFuture.completedFuture(null);
-        }
         synchronized (StoragePartitionClient.this) {
-            client = AtomixClient.builder(partition.getMemberAddresses())
-                                .withSerializer(serializer.clone())
-                                .withResourceResolver(r -> {
-                                    resourceTypes.forEach(r::register);
-                                })
-                                .withTransport(transport)
-                                .build();
+            client = newRaftClient(protocol);
         }
-        return client.open().whenComplete((r, e) -> {
+        return client.connect(partition.getMemberIds()).whenComplete((r, e) -> {
             if (e == null) {
                 log.info("Successfully started client for partition {}", partition.getId());
             } else {
@@ -101,69 +101,224 @@ public class StoragePartitionClient implements DistributedPrimitiveCreator, Mana
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <K, V> AsyncConsistentMap<K, V> newAsyncConsistentMap(String name, Serializer serializer) {
-        AsyncConsistentMap<String, byte[]> rawMap =
-                new DelegatingAsyncConsistentMap<String, byte[]>(client.get(name, AtomixConsistentMap.class).join()) {
-                    @Override
-                    public String name() {
-                        return name;
-                    }
-                };
-        AsyncConsistentMap<K, V> transcodedMap = DistributedPrimitives.<K, V, String, byte[]>newTranscodingMap(rawMap,
-                        key -> HexString.toHexString(serializer.encode(key)),
-                        string -> serializer.decode(HexString.fromHexString(string)),
-                        value -> value == null ? null : serializer.encode(value),
-                        bytes -> serializer.decode(bytes));
+        AtomixConsistentMap rawMap =
+                new AtomixConsistentMap(client.newProxyBuilder()
+                        .withName(name)
+                        .withServiceType(DistributedPrimitive.Type.CONSISTENT_MAP.name())
+                        .withReadConsistency(ReadConsistency.SEQUENTIAL)
+                        .withCommunicationStrategy(CommunicationStrategy.ANY)
+                        .withTimeout(Duration.ofSeconds(30))
+                        .withMaxRetries(5)
+                        .build()
+                        .open()
+                        .join());
 
-        return DistributedPrimitives.newCachingMap(transcodedMap);
+        if (serializer != null) {
+            return DistributedPrimitives.newTranscodingMap(rawMap,
+                    key -> HexString.toHexString(serializer.encode(key)),
+                    string -> serializer.decode(HexString.fromHexString(string)),
+                    value -> value == null ? null : serializer.encode(value),
+                    bytes -> serializer.decode(bytes));
+        }
+        return (AsyncConsistentMap<K, V>) rawMap;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <V> AsyncConsistentTreeMap<V> newAsyncConsistentTreeMap(String name, Serializer serializer) {
+        AtomixConsistentTreeMap rawMap =
+                new AtomixConsistentTreeMap(client.newProxyBuilder()
+                        .withName(name)
+                        .withServiceType(DistributedPrimitive.Type.CONSISTENT_TREEMAP.name())
+                        .withReadConsistency(ReadConsistency.SEQUENTIAL)
+                        .withCommunicationStrategy(CommunicationStrategy.ANY)
+                        .withTimeout(Duration.ofSeconds(30))
+                        .withMaxRetries(5)
+                        .build()
+                        .open()
+                        .join());
+
+        if (serializer != null) {
+            return DistributedPrimitives.newTranscodingTreeMap(
+                            rawMap,
+                            value -> value == null ? null : serializer.encode(value),
+                            bytes -> serializer.decode(bytes));
+        }
+        return (AsyncConsistentTreeMap<V>) rawMap;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <K, V> AsyncConsistentMultimap<K, V> newAsyncConsistentSetMultimap(String name, Serializer serializer) {
+        AtomixConsistentSetMultimap rawMap =
+                new AtomixConsistentSetMultimap(client.newProxyBuilder()
+                        .withName(name)
+                        .withServiceType(DistributedPrimitive.Type.CONSISTENT_MULTIMAP.name())
+                        .withReadConsistency(ReadConsistency.SEQUENTIAL)
+                        .withCommunicationStrategy(CommunicationStrategy.ANY)
+                        .withTimeout(Duration.ofSeconds(30))
+                        .withMaxRetries(5)
+                        .build()
+                        .open()
+                        .join());
+
+        if (serializer != null) {
+            return DistributedPrimitives.newTranscodingMultimap(
+                            rawMap,
+                            key -> HexString.toHexString(serializer.encode(key)),
+                            string -> serializer.decode(HexString.fromHexString(string)),
+                            value -> serializer.encode(value),
+                            bytes -> serializer.decode(bytes));
+        }
+        return (AsyncConsistentMultimap<K, V>) rawMap;
     }
 
     @Override
     public <E> AsyncDistributedSet<E> newAsyncDistributedSet(String name, Serializer serializer) {
-        return DistributedPrimitives.newSetFromMap(this.<E, Boolean>newAsyncConsistentMap(name, serializer));
+        return DistributedPrimitives.newSetFromMap(newAsyncConsistentMap(name, serializer));
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <K> AsyncAtomicCounterMap<K> newAsyncAtomicCounterMap(String name, Serializer serializer) {
+        AtomixAtomicCounterMap rawMap = new AtomixAtomicCounterMap(client.newProxyBuilder()
+                .withName(name)
+                .withServiceType(DistributedPrimitive.Type.COUNTER_MAP.name())
+                .withReadConsistency(ReadConsistency.LINEARIZABLE_LEASE)
+                .withCommunicationStrategy(CommunicationStrategy.LEADER)
+                .withTimeout(Duration.ofSeconds(30))
+                .withMaxRetries(5)
+                .build()
+                .open()
+                .join());
+
+        if (serializer != null) {
+            return DistributedPrimitives.newTranscodingAtomicCounterMap(
+                            rawMap,
+                            key -> HexString.toHexString(serializer.encode(key)),
+                            string -> serializer.decode(HexString.fromHexString(string)));
+        }
+        return (AsyncAtomicCounterMap<K>) rawMap;
     }
 
     @Override
     public AsyncAtomicCounter newAsyncCounter(String name) {
-        DistributedLong distributedLong = client.get(name, DistributedLong.class).join();
-        return new AtomixCounter(name, distributedLong);
+        return new AtomixCounter(client.newProxyBuilder()
+                .withName(name)
+                .withServiceType(DistributedPrimitive.Type.COUNTER.name())
+                .withReadConsistency(ReadConsistency.LINEARIZABLE_LEASE)
+                .withCommunicationStrategy(CommunicationStrategy.LEADER)
+                .withTimeout(Duration.ofSeconds(30))
+                .withMaxRetries(5)
+                .build()
+                .open()
+                .join());
+    }
+
+    @Override
+    public AsyncAtomicIdGenerator newAsyncIdGenerator(String name) {
+        return new AtomixIdGenerator(newAsyncCounter(name));
     }
 
     @Override
     public <V> AsyncAtomicValue<V> newAsyncAtomicValue(String name, Serializer serializer) {
-       return new DefaultAsyncAtomicValue<>(name,
-                                        serializer,
-                                        onosAtomicValuesMap.get());
+        return new DefaultAsyncAtomicValue<>(name, serializer, onosAtomicValuesMap.get());
     }
 
     @Override
-    public <E> DistributedQueue<E> newDistributedQueue(String name, Serializer serializer) {
-        // TODO: Implement
-        throw new UnsupportedOperationException();
+    public <E> WorkQueue<E> newWorkQueue(String name, Serializer serializer) {
+        AtomixWorkQueue atomixWorkQueue = new AtomixWorkQueue(client.newProxyBuilder()
+                .withName(name)
+                .withServiceType(DistributedPrimitive.Type.WORK_QUEUE.name())
+                .withReadConsistency(ReadConsistency.LINEARIZABLE_LEASE)
+                .withCommunicationStrategy(CommunicationStrategy.LEADER)
+                .withTimeout(Duration.ofSeconds(5))
+                .withMaxRetries(5)
+                .build()
+                .open()
+                .join());
+        return new DefaultDistributedWorkQueue<>(atomixWorkQueue, serializer);
     }
 
     @Override
-    public AsyncLeaderElector newAsyncLeaderElector(String name) {
-        return client.get(name, AtomixLeaderElector.class).join();
+    public <V> AsyncDocumentTree<V> newAsyncDocumentTree(String name, Serializer serializer, Ordering ordering) {
+        AtomixDocumentTree atomixDocumentTree = new AtomixDocumentTree(client.newProxyBuilder()
+                .withName(name)
+                .withServiceType(String.format("%s-%s", DistributedPrimitive.Type.DOCUMENT_TREE.name(), ordering))
+                .withReadConsistency(ReadConsistency.SEQUENTIAL)
+                .withCommunicationStrategy(CommunicationStrategy.ANY)
+                .withTimeout(Duration.ofSeconds(30))
+                .withMaxRetries(5)
+                .build()
+                .open()
+                .join());
+        return new DefaultDistributedDocumentTree<>(name, atomixDocumentTree, serializer);
+    }
+
+    @Override
+    public AsyncLeaderElector newAsyncLeaderElector(String name, long leaderTimeout, TimeUnit timeUnit) {
+        AtomixLeaderElector leaderElector = new AtomixLeaderElector(client.newProxyBuilder()
+                .withName(name)
+                .withServiceType(DistributedPrimitive.Type.LEADER_ELECTOR.name())
+                .withReadConsistency(ReadConsistency.LINEARIZABLE)
+                .withCommunicationStrategy(CommunicationStrategy.LEADER)
+                .withMinTimeout(Duration.ofMillis(timeUnit.toMillis(leaderTimeout)))
+                .withMaxTimeout(Duration.ofSeconds(5))
+                .withMaxRetries(5)
+                .build()
+                .open()
+                .join());
+        leaderElector.setupCache().join();
+        return leaderElector;
     }
 
     @Override
     public Set<String> getAsyncConsistentMapNames() {
-        return client.keys(AtomixConsistentMap.class).join();
+        return client.metadata().getSessions(DistributedPrimitive.Type.CONSISTENT_MAP.name())
+                .join()
+                .stream()
+                .map(RaftSessionMetadata::serviceName)
+                .collect(Collectors.toSet());
     }
 
     @Override
     public Set<String> getAsyncAtomicCounterNames() {
-        return client.keys(DistributedLong.class).join();
+        return client.metadata().getSessions(DistributedPrimitive.Type.COUNTER.name())
+                .join()
+                .stream()
+                .map(RaftSessionMetadata::serviceName)
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Set<String> getWorkQueueNames() {
+        return client.metadata().getSessions(DistributedPrimitive.Type.WORK_QUEUE.name())
+                .join()
+                .stream()
+                .map(RaftSessionMetadata::serviceName)
+                .collect(Collectors.toSet());
     }
 
     @Override
     public boolean isOpen() {
-        return client.isOpen();
+        return client != null;
     }
 
-    @Override
-    public boolean isClosed() {
-        return client.isClosed();
+    /**
+     * Returns the {@link PartitionClientInfo information} for this client.
+     * @return partition client information
+     */
+    public PartitionClientInfo clientInfo() {
+        return new PartitionClientInfo(partition.getId(), partition.getMembers());
+    }
+
+    private RaftClient newRaftClient(RaftClientProtocol protocol) {
+        return RaftClient.newBuilder()
+                .withClientId("partition-" + partition.getId())
+                .withMemberId(localMemberId)
+                .withProtocol(protocol)
+                .build();
     }
 }

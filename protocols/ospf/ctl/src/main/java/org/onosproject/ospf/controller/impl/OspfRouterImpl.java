@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,8 @@ public class OspfRouterImpl implements OspfRouter {
 
     /**
      * Sets IP address of the Router.
+     *
+     * @param routerIp IP address of the router
      */
     public void setRouterIp(Ip4Address routerIp) {
         this.routerIp = routerIp;
@@ -60,6 +62,8 @@ public class OspfRouterImpl implements OspfRouter {
 
     /**
      * Sets the area id for this device.
+     *
+     * @param areaIdOfInterface area identifier for the device
      */
     public void setAreaIdOfInterface(Ip4Address areaIdOfInterface) {
         this.areaIdOfInterface = areaIdOfInterface;

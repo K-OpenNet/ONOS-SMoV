@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ public class DefaultAtomicCounter extends Synchronous<AsyncAtomicCounter> implem
 
     @Override
     public long addAndGet(long delta) {
-        return complete(asyncCounter.getAndAdd(delta));
+        return complete(asyncCounter.addAndGet(delta));
     }
 
     @Override

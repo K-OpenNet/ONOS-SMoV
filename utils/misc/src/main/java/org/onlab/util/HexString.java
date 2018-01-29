@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onlab.util;
 
 public final class HexString {
+
+    private static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();
 
     private HexString() {
     }
@@ -45,18 +47,15 @@ public final class HexString {
         if (separator == null) {
             separator = "";
         }
-        int i;
-        StringBuilder ret = new StringBuilder(bytes.length * 3 - 1);
-        String tmp;
-        for (i = 0; i < bytes.length; i++) {
-            if (i > 0) {
+        int slen = bytes.length * (2 + separator.length()) - separator.length();
+        StringBuilder ret = new StringBuilder(slen);
+        boolean addSeparator = !separator.isEmpty();
+        for (int i = 0; i < bytes.length; i++) {
+            if (i > 0 && addSeparator) {
                 ret.append(separator);
             }
-            tmp = Integer.toHexString((bytes[i] & 0xff));
-            if (tmp.length() == 1) {
-                ret.append('0');
-            }
-            ret.append(tmp);
+            ret.append(HEX_CHARS[(bytes[i] >> 4) & 0xF]);
+            ret.append(HEX_CHARS[(bytes[i] & 0xF)]);
         }
         return ret.toString();
     }
@@ -109,7 +108,26 @@ public final class HexString {
      * @throws NumberFormatException if input hex string cannot be parsed
      */
     public static byte[] fromHexString(final String values) {
-        String[] octets = values.split(":");
+        return fromHexString(values, ":");
+    }
+
+    /**
+     * Convert a hex-string with arbitrary separator to byte array.
+     * If separator is the empty string or null, then no separator will be considered.
+     *
+     * @param values hex string to be converted
+     * @param separator regex for separator
+     * @return converted byte array
+     * @throws NumberFormatException if input hex string cannot be parsed
+     */
+    public static byte[] fromHexString(final String values, String separator) {
+        String regexSeparator;
+        if (separator == null || separator.length() == 0) {
+            regexSeparator = "(?<=\\G.{2})"; // Split string into several two character strings
+        } else {
+            regexSeparator = separator;
+        }
+        String[] octets = values.split(regexSeparator);
         byte[] ret = new byte[octets.length];
 
         for (int i = 0; i < octets.length; i++) {

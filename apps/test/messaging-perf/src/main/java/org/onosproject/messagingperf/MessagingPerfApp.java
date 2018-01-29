@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 package org.onosproject.messagingperf;
-
-import static com.google.common.base.Strings.isNullOrEmpty;
-import static org.apache.felix.scr.annotations.ReferenceCardinality.MANDATORY_UNARY;
-import static org.onlab.util.Tools.get;
-import static org.onlab.util.Tools.groupedThreads;
-import static org.slf4j.LoggerFactory.getLogger;
 
 import java.util.Dictionary;
 import java.util.List;
@@ -52,7 +46,7 @@ import org.onosproject.core.CoreService;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.onosproject.store.serializers.KryoSerializer;
+import org.onosproject.store.service.Serializer;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 
@@ -61,6 +55,12 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.MoreExecutors;
+
+import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.felix.scr.annotations.ReferenceCardinality.MANDATORY_UNARY;
+import static org.onlab.util.Tools.get;
+import static org.onlab.util.Tools.groupedThreads;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Application for measuring cluster messaging performance.
@@ -124,17 +124,13 @@ public class MessagingPerfApp {
     private AtomicInteger attempted = new AtomicInteger(0);
     private AtomicInteger completed = new AtomicInteger(0);
 
-    protected static final KryoSerializer SERIALIZER = new KryoSerializer() {
-        @Override
-        protected void setupKryoPool() {
-            serializerPool = KryoNamespace.newBuilder()
+    private static final Serializer SERIALIZER = Serializer
+            .using(
+                KryoNamespace.newBuilder()
                     .register(KryoNamespaces.BASIC)
                     .register(KryoNamespaces.MISC)
-                    .register(byte[].class)
                     .register(Data.class)
-                    .build();
-        }
-    };
+                    .build("MessagingPerfApp"));
 
     private final Data data = new Data().withStringField("test")
                                 .withListField(Lists.newArrayList("1", "2", "3"))
@@ -269,7 +265,9 @@ public class MessagingPerfApp {
         communicationService.<Data>addSubscriber(
                 TEST_UNICAST_MESSAGE_TOPIC,
                 decoder,
-                d -> { received.incrementAndGet(); },
+                d -> {
+                    received.incrementAndGet();
+                },
                 messageReceivingExecutor);
 
         communicationService.<Data, Data>addSubscriber(

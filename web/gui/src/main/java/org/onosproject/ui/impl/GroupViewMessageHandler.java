@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,12 +127,12 @@ public class GroupViewMessageHandler extends UiMessageHandler {
 
         private void populateRow(TableModel.Row row, Group g) {
             row.cell(ID, g.id().id())
-                .cell(APP_ID, g.appId().name())
-                .cell(STATE, g.state())
-                .cell(TYPE, g.type())
-                .cell(PACKETS, g.packets())
-                .cell(BYTES, g.bytes())
-                .cell(BUCKETS, g.buckets().buckets());
+                    .cell(APP_ID, g.appId().name())
+                    .cell(STATE, g.state())
+                    .cell(TYPE, g.type())
+                    .cell(PACKETS, g.packets())
+                    .cell(BYTES, g.bytes())
+                    .cell(BUCKETS, g.buckets().buckets());
         }
 
         private final class BucketFormatter implements CellFormatter {

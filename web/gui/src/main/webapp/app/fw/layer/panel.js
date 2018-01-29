@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@
         margin: 20,
         hideMargin: 20,
         xtnTime: 750,
-        fade: true
+        fade: true,
     };
 
     var panels,
@@ -37,7 +37,7 @@
 
     function init() {
         panelLayer = d3.select('#floatpanels');
-        panelLayer.html('');
+        panelLayer.text('');
         panels = {};
     }
 
@@ -71,7 +71,7 @@
                 id: id,
                 settings: settings,
                 on: false,
-                el: null
+                el: null,
             },
             api = {
                 show: showPanel,
@@ -81,9 +81,10 @@
                 append: appendPanel,
                 width: panelWidth,
                 height: panelHeight,
+                bbox: panelBBox,
                 isVisible: panelIsVisible,
                 classed: classed,
-                el: panelEl
+                el: panelEl,
             };
 
         p.el = panelLayer.append('div')
@@ -129,7 +130,7 @@
         }
 
         function emptyPanel() {
-            return p.el.html('');
+            return p.el.text('');
         }
 
         function appendPanel(what) {
@@ -148,6 +149,10 @@
                 return heightVal(p);
             }
             p.el.style('height', h + 'px');
+        }
+
+        function panelBBox() {
+            return p.el.node().getBoundingClientRect();
         }
 
         function panelIsVisible() {
@@ -210,7 +215,7 @@
             return {
                 init: init,
                 createPanel: createPanel,
-                destroyPanel: destroyPanel
+                destroyPanel: destroyPanel,
             };
         }]);
 }());

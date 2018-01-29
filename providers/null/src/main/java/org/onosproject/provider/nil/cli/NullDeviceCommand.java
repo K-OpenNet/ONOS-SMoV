@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,10 @@ import static org.onosproject.cli.UpDownCompleter.DOWN;
 import static org.onosproject.cli.UpDownCompleter.UP;
 
 /**
- * Servers or repairs a simulated link.
+ * Downs or repairs a simulated device.
  */
 @Command(scope = "onos", name = "null-device",
-        description = "Severs or repairs a simulated link")
+        description = "Downs or repairs a simulated device")
 public class NullDeviceCommand extends AbstractShellCommand {
 
     @Argument(index = 0, name = "id", description = "Device identifier",

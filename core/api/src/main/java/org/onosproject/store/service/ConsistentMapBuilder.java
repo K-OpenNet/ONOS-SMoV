@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,21 @@ import org.onosproject.store.primitives.DistributedPrimitiveBuilder;
 public abstract class ConsistentMapBuilder<K, V>
     extends DistributedPrimitiveBuilder<ConsistentMapBuilder<K, V>, ConsistentMap<K, V>> {
 
+    private boolean nullValues = false;
     private boolean purgeOnUninstall = false;
 
     public ConsistentMapBuilder() {
         super(DistributedPrimitive.Type.CONSISTENT_MAP);
+    }
+
+    /**
+     * Enables null values in the map.
+     *
+     * @return this builder
+     */
+    public ConsistentMapBuilder<K, V> withNullValues() {
+        nullValues = true;
+        return this;
     }
 
     /**
@@ -40,6 +51,15 @@ public abstract class ConsistentMapBuilder<K, V>
     public ConsistentMapBuilder<K, V> withPurgeOnUninstall() {
         purgeOnUninstall = true;
         return this;
+    }
+
+    /**
+     * Returns whether null values are supported by the map.
+     *
+     * @return {@code true} if null values are supported; {@code false} otherwise
+     */
+    public boolean nullValues() {
+        return nullValues;
     }
 
     /**

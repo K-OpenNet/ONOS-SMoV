@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
     private final TrafficTreatment treatment;
     private final Operation op;
     private final Optional<ObjectiveContext> context;
+    private final TrafficSelector meta;
 
     private final int id;
 
@@ -58,6 +59,7 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
         this.treatment = builder.treatment;
         this.op = builder.op;
         this.context = Optional.ofNullable(builder.context);
+        this.meta = builder.meta;
 
         this.id = Objects.hash(selector, flag, permanent,
                 timeout, appId, priority, nextId,
@@ -122,9 +124,14 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
     }
 
     @Override
+    public TrafficSelector meta() {
+        return meta;
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hash(selector, flag, permanent, timeout, appId,
-                            priority, nextId, treatment, op);
+                            priority, nextId, treatment, op, meta);
     }
 
     @Override
@@ -142,7 +149,8 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
                     && Objects.equals(this.priority, other.priority)
                     && Objects.equals(this.nextId, other.nextId)
                     && Objects.equals(this.treatment, other.treatment)
-                    && Objects.equals(this.op, other.op);
+                    && Objects.equals(this.op, other.op)
+                    && Objects.equals(this.meta, other.meta);
         }
         return false;
     }
@@ -156,11 +164,11 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
                 .add("selector", selector())
                 .add("treatment", treatment())
                 .add("nextId", nextId())
+                .add("meta", meta())
                 .add("flag", flag())
                 .add("appId", appId())
                 .add("permanent", permanent())
                 .add("timeout", timeout())
-                .add("context", context())
                 .toString();
     }
 
@@ -171,6 +179,17 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Returns a new builder primed to produce entities
+     * patterned after the supplied forwarding objective.
+     *
+     * @param fwd base fwd
+     * @return forwarding objective builder
+     */
+    public static Builder builder(ForwardingObjective fwd) {
+        return new Builder(fwd);
     }
 
 
@@ -192,6 +211,7 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
         private TrafficTreatment treatment;
         private Operation op;
         private ObjectiveContext context;
+        private TrafficSelector meta;
 
         // Creates an empty builder
         private Builder() {
@@ -208,6 +228,7 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
             this.nextId = objective.nextId();
             this.treatment = objective.treatment();
             this.op = objective.op();
+            this.meta = objective.meta();
         }
 
         @Override
@@ -260,12 +281,20 @@ public final class DefaultForwardingObjective implements ForwardingObjective {
         }
 
         @Override
+        public Builder withMeta(TrafficSelector meta) {
+            this.meta = meta;
+            return this;
+        }
+
+        @Override
         public ForwardingObjective add() {
             checkNotNull(selector, "Must have a selector");
             checkNotNull(flag, "A flag must be set");
             checkArgument(nextId != null || treatment != null, "Must supply at " +
                     "least a treatment and/or a nextId");
             checkNotNull(appId, "Must supply an application id");
+            checkArgument(priority <= MAX_PRIORITY && priority >= MIN_PRIORITY, "Priority " +
+                    "out of range");
             op = Operation.ADD;
             return new DefaultForwardingObjective(this);
         }

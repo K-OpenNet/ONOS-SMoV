@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 package org.onosproject.vrouter;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.Deactivate;
@@ -23,7 +23,7 @@ import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.incubator.component.ComponentService;
+import org.onosproject.component.ComponentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,27 +38,22 @@ public class Vrouter {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private static final String APP_NAME = "org.onosproject.vrouter";
+    private static final String DIRECT_HOST_MGR = "org.onosproject.routing.impl.DirectHostManager";
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected CoreService coreService;
+    private CoreService coreService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    protected ComponentService componentService;
+    private ComponentService componentService;
 
     private ApplicationId appId;
 
-    private final List<String> components = ImmutableList.<String>builder()
-            .add("org.onosproject.routing.fpm.FpmManager")
-            .add("org.onosproject.routing.impl.Router")
-            .add("org.onosproject.routing.impl.SingleSwitchFibInstaller")
-            .add("org.onosproject.routing.impl.ControlPlaneRedirectManager")
-            .build();
+    private List<String> baseComponents = Lists.newArrayList(DIRECT_HOST_MGR);
 
     @Activate
     protected void activate() {
         appId = coreService.registerApplication(APP_NAME);
-
-        components.forEach(name -> componentService.activate(appId, name));
+        baseComponents.forEach(name -> componentService.activate(appId, name));
 
         log.info("Started");
     }
@@ -67,5 +62,4 @@ public class Vrouter {
     protected void deactivate() {
         log.info("Stopped");
     }
-
 }

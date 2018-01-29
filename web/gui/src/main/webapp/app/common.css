@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,22 @@
  ONOS GUI -- common -- CSS file
  */
 
-#view h2 {
-    margin: 0;
-    /* separated out so that other padding doesn't get clobbered */
-    padding-top: 20px;
-    padding-bottom: 20px;
-}
-
 .clickable {
     cursor: pointer;
 }
 
+.light .editable {
+    border-bottom: 1px dashed #ca504b;
+}
+
+.dark .editable {
+    border-bottom: 1px dashed #df4f4a;
+}
+
+.light svg.embeddedIcon .icon .glyph {
+    fill: #0071bd;
+}
+
+.dark svg.embeddedIcon .icon .glyph {
+    fill: #375b7f;
+}

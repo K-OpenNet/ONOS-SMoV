@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,14 +70,24 @@ public final class DefaultOpenFlowPacketContext implements OpenFlowPacketContext
         if (isBuilt.getAndSet(true)) {
             return;
         }
-        OFPacketOut.Builder builder = sw.factory().buildPacketOut();
         OFAction act = buildOutput(outPort.getPortNumber());
-        pktout = builder.setXid(pktin.getXid())
-                .setInPort(pktinInPort())
-                .setBufferId(OFBufferId.NO_BUFFER)
-                .setData(pktin.getData())
+        pktout = createOFPacketOut(pktin.getData(), act, pktin.getXid());
+    }
+
+    private OFPacketOut createOFPacketOut(byte[] data, OFAction act, long xid) {
+        OFPacketOut.Builder builder = sw.factory().buildPacketOut();
+        if (sw.factory().getVersion().getWireVersion() <= OFVersion.OF_14.getWireVersion()) {
+            return builder.setXid(xid)
+                    .setInPort(pktinInPort())
+                    .setBufferId(OFBufferId.NO_BUFFER)
+                    .setData(data)
 //                .setBufferId(pktin.getBufferId())
+                    .setActions(Collections.singletonList(act)).build();
+        }
+        return builder.setXid(xid)
+                .setBufferId(OFBufferId.NO_BUFFER)
                 .setActions(Collections.singletonList(act))
+                .setData(data)
                 .build();
     }
 
@@ -86,14 +96,8 @@ public final class DefaultOpenFlowPacketContext implements OpenFlowPacketContext
         if (isBuilt.getAndSet(true)) {
             return;
         }
-        OFPacketOut.Builder builder = sw.factory().buildPacketOut();
         OFAction act = buildOutput(outPort.getPortNumber());
-        pktout = builder.setXid(pktin.getXid())
-                .setBufferId(OFBufferId.NO_BUFFER)
-                .setInPort(pktinInPort())
-                .setActions(Collections.singletonList(act))
-                .setData(ethFrame.serialize())
-                .build();
+        pktout = createOFPacketOut(ethFrame.serialize(), act, pktin.getXid());
     }
 
     @Override
@@ -114,7 +118,7 @@ public final class DefaultOpenFlowPacketContext implements OpenFlowPacketContext
     public Dpid dpid() {
         checkPermission(PACKET_READ);
 
-        return new Dpid(sw.getId());
+        return sw.getDpid();
     }
 
     /**

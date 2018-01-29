@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,17 @@ package org.onosproject.store.cluster.messaging.impl;
  * State transitions a decoder goes through as it is decoding an incoming message.
  */
 public enum DecoderState {
-    READ_MESSAGE_PREAMBLE,
+    READ_TYPE,
+    READ_PREAMBLE,
+    READ_LOGICAL_TIME,
+    READ_LOGICAL_COUNTER,
     READ_MESSAGE_ID,
     READ_SENDER_IP_VERSION,
     READ_SENDER_IP,
     READ_SENDER_PORT,
-    READ_MESSAGE_TYPE_LENGTH,
-    READ_MESSAGE_TYPE,
-    READ_MESSAGE_STATUS,
+    READ_SUBJECT_LENGTH,
+    READ_SUBJECT,
+    READ_STATUS,
     READ_CONTENT_LENGTH,
     READ_CONTENT
 }

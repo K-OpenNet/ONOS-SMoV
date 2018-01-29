@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,12 +41,12 @@ import org.onosproject.cluster.DefaultPartition;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.cluster.Partition;
 import org.onosproject.cluster.PartitionId;
+import org.onosproject.core.VersionService;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.service.Versioned;
 import org.slf4j.Logger;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 
 /**
  * Provider of default {@link ClusterMetadata cluster metadata}.
@@ -59,27 +59,31 @@ public class DefaultClusterMetadataProvider implements ClusterMetadataProvider {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     protected ClusterMetadataProviderRegistry providerRegistry;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    protected VersionService versionService;
+
     private static final String ONOS_IP = "ONOS_IP";
     private static final String ONOS_INTERFACE = "ONOS_INTERFACE";
     private static final String ONOS_ALLOW_IPV6 = "ONOS_ALLOW_IPV6";
     private static final String DEFAULT_ONOS_INTERFACE = "eth0";
     private static final int DEFAULT_ONOS_PORT = 9876;
     private static final ProviderId PROVIDER_ID = new ProviderId("default", "none");
-    private AtomicReference<Versioned<ClusterMetadata>> cachedMetadata = new AtomicReference<>();
+    private final AtomicReference<Versioned<ClusterMetadata>> cachedMetadata = new AtomicReference<>();
 
     @Activate
     public void activate() {
         String localIp = getSiteLocalAddress();
         ControllerNode localNode =
                 new DefaultControllerNode(new NodeId(localIp), IpAddress.valueOf(localIp), DEFAULT_ONOS_PORT);
-        // p0 partition
-        Partition basePartition = new DefaultPartition(PartitionId.from(0), Sets.newHashSet(localNode.id()));
-        // p1 partition
-        Partition extendedPartition = new DefaultPartition(PartitionId.from(1), Sets.newHashSet(localNode.id()));
+        // partition 1
+        Partition partition = new DefaultPartition(
+                PartitionId.from(1),
+                versionService.version(),
+                ImmutableSet.of(localNode.id()));
         ClusterMetadata metadata = new ClusterMetadata(PROVIDER_ID,
                                         "default",
                                         ImmutableSet.of(localNode),
-                                        ImmutableSet.of(basePartition, extendedPartition));
+                                        ImmutableSet.of(partition));
         long version = System.currentTimeMillis();
         cachedMetadata.set(new Versioned<>(metadata, version));
         providerRegistry.register(this);

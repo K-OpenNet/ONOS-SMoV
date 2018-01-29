@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import org.onlab.packet.MplsLabel;
 import org.onlab.packet.TpPort;
 import org.onlab.packet.VlanId;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.IndexedLambda;
 import org.onosproject.net.Lambda;
 import org.onosproject.net.OchSignal;
 import org.onosproject.net.OchSignalType;
@@ -239,6 +238,17 @@ public final class Criteria {
     }
 
     /**
+     * Creates a masked match on TCP source port field using the specified value and mask.
+     *
+     * @param tcpPort TCP source port
+     * @param mask TCP source port masking
+     * @return match criterion
+     */
+    public static Criterion matchTcpSrcMasked(TpPort tcpPort, TpPort mask) {
+        return new TcpPortCriterion(tcpPort, mask, Type.TCP_SRC_MASKED);
+    }
+
+    /**
      * Creates a match on TCP destination port field using the specified value.
      *
      * @param tcpPort TCP destination port
@@ -246,6 +256,17 @@ public final class Criteria {
      */
     public static Criterion matchTcpDst(TpPort tcpPort) {
         return new TcpPortCriterion(tcpPort, Type.TCP_DST);
+    }
+
+    /**
+     * Creates a masked match on TCP destination port field using the specified value and mask.
+     *
+     * @param tcpPort TCP destination port
+     * @param mask TCP destination port masking
+     * @return match criterion
+     */
+    public static Criterion matchTcpDstMasked(TpPort tcpPort, TpPort mask) {
+        return new TcpPortCriterion(tcpPort, mask, Type.TCP_DST_MASKED);
     }
 
     /**
@@ -269,6 +290,17 @@ public final class Criteria {
     }
 
     /**
+     * Creates a masked match on UDP source port field using the specified value and mask.
+     *
+     * @param udpPort UDP source port
+     * @param mask UDP source port masking
+     * @return match criterion
+     */
+    public static Criterion matchUdpSrcMasked(TpPort udpPort, TpPort mask) {
+        return new UdpPortCriterion(udpPort, mask, Type.UDP_SRC_MASKED);
+    }
+
+    /**
      * Creates a match on UDP destination port field using the specified value.
      *
      * @param udpPort UDP destination port
@@ -276,6 +308,17 @@ public final class Criteria {
      */
     public static Criterion matchUdpDst(TpPort udpPort) {
         return new UdpPortCriterion(udpPort, Type.UDP_DST);
+    }
+
+    /**
+     * Creates a masked match on UDP destination port field using the specified value and mask.
+     *
+     * @param udpPort UDP destination port
+     * @param mask UDP destination port masking
+     * @return match criterion
+     */
+    public static Criterion matchUdpDstMasked(TpPort udpPort, TpPort mask) {
+        return new UdpPortCriterion(udpPort, mask, Type.UDP_DST_MASKED);
     }
 
     /**
@@ -289,6 +332,17 @@ public final class Criteria {
     }
 
     /**
+     * Creates a masked match on SCTP source port field using the specified value and mask.
+     *
+     * @param sctpPort SCTP source port
+     * @param mask SCTP source port masking
+     * @return match criterion
+     */
+    public static Criterion matchSctpSrcMasked(TpPort sctpPort, TpPort mask) {
+        return new SctpPortCriterion(sctpPort, mask, Type.SCTP_SRC_MASKED);
+    }
+
+    /**
      * Creates a match on SCTP destination port field using the specified
      * value.
      *
@@ -297,6 +351,17 @@ public final class Criteria {
      */
     public static Criterion matchSctpDst(TpPort sctpPort) {
         return new SctpPortCriterion(sctpPort, Type.SCTP_DST);
+    }
+
+    /**
+     * Creates a masked match on SCTP destination port field using the specified value and mask.
+     *
+     * @param sctpPort SCTP destination port
+     * @param mask SCTP destination port masking
+     * @return match criterion
+     */
+    public static Criterion matchSctpDstMasked(TpPort sctpPort, TpPort mask) {
+        return new SctpPortCriterion(sctpPort, mask, Type.SCTP_DST_MASKED);
     }
 
     /**
@@ -460,9 +525,7 @@ public final class Criteria {
      * @return match criterion
      */
     public static Criterion matchLambda(Lambda lambda) {
-        if (lambda instanceof IndexedLambda) {
-            return new IndexedLambdaCriterion((IndexedLambda) lambda);
-        } else if (lambda instanceof OchSignal) {
+        if (lambda instanceof OchSignal) {
             return new OchSignalCriterion((OchSignal) lambda);
         } else {
             throw new UnsupportedOperationException(String.format("Unsupported type of Lambda: %s", lambda));

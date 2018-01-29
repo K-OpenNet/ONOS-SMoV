@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 /*
- ONOS GUI -- Port View -- CSS file
+ ONOS GUI -- Port View (layout) -- CSS file
  */
 
 #ov-port h2 {
@@ -25,27 +25,50 @@
 #ov-port div.ctrl-btns {
 }
 
-.light #ov-port .current-view use {
-    fill: white;
-}
-.dark #ov-port .current-view use {
-    fill: #304860;
-}
-
-.light #ov-port .current-view rect {
-    fill: deepskyblue;
-}
-.dark #ov-port .current-view rect {
-    fill: #eee;
-}
-
 #ov-port td {
     text-align: center;
 }
+
 #ov-port td.right {
     text-align: right;
 }
 
+#ov-port td.delta {
+    text-align: right;
+    font-weight: bold;
+}
+
+#ov-port td.delta:before {
+    content: "+";
+}
+
 #ov-port tr.no-data td {
     text-align: center;
+}
+
+#port-details-panel.floatpanel {
+    z-index: 0;
+}
+
+
+#port-details-panel .container {
+    padding: 8px 12px;
+}
+
+#port-details-panel .close-btn {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    cursor: pointer;
+}
+
+#port-details-panel .port-icon {
+    display: inline-block;
+    padding: 0 6px 0 0;
+    vertical-align: middle;
+}
+
+#port-details-panel h2 {
+    display: inline-block;
+    margin: 8px 0;
 }

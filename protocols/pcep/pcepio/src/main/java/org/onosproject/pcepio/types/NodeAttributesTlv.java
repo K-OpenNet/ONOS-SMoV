@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ public class NodeAttributesTlv implements PcepValueType {
     protected static final Logger log = LoggerFactory.getLogger(NodeAttributesTlv.class);
 
     public static final short TYPE = (short) 65285;
-    public short hLength;
+    short hLength;
 
     public static final int TLV_HEADER_LENGTH = 4;
     // LinkDescriptors Sub-TLVs (variable)

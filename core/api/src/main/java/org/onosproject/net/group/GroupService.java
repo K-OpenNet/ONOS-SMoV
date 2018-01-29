@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,6 +105,37 @@ public interface GroupService
                                 GroupBuckets buckets,
                                 GroupKey newCookie,
                                 ApplicationId appId);
+
+    /**
+     * Set buckets for an existing group. The caller can optionally
+     * associate a new cookie during this updation. GROUP_UPDATED or
+     * GROUP_UPDATE_FAILED notifications would be provided along with
+     * cookie depending on the result of the operation on the device.
+     *
+     * This operation overwrites the previous group buckets entirely.
+     *
+     * @param deviceId  device identifier
+     * @param oldCookie cookie to be used to retrieve the existing group
+     * @param buckets   immutable list of group buckets to be set
+     * @param newCookie immutable cookie to be used post update operation
+     * @param appId     Application Id
+     */
+    default void setBucketsForGroup(DeviceId deviceId,
+                                    GroupKey oldCookie,
+                                    GroupBuckets buckets,
+                                    GroupKey newCookie,
+                                    ApplicationId appId) {}
+
+    /**
+     * Purges all the group entries on the specified device.
+     * @param deviceId device identifier
+     */
+    void purgeGroupEntries(DeviceId deviceId);
+
+    /**
+     * Purges all group entries.
+     */
+    default void purgeGroupEntries() {}
 
     /**
      * Deletes a group associated to an application cookie.

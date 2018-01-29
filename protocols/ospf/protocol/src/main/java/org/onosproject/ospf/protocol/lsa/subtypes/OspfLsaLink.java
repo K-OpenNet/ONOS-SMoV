@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import com.google.common.base.MoreObjects;
  */
 public class OspfLsaLink {
 
-    public String linkId;
-    public String linkData;
-    public int linkType;
-    public int metric;
-    public int tos;
+    private String linkId;
+    private String linkData;
+    private int linkType;
+    private int metric;
+    private int tos;
 
     /**
      * Gets link id.

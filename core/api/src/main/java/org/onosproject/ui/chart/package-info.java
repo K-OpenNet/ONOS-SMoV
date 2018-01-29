@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,6 @@
  */
 
 /**
- * Facilities for creating chart models of data for the GUI.
+ * Facilities for creating chart models of data for the Web UI.
  */
 package org.onosproject.ui.chart;

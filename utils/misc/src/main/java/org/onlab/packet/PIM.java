@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ package org.onlab.packet;
 import org.onlab.packet.pim.PIMHello;
 import org.onlab.packet.pim.PIMJoinPrune;
 
+import com.google.common.collect.ImmutableMap;
+
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -48,12 +49,10 @@ public class PIM extends BasePacket {
     public static final byte ADDRESS_FAMILY_IP6 = 0x2;
 
     public static final Map<Byte, Deserializer<? extends IPacket>> PROTOCOL_DESERIALIZER_MAP =
-            new HashMap<>();
-
-    static {
-        PIM.PROTOCOL_DESERIALIZER_MAP.put(PIM.TYPE_HELLO, PIMHello.deserializer());
-        PIM.PROTOCOL_DESERIALIZER_MAP.put(PIM.TYPE_JOIN_PRUNE_REQUEST, PIMJoinPrune.deserializer());
-    }
+            ImmutableMap.<Byte, Deserializer<? extends IPacket>>builder()
+                .put(PIM.TYPE_HELLO, PIMHello.deserializer())
+                .put(PIM.TYPE_JOIN_PRUNE_REQUEST, PIMJoinPrune.deserializer())
+                .build();
 
     /*
      * PIM Header fields
@@ -243,28 +242,7 @@ public class PIM extends BasePacket {
         return data;
     }
 
-    /**
-     * Deserialize the PIM packet.
-     *
-     * @param data bytes to deserialize.
-     * @param offset offset to start deserializing from
-     * @param length length of the data to deserialize
-     *
-     * @return the deserialized PIM packet.
-     */
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-            final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.type = bb.get();
-        this.version = bb.get();
-        this.checksum = bb.getShort();
 
-        //this.payload = new Data();
-        this.payload = this.payload.deserialize(data, bb.position(), bb.limit() - bb.position());
-        this.payload.setParent(this);
-        return this;
-    }
     /**
      * Deserializer function for IPv4 packets.
      *

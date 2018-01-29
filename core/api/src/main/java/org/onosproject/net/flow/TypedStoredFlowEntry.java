@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,11 +57,11 @@ public interface TypedStoredFlowEntry extends StoredFlowEntry {
      *
      * @return flow live type
      */
-    FlowLiveType flowLiveType();
+    TypedStoredFlowEntry.FlowLiveType flowLiveType();
 
     /**
      * Sets the new flow live type for this entry.
      * @param liveType new flow live type.
      */
-    void setFlowLiveType(FlowLiveType liveType);
+    void setFlowLiveType(TypedStoredFlowEntry.FlowLiveType liveType);
 }

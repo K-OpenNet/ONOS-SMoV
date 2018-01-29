@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.onosproject.pcepio.types;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -74,7 +75,7 @@ public class PcepNaiIpv6Adjacency implements PcepNai {
 
     @Override
     public int hashCode() {
-        return Objects.hash(localIpv6Addr, remoteIpv6Addr);
+        return Objects.hash(Arrays.hashCode(localIpv6Addr), Arrays.hashCode(remoteIpv6Addr));
     }
 
     @Override
@@ -84,8 +85,8 @@ public class PcepNaiIpv6Adjacency implements PcepNai {
         }
         if (obj instanceof PcepNaiIpv6Adjacency) {
             PcepNaiIpv6Adjacency other = (PcepNaiIpv6Adjacency) obj;
-            return Objects.equals(this.localIpv6Addr, other.localIpv6Addr)
-                    && Objects.equals(this.remoteIpv6Addr, other.remoteIpv6Addr);
+            return Arrays.equals(this.localIpv6Addr, other.localIpv6Addr)
+                    && Arrays.equals(this.remoteIpv6Addr, other.remoteIpv6Addr);
         }
         return false;
     }

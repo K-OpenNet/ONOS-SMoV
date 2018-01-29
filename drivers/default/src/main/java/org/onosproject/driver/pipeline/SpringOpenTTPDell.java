@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 package org.onosproject.driver.pipeline;
+
+import static org.slf4j.LoggerFactory.getLogger;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -42,7 +44,7 @@ import org.onosproject.net.flowobjective.FilteringObjective;
 import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.ObjectiveError;
 import org.onosproject.net.group.Group;
-import org.onosproject.net.group.GroupKey;
+import org.slf4j.Logger;
 
 /**
  * Spring-open driver implementation for Dell hardware switches.
@@ -55,6 +57,8 @@ public class SpringOpenTTPDell extends SpringOpenTTP {
     private static final int DELL_TABLE_IPV4_UNICAST = 30;
     private static final int DELL_TABLE_MPLS = 25;
     private static final int DELL_TABLE_ACL = 40;
+
+    private final Logger log = getLogger(getClass());
 
     //TODO: Store this info in the distributed store.
     private MacAddress deviceTMac = null;
@@ -137,17 +141,27 @@ public class SpringOpenTTPDell extends SpringOpenTTP {
             NextGroup next = flowObjectiveStore.getNextGroup(fwd.nextId());
 
             if (next != null) {
-                GroupKey key = appKryo.deserialize(next.data());
+                SpringOpenGroup soGroup = appKryo.deserialize(next.data());
+                if (soGroup.dummy()) {
+                    log.debug("Adding {} flow-actions for fwd. obj. {} -> next:{} "
+                            + "in dev: {}", soGroup.treatment().allInstructions().size(),
+                            fwd.id(), fwd.nextId(), deviceId);
+                    for (Instruction ins : soGroup.treatment().allInstructions()) {
+                        treatmentBuilder.add(ins);
+                    }
+                } else {
+                    Group group = groupService.getGroup(deviceId, soGroup.key());
 
-                Group group = groupService.getGroup(deviceId, key);
-
-                if (group == null) {
-                    log.warn("The group left!");
-                    fail(fwd, ObjectiveError.GROUPMISSING);
-                    return Collections.emptySet();
+                    if (group == null) {
+                        log.warn("The group left!");
+                        fail(fwd, ObjectiveError.GROUPMISSING);
+                        return Collections.emptySet();
+                    }
+                    treatmentBuilder.group(group.id());
+                    log.debug("Adding OUTGROUP action to group:{} for fwd. obj. {} "
+                            + "for next:{} in dev: {}", group.id(), fwd.id(),
+                            fwd.nextId(), deviceId);
                 }
-                treatmentBuilder.group(group.id());
-                log.debug("Adding OUTGROUP action");
             } else {
                 log.warn("processSpecific: No associated next objective object");
                 fail(fwd, ObjectiveError.GROUPMISSING);
@@ -196,7 +210,8 @@ public class SpringOpenTTPDell extends SpringOpenTTP {
     @Override
     protected List<FlowRule> processVlanIdFilter(VlanIdCriterion vlanIdCriterion,
                                                  FilteringObjective filt,
-                                                 VlanId assignedVlan,
+                                                 VlanId assignedVlan, VlanId modifiedVlan, VlanId pushedVlan,
+                                                 boolean popVlan, boolean pushVlan,
                                                  ApplicationId applicationId) {
         log.debug("For now not adding any VLAN rules "
                 + "into Dell switches as it is ignoring");

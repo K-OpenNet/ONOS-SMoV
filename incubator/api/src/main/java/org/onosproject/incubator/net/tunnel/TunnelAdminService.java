@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,4 +62,11 @@ public interface TunnelAdminService {
      */
     void updateTunnel(Tunnel tunnel, Path path);
 
+    /**
+     * Updates the state of a tunnel.
+     *
+     * @param tunnel tunnel to be changed
+     * @param state new state of the tunnel
+     */
+    void updateTunnelState(Tunnel tunnel, Tunnel.State state);
 }

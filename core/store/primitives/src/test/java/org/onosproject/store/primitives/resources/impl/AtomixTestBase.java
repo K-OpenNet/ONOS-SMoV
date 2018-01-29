@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,167 +15,313 @@
  */
 package org.onosproject.store.primitives.resources.impl;
 
-import io.atomix.Atomix;
-import io.atomix.AtomixClient;
-import io.atomix.catalyst.serializer.Serializer;
-import io.atomix.catalyst.transport.Address;
-import io.atomix.catalyst.transport.LocalServerRegistry;
-import io.atomix.catalyst.transport.LocalTransport;
-import io.atomix.copycat.client.CopycatClient;
-import io.atomix.copycat.server.CopycatServer;
-import io.atomix.copycat.server.storage.Storage;
-import io.atomix.copycat.server.storage.StorageLevel;
-import io.atomix.manager.state.ResourceManagerState;
-import io.atomix.resource.ResourceRegistry;
-import io.atomix.resource.ResourceType;
-
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
-import java.time.Duration;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
+import com.google.common.collect.Lists;
+import io.atomix.protocols.raft.RaftClient;
+import io.atomix.protocols.raft.RaftServer;
+import io.atomix.protocols.raft.ReadConsistency;
+import io.atomix.protocols.raft.cluster.MemberId;
+import io.atomix.protocols.raft.cluster.RaftMember;
+import io.atomix.protocols.raft.proxy.CommunicationStrategy;
+import io.atomix.protocols.raft.proxy.RaftProxy;
+import io.atomix.protocols.raft.service.RaftService;
+import io.atomix.protocols.raft.storage.RaftStorage;
+import io.atomix.storage.StorageLevel;
 import org.junit.After;
 import org.junit.Before;
-import org.onosproject.store.primitives.impl.CatalystSerializers;
-
-import com.google.common.util.concurrent.Uninterruptibles;
+import org.onosproject.cluster.NodeId;
+import org.onosproject.store.primitives.impl.RaftClientCommunicator;
+import org.onosproject.store.primitives.impl.RaftServerCommunicator;
+import org.onosproject.store.primitives.impl.StorageNamespaces;
+import org.onosproject.store.service.Serializer;
 
 /**
- * Base class for various Atomix* tests.
+ * Base class for various Atomix tests.
+ *
+ * @param <T> the Raft primitive type being tested
  */
-public abstract class AtomixTestBase {
-    private static final File TEST_DIR = new File("target/test-logs");
-    protected LocalServerRegistry registry;
-    protected int port;
-    protected List<Address> members;
-    protected List<CopycatClient> copycatClients = new ArrayList<>();
-    protected List<CopycatServer> copycatServers = new ArrayList<>();
-    protected List<Atomix> atomixClients = new ArrayList<>();
-    protected List<CopycatServer> atomixServers = new ArrayList<>();
-    protected Serializer serializer = CatalystSerializers.getSerializer();
+public abstract class AtomixTestBase<T extends AbstractRaftPrimitive> {
+
+    protected TestClusterCommunicationServiceFactory communicationServiceFactory;
+    protected List<RaftMember> members = Lists.newCopyOnWriteArrayList();
+    protected List<RaftClient> clients = Lists.newCopyOnWriteArrayList();
+    protected List<RaftServer> servers = Lists.newCopyOnWriteArrayList();
+    protected int nextId;
 
     /**
-     * Creates a new resource state machine.
+     * Creates the primitive service.
      *
-     * @return A new resource state machine.
+     * @return the primitive service
      */
-    protected abstract ResourceType resourceType();
+    protected abstract RaftService createService();
+
+    /**
+     * Creates a new primitive.
+     *
+     * @param name the primitive name
+     * @return the primitive instance
+     */
+    protected T newPrimitive(String name) {
+        RaftClient client = createClient();
+        RaftProxy proxy = client.newProxyBuilder()
+                .withName(name)
+                .withServiceType("test")
+                .withReadConsistency(readConsistency())
+                .withCommunicationStrategy(communicationStrategy())
+                .build()
+                .open()
+                .join();
+        return createPrimitive(proxy);
+    }
+
+    /**
+     * Creates a new primitive instance.
+     *
+     * @param proxy the primitive proxy
+     * @return the primitive instance
+     */
+    protected abstract T createPrimitive(RaftProxy proxy);
+
+    /**
+     * Returns the proxy read consistency.
+     *
+     * @return the primitive read consistency
+     */
+    protected ReadConsistency readConsistency() {
+        return ReadConsistency.LINEARIZABLE;
+    }
+
+    /**
+     * Returns the proxy communication strategy.
+     *
+     * @return the primitive communication strategy
+     */
+    protected CommunicationStrategy communicationStrategy() {
+        return CommunicationStrategy.LEADER;
+    }
+
+    @Before
+    public void prepare() {
+        members.clear();
+        clients.clear();
+        servers.clear();
+        communicationServiceFactory = new TestClusterCommunicationServiceFactory();
+        createServers(3);
+    }
+
+    @After
+    public void cleanup() {
+        shutdown();
+    }
+
+    /**
+     * Shuts down clients and servers.
+     */
+    private void shutdown() {
+        clients.forEach(c -> {
+            try {
+                c.close().get(10, TimeUnit.SECONDS);
+            } catch (Exception e) {
+            }
+        });
+
+        servers.forEach(s -> {
+            try {
+                if (s.isRunning()) {
+                    s.shutdown().get(10, TimeUnit.SECONDS);
+                }
+            } catch (Exception e) {
+            }
+        });
+
+        Path directory = Paths.get("target/primitives/");
+        if (Files.exists(directory)) {
+            try {
+                Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        Files.delete(file);
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                        Files.delete(dir);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            } catch (IOException e) {
+            }
+        }
+    }
+
+    /**
+     * Returns the next unique member identifier.
+     *
+     * @return The next unique member identifier.
+     */
+    private MemberId nextMemberId() {
+        return MemberId.from(String.valueOf(++nextId));
+    }
 
     /**
      * Returns the next server address.
      *
+     * @param type The startup member type.
      * @return The next server address.
      */
-    private Address nextAddress() {
-        Address address = new Address("localhost", port++);
-        members.add(address);
-        return address;
+    private RaftMember nextMember(RaftMember.Type type) {
+        return new TestMember(nextMemberId(), type);
     }
 
     /**
-     * Creates a set of Copycat servers.
+     * Creates a set of Raft servers.
      */
-    protected List<CopycatServer> createCopycatServers(int nodes) throws Throwable {
-        CountDownLatch latch = new CountDownLatch(nodes);
-        List<CopycatServer> servers = new ArrayList<>();
+    protected List<RaftServer> createServers(int nodes) {
+        List<RaftServer> servers = new ArrayList<>();
 
-        List<Address> members = new ArrayList<>();
         for (int i = 0; i < nodes; i++) {
-            members.add(nextAddress());
+            members.add(nextMember(RaftMember.Type.ACTIVE));
         }
 
+        CountDownLatch latch = new CountDownLatch(nodes);
         for (int i = 0; i < nodes; i++) {
-            CopycatServer server = createCopycatServer(members.get(i));
-            server.open().thenRun(latch::countDown);
+            RaftServer server = createServer(members.get(i));
+            server.bootstrap(members.stream().map(RaftMember::memberId).collect(Collectors.toList()))
+                    .thenRun(latch::countDown);
             servers.add(server);
         }
 
-        Uninterruptibles.awaitUninterruptibly(latch);
+        try {
+            latch.await(30000, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         return servers;
     }
 
     /**
-     * Creates a Copycat server.
+     * Creates a Raft server.
      */
-    protected CopycatServer createCopycatServer(Address address) {
-        ResourceRegistry resourceRegistry = new ResourceRegistry();
-        resourceRegistry.register(resourceType());
-        CopycatServer server = CopycatServer.builder(address, members)
-                .withTransport(new LocalTransport(registry))
-                .withStorage(Storage.builder()
-                        .withStorageLevel(StorageLevel.DISK)
-                        .withDirectory(TEST_DIR + "/" + address.port())
+    private RaftServer createServer(RaftMember member) {
+        RaftServer.Builder builder = RaftServer.newBuilder(member.memberId())
+                .withType(member.getType())
+                .withProtocol(new RaftServerCommunicator(
+                        "partition-1",
+                        Serializer.using(StorageNamespaces.RAFT_PROTOCOL),
+                        communicationServiceFactory.newCommunicationService(NodeId.nodeId(member.memberId().id()))))
+                .withStorage(RaftStorage.newBuilder()
+                        .withStorageLevel(StorageLevel.MEMORY)
+                        .withDirectory(new File(String.format("target/primitives/%s", member.memberId())))
+                        .withSerializer(new AtomixSerializerAdapter(Serializer.using(StorageNamespaces.RAFT_STORAGE)))
+                        .withMaxSegmentSize(1024 * 1024)
                         .build())
-                .withStateMachine(() -> new ResourceManagerState(resourceRegistry))
-                .withSerializer(serializer.clone())
-                .withHeartbeatInterval(Duration.ofMillis(25))
-                .withElectionTimeout(Duration.ofMillis(50))
-                .withSessionTimeout(Duration.ofMillis(100))
-                .build();
-        copycatServers.add(server);
+                .addService("test", this::createService);
+
+        RaftServer server = builder.build();
+        servers.add(server);
         return server;
     }
 
-    @Before
-    @After
-    public void clearTests() throws Exception {
-        registry = new LocalServerRegistry();
-        members = new ArrayList<>();
-        port = 5000;
-
-        CompletableFuture<Void> closeClients =
-                CompletableFuture.allOf(atomixClients.stream()
-                                                     .map(Atomix::close)
-                                                     .toArray(CompletableFuture[]::new));
-
-        closeClients.thenCompose(v -> CompletableFuture.allOf(copycatServers.stream()
-                .map(CopycatServer::close)
-                .toArray(CompletableFuture[]::new))).join();
-
-        deleteDirectory(TEST_DIR);
-
-        atomixClients = new ArrayList<>();
-
-        copycatServers = new ArrayList<>();
-    }
-
     /**
-     * Deletes a directory recursively.
+     * Creates a Raft client.
      */
-    private void deleteDirectory(File directory) throws IOException {
-        if (directory.exists()) {
-            File[] files = directory.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isDirectory()) {
-                        deleteDirectory(file);
-                    } else {
-                        Files.delete(file.toPath());
-                    }
-                }
-            }
-            Files.delete(directory.toPath());
-        }
-    }
-
-    /**
-     * Creates a Atomix client.
-     */
-    protected Atomix createAtomixClient() {
-        CountDownLatch latch = new CountDownLatch(1);
-        Atomix client = AtomixClient.builder(members)
-                .withTransport(new LocalTransport(registry))
-                .withSerializer(serializer.clone())
-                .withResourceResolver(r -> r.register(resourceType()))
+    private RaftClient createClient() {
+        MemberId memberId = nextMemberId();
+        RaftClient client = RaftClient.newBuilder()
+                .withMemberId(memberId)
+                .withProtocol(new RaftClientCommunicator(
+                        "partition-1",
+                        Serializer.using(StorageNamespaces.RAFT_PROTOCOL),
+                        communicationServiceFactory.newCommunicationService(NodeId.nodeId(memberId.id()))))
                 .build();
-        client.open().thenRun(latch::countDown);
-        atomixClients.add(client);
-        Uninterruptibles.awaitUninterruptibly(latch);
+
+        client.connect(members.stream().map(RaftMember::memberId).collect(Collectors.toList())).join();
+        clients.add(client);
         return client;
+    }
+
+    /**
+     * Test member.
+     */
+    public static class TestMember implements RaftMember {
+        private final MemberId memberId;
+        private final Type type;
+
+        public TestMember(MemberId memberId, Type type) {
+            this.memberId = memberId;
+            this.type = type;
+        }
+
+        @Override
+        public MemberId memberId() {
+            return memberId;
+        }
+
+        @Override
+        public int hash() {
+            return memberId.hashCode();
+        }
+
+        @Override
+        public Type getType() {
+            return type;
+        }
+
+        @Override
+        public void addTypeChangeListener(Consumer<Type> listener) {
+
+        }
+
+        @Override
+        public void removeTypeChangeListener(Consumer<Type> listener) {
+
+        }
+
+        @Override
+        public Instant getLastUpdated() {
+            return Instant.now();
+        }
+        @Override
+        public CompletableFuture<Void> promote() {
+            return null;
+        }
+
+        @Override
+        public CompletableFuture<Void> promote(Type type) {
+            return null;
+        }
+
+        @Override
+        public CompletableFuture<Void> demote() {
+            return null;
+        }
+
+        @Override
+        public CompletableFuture<Void> demote(Type type) {
+            return null;
+        }
+
+        @Override
+        public CompletableFuture<Void> remove() {
+            return null;
+        }
     }
 }

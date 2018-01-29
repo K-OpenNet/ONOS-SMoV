@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onlab.util;
 
 import org.junit.Test;
+
+import com.google.common.testing.EqualsTester;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -45,10 +47,8 @@ public class CounterTest {
 
     @Test
     public void freeze() {
-        Counter tt = new Counter();
-        tt.add(123L);
-        assertEquals("incorrect number of bytes", 123L, tt.total());
-        delay(1000);
+        long now = System.currentTimeMillis();
+        Counter tt = new Counter(now, 123L, now + 1000);
         tt.freeze();
         tt.add(123L);
         assertEquals("incorrect number of bytes", 123L, tt.total());
@@ -82,5 +82,29 @@ public class CounterTest {
         Counter tt = new Counter(5000, 1000, 6000);
         assertEquals("incorrect duration", 1, tt.duration(), 0.1);
         assertEquals("incorrect throughput", 1000, tt.throughput(), 1.0);
+    }
+
+    @Test
+    public void equals() {
+        long start = 100L;
+        long total = 300L;
+        long end = 200L;
+        Counter tt = new Counter(start, total, end);
+        Counter same = new Counter(start, total, end);
+        Counter diff = new Counter(300L, 700L, 400L);
+        new EqualsTester()
+                .addEqualityGroup(tt, same)
+                .addEqualityGroup(400)
+                .addEqualityGroup("")
+                .addEqualityGroup(diff);
+
+    }
+
+    @Test
+    public void toStringTest() {
+        Counter tt = new Counter(100L, 300L, 200L);
+        assertEquals("Counter{total=300, start=100, end=200}", tt.toString());
+        Counter another = new Counter(200L, 500L, 300L);
+        assertEquals("Counter{total=500, start=200, end=300}", another.toString());
     }
 }

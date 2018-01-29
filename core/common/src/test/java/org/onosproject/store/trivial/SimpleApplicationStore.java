@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import org.onosproject.app.ApplicationStore;
 import org.onosproject.common.app.ApplicationArchive;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.core.ApplicationIdStore;
+import org.onosproject.app.ApplicationIdStore;
 import org.onosproject.core.DefaultApplication;
 import org.onosproject.security.Permission;
 import org.slf4j.Logger;
@@ -76,20 +76,11 @@ public class SimpleApplicationStore extends ApplicationArchive
             ApplicationId appId = idStore.registerApplication(name);
             ApplicationDescription appDesc = getApplicationDescription(name);
             DefaultApplication app =
-                    new DefaultApplication(appId,
-                            appDesc.version(),
-                            appDesc.title(),
-                            appDesc.description(),
-                            appDesc.origin(),
-                            appDesc.category(),
-                            appDesc.url(),
-                            appDesc.readme(),
-                            appDesc.icon(),
-                            appDesc.role(),
-                            appDesc.permissions(),
-                            appDesc.featuresRepo(),
-                            appDesc.features(),
-                            appDesc.requiredApps());
+                DefaultApplication
+                    .builder(appDesc)
+                    .withAppId(appId)
+                    .build();
+
             apps.put(appId, app);
             states.put(appId, isActive(name) ? INSTALLED : ACTIVE);
             // load app permissions
@@ -129,20 +120,11 @@ public class SimpleApplicationStore extends ApplicationArchive
         ApplicationDescription appDesc = saveApplication(appDescStream);
         ApplicationId appId = idStore.registerApplication(appDesc.name());
         DefaultApplication app =
-                new DefaultApplication(appId,
-                        appDesc.version(),
-                        appDesc.title(),
-                        appDesc.description(),
-                        appDesc.origin(),
-                        appDesc.category(),
-                        appDesc.url(),
-                        appDesc.readme(),
-                        appDesc.icon(),
-                        appDesc.role(),
-                        appDesc.permissions(),
-                        appDesc.featuresRepo(),
-                        appDesc.features(),
-                        appDesc.requiredApps());
+            DefaultApplication
+                .builder(appDesc)
+                .withAppId(appId)
+                .build();
+
         apps.put(appId, app);
         states.put(appId, INSTALLED);
         delegate.notify(new ApplicationEvent(APP_INSTALLED, app));

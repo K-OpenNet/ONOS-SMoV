@@ -1,5 +1,5 @@
 /*
- * Copyright 2014,2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,12 @@
 package org.onosproject.faultmanagement.alarms.gui;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import org.onlab.osgi.ServiceDirectory;
-import org.onosproject.net.Device;
+import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
+import org.onosproject.incubator.net.faultmanagement.alarm.AlarmService;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.Element;
-import org.onosproject.net.HostId;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.host.HostService;
 import org.onosproject.ui.RequestHandler;
 import org.onosproject.ui.UiConnection;
 import org.onosproject.ui.UiMessageHandler;
@@ -38,49 +35,36 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Set;
-import org.onosproject.incubator.net.faultmanagement.alarm.Alarm;
-import org.onosproject.incubator.net.faultmanagement.alarm.AlarmService;
 
 /**
- * Skeletal ONOS UI Topology-Overlay message handler.
+ * FaultManagement UI Topology-Overlay message handler.
  */
 public class AlarmTopovMessageHandler extends UiMessageHandler {
 
     private static final String ALARM_TOPOV_DISPLAY_START = "alarmTopovDisplayStart";
-    private static final String ALARM_TOPOV_DISPLAY_UPDATE = "alarmTopovDisplayUpdate";
     private static final String ALARM_TOPOV_DISPLAY_STOP = "alarmTopovDisplayStop";
+    private static final int DELAY_MS = 500;
 
-    private static final String ID = "id";
-    private static final String MODE = "mode";
-
-    private enum Mode {
-
-        IDLE, MOUSE
-    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    protected AlarmService alarmService;
     private DeviceService deviceService;
-    private HostService hostService;
-    private AlarmService alarmService;
+    private AlarmMonitor alarmMonitor;
 
-    private Mode currentMode = Mode.IDLE;
-    private Element elementOfNote;
-
-    // ===============-=-=-=-=-=-======================-=-=-=-=-=-=-================================
+    // =======================================================================
     @Override
     public void init(UiConnection connection, ServiceDirectory directory) {
         super.init(connection, directory);
         deviceService = directory.get(DeviceService.class);
-        hostService = directory.get(HostService.class);
         alarmService = directory.get(AlarmService.class);
+        alarmMonitor = new AlarmMonitor(this);
     }
 
     @Override
     protected Collection<RequestHandler> createRequestHandlers() {
         return ImmutableSet.of(
                 new DisplayStartHandler(),
-                new DisplayUpdateHandler(),
                 new DisplayStopHandler()
         );
     }
@@ -94,43 +78,10 @@ public class AlarmTopovMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
-            String mode = string(payload, MODE);
-
-            log.debug("Start Display: mode [{}]", mode);
-            clearState();
-            clearForMode();
-
-            switch (mode) {
-                case "mouse":
-                    currentMode = Mode.MOUSE;
-
-                    sendMouseData();
-                    break;
-
-                default:
-                    currentMode = Mode.IDLE;
-
-                    break;
-            }
-        }
-    }
-
-    private final class DisplayUpdateHandler extends RequestHandler {
-
-        public DisplayUpdateHandler() {
-            super(ALARM_TOPOV_DISPLAY_UPDATE);
-        }
-
-        @Override
-        public void process(long sid, ObjectNode payload) {
-            String id = string(payload, ID);
-            log.debug("Update Display: id [{}]", id);
-            if (!Strings.isNullOrEmpty(id)) {
-                updateForMode(id);
-            } else {
-                clearForMode();
-            }
+        public void process(ObjectNode payload) {
+            log.debug("Start Display");
+            sendDelayedAlarmHighlights();
+            alarmMonitor.startMonitorig();
         }
     }
 
@@ -141,72 +92,55 @@ public class AlarmTopovMessageHandler extends UiMessageHandler {
         }
 
         @Override
-        public void process(long sid, ObjectNode payload) {
+        public void process(ObjectNode payload) {
             log.debug("Stop Display");
-            clearState();
-            clearForMode();
+            alarmMonitor.stopMonitoring();
+            clearHighlights();
         }
     }
 
-    // === ------------
-    private void clearState() {
-        currentMode = Mode.IDLE;
-        elementOfNote = null;
+    /**
+     * Sends the highlights with a delay to the client side on the browser.
+     */
+    protected void sendDelayedAlarmHighlights() {
+        createAndSendHighlights(true);
     }
 
-    private void updateForMode(String id) {
-        log.debug("host service: {}", hostService);
-        log.debug("device service: {}", deviceService);
-
-        try {
-            HostId hid = HostId.hostId(id);
-            log.debug("host id {}", hid);
-            elementOfNote = hostService.getHost(hid);
-            log.debug("host element {}", elementOfNote);
-
-        } catch (RuntimeException e) {
-            try {
-                DeviceId did = DeviceId.deviceId(id);
-                log.debug("device id {}", did);
-                elementOfNote = deviceService.getDevice(did);
-                log.debug("device element {}", elementOfNote);
-
-            } catch (RuntimeException e2) {
-                log.debug("Unable to process ID [{}]", id);
-                elementOfNote = null;
-            }
-        }
-
-        switch (currentMode) {
-            case MOUSE:
-                sendMouseData();
-                break;
-
-            default:
-                break;
-        }
-
+    /**
+     * Sends the highlights to the client side on the browser.
+     */
+    protected void sendAlarmHighlights() {
+        createAndSendHighlights(false);
     }
 
-    private void clearForMode() {
-        sendHighlights(new Highlights());
+    private void createAndSendHighlights(boolean toDelay) {
+        Highlights highlights = new Highlights();
+        createBadges(highlights);
+        if (toDelay) {
+            highlights.delay(DELAY_MS);
+        }
+        sendHighlights(highlights);
     }
 
     private void sendHighlights(Highlights highlights) {
         sendMessage(TopoJson.highlightsMessage(highlights));
     }
 
-    private void sendMouseData() {
-        if (elementOfNote != null && elementOfNote instanceof Device) {
-            DeviceId devId = (DeviceId) elementOfNote.id();
-            Set<Alarm> alarmsOnDevice = alarmService.getAlarms(devId);
-            Highlights highlights = new Highlights();
-
-            addDeviceBadge(highlights, devId, alarmsOnDevice.size());
-            sendHighlights(highlights);
-        }
-        // Note: could also process Host, if available
+    private void createBadges(Highlights highlights) {
+        deviceService.getAvailableDevices().forEach(d -> {
+            Set<Alarm> alarmsOnDevice = alarmService.getAlarms(d.id());
+            int alarmSize = alarmsOnDevice.size();
+            log.debug("{} Alarms on device {}", alarmSize, d.id());
+            if (alarmSize > 0) {
+                addDeviceBadge(highlights, d.id(), alarmSize);
+            }
+        });
     }
+
+    private void clearHighlights() {
+        sendHighlights(new Highlights());
+    }
+
 
     private void addDeviceBadge(Highlights h, DeviceId devId, int n) {
         DeviceHighlight dh = new DeviceHighlight(devId.toString());

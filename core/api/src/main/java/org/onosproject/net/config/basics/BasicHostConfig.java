@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,14 @@
 package org.onosproject.net.config.basics;
 
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.common.collect.ImmutableSet;
 import org.onlab.packet.IpAddress;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.HostId;
+import org.onosproject.net.HostLocation;
 
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.onosproject.net.config.basics.AllowedEntityConfig.ALLOWED;
 
 /**
  * Basic configuration for network end-station hosts.
@@ -31,36 +31,67 @@ import static org.onosproject.net.config.basics.AllowedEntityConfig.ALLOWED;
 public final class BasicHostConfig extends BasicElementConfig<HostId> {
 
     private static final String IPS = "ips";
-    private static final String LOCATION = "location";
+    private static final String LOCATIONS = "locations";
+    private static final String DASH = "-";
 
     @Override
     public boolean isValid() {
-        // Location and IP addresses can be absent, but if present must be valid.
-        this.location();
+        // locations is mandatory and must have at least one
+        // ipAddresses can be absent, but if present must be valid
+        this.locations();
         this.ipAddresses();
-        return hasOnlyFields(ALLOWED, NAME, LATITUDE, LONGITUDE, RACK_ADDRESS, OWNER,
-                             IPS, LOCATION);
+        return hasOnlyFields(ALLOWED, NAME, LOC_TYPE, LATITUDE, LONGITUDE,
+                             GRID_Y, GRID_Y, UI_TYPE, RACK_ADDRESS, OWNER, IPS, LOCATIONS);
+    }
+
+    @Override
+    public String name() {
+        // NOTE:
+        // We don't want to default to host ID if friendly name is not set;
+        // (it isn't particularly friendly, e.g. "00:00:00:00:00:01/None").
+        // We'd prefer to clear the annotation, but if we pass null, then the
+        // value won't get set (see BasicElementOperator). So, instead we will
+        // return a DASH to signify "use the default friendly name".
+        return get(NAME, DASH);
     }
 
     /**
-     * Returns location of the host.
+     * Returns the location of the host.
      *
-     * @return location of the host or null if not set
-     * @throws IllegalArgumentException if not specified with correct format
+     * @return location of the host or null if none specified
+     * @throws IllegalArgumentException if locations are set but empty or not
+     *                                  specified with correct format
      */
-    public ConnectPoint location() {
-        String location = get(LOCATION, null);
-        return location != null ? ConnectPoint.deviceConnectPoint(location) : null;
+    public Set<HostLocation> locations() {
+        if (!object.has(LOCATIONS)) {
+            return null; //no locations are specified
+        }
+
+        ImmutableSet.Builder<HostLocation> locationsSetBuilder = ImmutableSet.<HostLocation>builder();
+
+        ArrayNode locationNodes = (ArrayNode) object.path(LOCATIONS);
+        locationNodes.forEach(n -> {
+            ConnectPoint cp = ConnectPoint.deviceConnectPoint((n.asText()));
+            locationsSetBuilder.add(new HostLocation(cp, 0));
+        });
+
+
+        Set<HostLocation> locations = locationsSetBuilder.build();
+        if (locations.isEmpty()) {
+            throw new IllegalArgumentException("Host should have at least one location");
+        }
+
+        return locations;
     }
 
     /**
      * Sets the location of the host.
      *
-     * @param location location of the host or null to unset
+     * @param locations location of the host or null to unset
      * @return the config of the host
      */
-    public BasicHostConfig setLocation(String location) {
-        return (BasicHostConfig) setOrClear(LOCATION, location);
+    public BasicHostConfig setLocations(Set<HostLocation> locations) {
+        return (BasicHostConfig) setOrClear(LOCATIONS, locations);
     }
 
     /**

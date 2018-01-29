@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,6 +106,7 @@ public class SimpleHostStore
                                             descr.vlan(),
                                             descr.location(),
                                             ImmutableSet.copyOf(descr.ipAddress()),
+                                            descr.configured(),
                                             descr.annotations());
         synchronized (this) {
             hosts.put(hostId, newhost);
@@ -141,6 +142,7 @@ public class SimpleHostStore
         StoredHost updated = new StoredHost(providerId, host.id(),
                                             host.mac(), host.vlan(),
                                             descr.location(), addresses,
+                                            descr.configured(),
                                             annotations);
         event = new HostEvent(HOST_UPDATED, updated);
         synchronized (this) {
@@ -167,7 +169,13 @@ public class SimpleHostStore
 
     @Override
     public HostEvent removeIp(HostId hostId, IpAddress ipAddress) {
+        // TODO implement this
         return null;
+    }
+
+    @Override
+    public void removeLocation(HostId hostId, HostLocation location) {
+        hosts.get(hostId).locations().remove(location);
     }
 
     @Override
@@ -177,7 +185,7 @@ public class SimpleHostStore
 
     @Override
     public Iterable<Host> getHosts() {
-        return ImmutableSet.<Host>copyOf(hosts.values());
+        return ImmutableSet.copyOf(hosts.values());
     }
 
     @Override
@@ -251,8 +259,8 @@ public class SimpleHostStore
          */
         public StoredHost(ProviderId providerId, HostId id,
                           MacAddress mac, VlanId vlan, HostLocation location,
-                          Set<IpAddress> ips, Annotations... annotations) {
-            super(providerId, id, mac, vlan, location, ips, annotations);
+                          Set<IpAddress> ips, boolean configured, Annotations... annotations) {
+            super(providerId, id, mac, vlan, location, ips, configured, annotations);
             this.location = location;
         }
 

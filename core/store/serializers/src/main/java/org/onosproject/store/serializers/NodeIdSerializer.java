@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,12 @@ import org.onosproject.cluster.NodeId;
  * Kryo Serializer for {@link org.onosproject.cluster.NodeId}.
  */
 public final class NodeIdSerializer extends Serializer<NodeId> {
+
+    private static final NodeIdSerializer INSTANCE = new NodeIdSerializer();
+
+    public static final NodeIdSerializer nodeIdSerializer() {
+        return INSTANCE;
+    }
 
     /**
      * Creates {@link NodeId} serializer instance.

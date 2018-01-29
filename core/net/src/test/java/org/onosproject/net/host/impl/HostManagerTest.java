@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,11 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.onlab.junit.TestTools;
+import org.onlab.osgi.ComponentContextAdapter;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
+import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.common.event.impl.TestEventDispatcher;
 import org.onosproject.event.Event;
 import org.onosproject.net.DeviceId;
@@ -43,6 +45,9 @@ import org.onosproject.net.provider.AbstractProvider;
 import org.onosproject.net.provider.ProviderId;
 import org.onosproject.store.trivial.SimpleHostStore;
 
+import java.util.Collections;
+import java.util.Dictionary;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Set;
 
@@ -62,7 +67,8 @@ import static org.onosproject.net.host.HostEvent.Type.HOST_UPDATED;
  */
 public class HostManagerTest {
 
-    private static final ProviderId PID = new ProviderId("of", "foo");
+    private static final ProviderId PID = new ProviderId("host", "foo");
+    private static final ProviderId PID2 = new ProviderId("host2", "foo2");
 
     private static final VlanId VLAN1 = VlanId.vlanId((short) 1);
     private static final VlanId VLAN2 = VlanId.vlanId((short) 2);
@@ -87,12 +93,25 @@ public class HostManagerTest {
     private static final HostLocation LOC1 = new HostLocation(DID1, P1, 123L);
     private static final HostLocation LOC2 = new HostLocation(DID1, P2, 123L);
 
+    public static final ComponentContextAdapter REMOVE_DUPS_MONITOR = new ComponentContextAdapter() {
+        @Override
+        public Dictionary getProperties() {
+            Hashtable<String, String> props = new Hashtable<String, String>();
+            props.put("allowDuplicateIps", "true");
+            props.put("monitorHosts", "true");
+            props.put("probeRate", "40000");
+            return props;
+        }
+    };
+
     private HostManager mgr;
 
     protected TestListener listener = new TestListener();
     protected HostProviderRegistry registry;
     protected TestHostProvider provider;
+    protected TestHostProvider provider2;
     protected HostProviderService providerService;
+    protected HostProviderService providerService2;
 
     @Before
     public void setUp() {
@@ -101,21 +120,30 @@ public class HostManagerTest {
         injectEventDispatcher(mgr, new TestEventDispatcher());
         registry = mgr;
         mgr.networkConfigService = new TestNetworkConfigService();
-        mgr.activate();
+        mgr.cfgService = new ComponentConfigAdapter();
+
+        mgr.activate(REMOVE_DUPS_MONITOR);
 
         mgr.addListener(listener);
 
-        provider = new TestHostProvider();
+        provider = new TestHostProvider(PID);
+        provider2 = new TestHostProvider(PID2);
         providerService = registry.register(provider);
+        providerService2 = registry.register(provider2);
         assertTrue("provider should be registered",
                    registry.getProviders().contains(provider.id()));
+        assertTrue("provider2 should be registered",
+                registry.getProviders().contains(provider2.id()));
     }
 
     @After
     public void tearDown() {
         registry.unregister(provider);
+        registry.unregister(provider2);
         assertFalse("provider should not be registered",
                     registry.getProviders().contains(provider.id()));
+        assertFalse("provider2 should not be registered",
+                registry.getProviders().contains(provider2.id()));
 
         mgr.removeListener(listener);
         mgr.deactivate();
@@ -126,6 +154,13 @@ public class HostManagerTest {
                         HostLocation loc, IpAddress ip) {
         HostDescription descr = new DefaultHostDescription(mac, vlan, loc, ip);
         providerService.hostDetected(hid, descr, false);
+        assertNotNull("host should be found", mgr.getHost(hid));
+    }
+
+    private void configured(HostId hid, MacAddress mac, VlanId vlan,
+                        HostLocation loc, IpAddress ip) {
+        HostDescription descr = new DefaultHostDescription(mac, vlan, loc, Collections.singleton(ip), true);
+        providerService2.hostDetected(hid, descr, false);
         assertNotNull("host should be found", mgr.getHost(hid));
     }
 
@@ -185,6 +220,26 @@ public class HostManagerTest {
         assertEquals("only two hosts should be found", 2, mgr.getHostCount());
     }
 
+    /**
+     * If configured host and learnt host are both provided, we should always use
+     * the configured one.
+     */
+    @Test
+    public void hostDetectedWithMultipleProviders() {
+        detect(HID1, MAC1, VLAN1, LOC1, IP1);
+        assertEquals("Expect ProviderId to be PID", PID, mgr.getHost(HID1).providerId());
+        assertTrue("Expect IP to be IP1", mgr.getHost(HID1).ipAddresses().contains(IP1));
+        assertEquals("Expect 1 host in the store", 1, mgr.getHostCount());
+        configured(HID1, MAC1, VLAN1, LOC1, IP2);
+        assertEquals("Expect ProviderId get overridden by PID2", PID2, mgr.getHost(HID1).providerId());
+        assertTrue("Expect IP to be IP2", mgr.getHost(HID1).ipAddresses().contains(IP2));
+        assertEquals("Expect 1 hosts in the store", 1, mgr.getHostCount());
+        detect(HID1, MAC1, VLAN1, LOC1, IP1);
+        assertEquals("Expect ProviderId doesn't get overridden by PID", PID2, mgr.getHost(HID1).providerId());
+        assertTrue("Expect IP to be IP2", mgr.getHost(HID1).ipAddresses().contains(IP2));
+        assertEquals("Expect 1 host in the store", 1, mgr.getHostCount());
+    }
+
     @Test
     public void hostVanished() {
         detect(HID1, MAC1, VLAN1, LOC1, IP1);
@@ -201,6 +256,27 @@ public class HostManagerTest {
         validateEvents(HOST_ADDED, HOST_REMOVED);
 
         assertNull("host should have been removed", mgr.getHost(HID3));
+    }
+
+    /**
+     * Providers should only be able to remove a host that is provided by itself,
+     * or a host that is not configured.
+     */
+    @Test
+    public void hostVanishedWithMultipleProviders() {
+        detect(HID1, MAC1, VLAN1, LOC1, IP1);
+        configured(HID2, MAC2, VLAN2, LOC2, IP2);
+
+        providerService2.hostVanished(HID1);
+        assertNull("Should be able to remove learnt host", mgr.getHost(HID1));
+
+        providerService.hostVanished(HID2);
+        assertNotNull("Should not be able to remove configured host since the provider is different",
+                mgr.getHost(HID2));
+
+        providerService2.hostVanished(HID2);
+        assertNull("Should be able to remove configured host when provider is the same",
+                mgr.getHost(HID2));
     }
 
     private void validateHosts(
@@ -241,13 +317,8 @@ public class HostManagerTest {
     private static class TestHostProvider extends AbstractProvider
             implements HostProvider {
 
-        protected TestHostProvider() {
-            super(PID);
-        }
-
-        @Override
-        public ProviderId id() {
-            return PID;
+        protected TestHostProvider(ProviderId pid) {
+            super(pid);
         }
 
         @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,8 @@ import org.junit.Test;
 import java.nio.ByteBuffer;
 
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+import static org.onlab.packet.IPv6.*;
 
 /**
  * Tests for class {@link IPv6}.
@@ -43,6 +41,28 @@ public class IPv6Test {
             (byte) 0x20, (byte) 0x01, (byte) 0x0f, (byte) 0x18, (byte) 0x01, (byte) 0x13, (byte) 0x02, (byte) 0x15,
             (byte) 0xe6, (byte) 0xce, (byte) 0x8f, (byte) 0xff, (byte) 0xfe, (byte) 0x54, (byte) 0x37, (byte) 0xc8
     };
+    private static final byte[] SOLICITATION_NODE_ADDRESS = {
+            (byte) 0xff, (byte) 0x02, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0xff, (byte) 0x54, (byte) 0x37, (byte) 0xc8
+    };
+    private static final byte[] MULTICAST_ADDRESS = {
+            (byte) 0x33, (byte) 0x33, (byte) 0xfe, (byte) 0x54, (byte) 0x37, (byte) 0xc8
+    };
+    private static final byte[] LINK_LOCAL_ADDRESS_1 = {
+            (byte) 0xfe, (byte) 0x80, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
+            (byte) 0x50, (byte) 0x74, (byte) 0xf2, (byte) 0xff, (byte) 0xfe, (byte) 0xb1, (byte) 0xa8, (byte) 0x7f
+    };
+    private static final byte[] MAC_ADDRESS_1 = {
+            (byte) 0x52, (byte) 0x74, (byte) 0xf2, (byte) 0xb1, (byte) 0xa8, (byte) 0x7f
+    };
+    private static final byte[] LINK_LOCAL_ADDRESS_2 = {
+            (byte) 0xfe, (byte) 0x80, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
+            (byte) 0x02, (byte) 0x0c, (byte) 0x29, (byte) 0xff, (byte) 0xfe, (byte) 0x8f, (byte) 0x99, (byte) 0xd2
+    };
+    private static final byte[] MAC_ADDRESS_2 = {
+            (byte) 0x00, (byte) 0x0c, (byte) 0x29, (byte) 0x8f, (byte) 0x99, (byte) 0xd2
+    };
+
     private static Data data;
     private static UDP udp;
     private static byte[] bytePacket;
@@ -73,7 +93,7 @@ public class IPv6Test {
 
     @Before
     public void setUp() {
-        deserializer = IPv6.deserializer();
+        deserializer = deserializer();
     }
 
     /**
@@ -86,7 +106,7 @@ public class IPv6Test {
         ipv6.setVersion((byte) 6);
         ipv6.setTrafficClass((byte) 0x93);
         ipv6.setFlowLabel(0x13579);
-        ipv6.setNextHeader(IPv6.PROTOCOL_UDP);
+        ipv6.setNextHeader(PROTOCOL_UDP);
         ipv6.setHopLimit((byte) 32);
         ipv6.setSourceAddress(SOURCE_ADDRESS);
         ipv6.setDestinationAddress(DESTINATION_ADDRESS);
@@ -102,7 +122,7 @@ public class IPv6Test {
     @Test
     public void testDeserializeTruncated() throws Exception {
         // Run the truncation test only on the IPv6 header
-        byte[] ipv6Header = new byte[IPv6.FIXED_HEADER_LENGTH];
+        byte[] ipv6Header = new byte[FIXED_HEADER_LENGTH];
         ByteBuffer.wrap(bytePacket).get(ipv6Header);
 
         PacketTestUtils.testDeserializeTruncated(deserializer, ipv6Header);
@@ -118,7 +138,7 @@ public class IPv6Test {
         assertThat(ipv6.getVersion(), is((byte) 6));
         assertThat(ipv6.getTrafficClass(), is((byte) 0x93));
         assertThat(ipv6.getFlowLabel(), is(0x13579));
-        assertThat(ipv6.getNextHeader(), is(IPv6.PROTOCOL_UDP));
+        assertThat(ipv6.getNextHeader(), is(PROTOCOL_UDP));
         assertThat(ipv6.getHopLimit(), is((byte) 32));
         assertArrayEquals(ipv6.getSourceAddress(), SOURCE_ADDRESS);
         assertArrayEquals(ipv6.getDestinationAddress(), DESTINATION_ADDRESS);
@@ -134,7 +154,7 @@ public class IPv6Test {
         packet1.setVersion((byte) 6);
         packet1.setTrafficClass((byte) 0x93);
         packet1.setFlowLabel(0x13579);
-        packet1.setNextHeader(IPv6.PROTOCOL_UDP);
+        packet1.setNextHeader(PROTOCOL_UDP);
         packet1.setHopLimit((byte) 32);
         packet1.setSourceAddress(SOURCE_ADDRESS);
         packet1.setDestinationAddress(DESTINATION_ADDRESS);
@@ -144,7 +164,7 @@ public class IPv6Test {
         packet2.setVersion((byte) 6);
         packet2.setTrafficClass((byte) 0x93);
         packet2.setFlowLabel(0x13579);
-        packet2.setNextHeader(IPv6.PROTOCOL_UDP);
+        packet2.setNextHeader(PROTOCOL_UDP);
         packet2.setHopLimit((byte) 32);
         packet2.setSourceAddress(DESTINATION_ADDRESS);
         packet2.setDestinationAddress(SOURCE_ADDRESS);
@@ -164,8 +184,54 @@ public class IPv6Test {
         assertTrue(StringUtils.contains(str, "version=" + (byte) 6));
         assertTrue(StringUtils.contains(str, "trafficClass=" + (byte) 0x93));
         assertTrue(StringUtils.contains(str, "flowLabel=" + 0x13579));
-        assertTrue(StringUtils.contains(str, "nextHeader=" + IPv6.PROTOCOL_UDP));
+        assertTrue(StringUtils.contains(str, "nextHeader=" + PROTOCOL_UDP));
         assertTrue(StringUtils.contains(str, "hopLimit=" + (byte) 32));
         // TODO: test IPv6 source and destination address
+    }
+
+    /**
+     * Tests the proper operation of the solicitationNodeAddress function.
+     */
+    @Test
+    public void testSolicitationNodeAddress() {
+        assertArrayEquals(SOLICITATION_NODE_ADDRESS, getSolicitNodeAddress(DESTINATION_ADDRESS));
+    }
+
+    /**
+     * Tests the proper operation of the multicastAddress function.
+     */
+    @Test
+    public void testMulticastAddress() {
+        assertArrayEquals(MULTICAST_ADDRESS, getMCastMacAddress(DESTINATION_ADDRESS));
+    }
+
+    /**
+     * Tests the proper operation of the isLinkLocalAddress function.
+     */
+    @Test
+    public void testIsLinkLocalAddress() {
+        assertFalse(isLinkLocalAddress(SOURCE_ADDRESS));
+        assertFalse(isLinkLocalAddress(DESTINATION_ADDRESS));
+        assertFalse(isLinkLocalAddress(SOLICITATION_NODE_ADDRESS));
+        assertTrue(isLinkLocalAddress(LINK_LOCAL_ADDRESS_1));
+        assertTrue(isLinkLocalAddress(LINK_LOCAL_ADDRESS_2));
+    }
+
+    /**
+     * Tests the proper operation of the linkLocalAddress function.
+     */
+    @Test
+    public void testLinkLocalAddress() {
+        assertArrayEquals(getLinkLocalAddress(MAC_ADDRESS_1), LINK_LOCAL_ADDRESS_1);
+        assertArrayEquals(getLinkLocalAddress(MAC_ADDRESS_2), LINK_LOCAL_ADDRESS_2);
+    }
+
+    /**
+     * Tests the proper operation of the macAddress function.
+     */
+    @Test
+    public void testMacAddress() {
+        assertArrayEquals(getMacAddress(LINK_LOCAL_ADDRESS_1), MAC_ADDRESS_1);
+        assertArrayEquals(getMacAddress(LINK_LOCAL_ADDRESS_2), MAC_ADDRESS_2);
     }
 }

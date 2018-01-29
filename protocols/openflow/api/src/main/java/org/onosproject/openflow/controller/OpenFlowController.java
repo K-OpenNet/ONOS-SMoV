@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 package org.onosproject.openflow.controller;
 
 import org.projectfloodlight.openflow.protocol.OFMessage;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Abstraction of an OpenFlow controller. Serves as a one stop
@@ -65,13 +67,6 @@ public interface OpenFlowController {
     OpenFlowSwitch getEqualSwitch(Dpid dpid);
 
     /**
-     * If this set to be true, all incoming events are monitored.
-     * Other wise, only stats related incoming events are monitored
-     * @param monitor monitoring flag
-     */
-    void monitorAllEvents(boolean monitor);
-
-    /**
      * Register a listener for meta events that occur to OF
      * devices.
      * @param listener the listener to notify
@@ -84,6 +79,20 @@ public interface OpenFlowController {
      * @param listener the listener to unregister
      */
     void removeListener(OpenFlowSwitchListener listener);
+
+    /**
+     * Register a listener for all OF msg types.
+     *
+     * @param listener the listener to notify
+     */
+    void addMessageListener(OpenFlowMessageListener listener);
+
+    /**
+     * Unregister a listener for all OF msg types.
+     *
+     * @param listener the listener to notify
+     */
+    void removeMessageListener(OpenFlowMessageListener listener);
 
     /**
      * Register a listener for packet events.
@@ -119,6 +128,15 @@ public interface OpenFlowController {
      * @param msg the message to send
      */
     void write(Dpid dpid, OFMessage msg);
+
+    /**
+     * Send a message to a particular switch and return the future response.
+     *
+     * @param dpid the switch to send to
+     * @param msg the message to send
+     * @return future for response message
+     */
+    CompletableFuture<OFMessage> writeResponse(Dpid dpid, OFMessage msg);
 
     /**
      * Process a message and notify the appropriate listeners.

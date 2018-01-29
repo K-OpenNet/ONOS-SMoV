@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -193,7 +193,7 @@ public class SimpleLinkStore
             return null;
         }
 
-        if (link.isDurable()) {
+        if (link.isExpected()) {
             return link.state() == INACTIVE ? null :
                     updateLink(linkKey(link.src(), link.dst()), link,
                                DefaultLink.builder()
@@ -251,7 +251,7 @@ public class SimpleLinkStore
                 !AnnotationsUtil.isEqual(oldLink.annotations(), newLink.annotations())) {
 
             links.put(key, newLink);
-            // strictly speaking following can be ommitted
+            // strictly speaking following can be omitted
             srcLinks.put(oldLink.src().deviceId(), key);
             dstLinks.put(oldLink.dst().deviceId(), key);
             return new LinkEvent(LINK_UPDATED, newLink);

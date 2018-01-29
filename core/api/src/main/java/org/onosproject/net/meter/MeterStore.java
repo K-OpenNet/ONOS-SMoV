@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package org.onosproject.net.meter;
 
+import org.onosproject.net.DeviceId;
 import org.onosproject.store.Store;
 
 import java.util.Collection;
@@ -40,6 +41,22 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
      * @return a future indicating the result of the store operation
      */
     CompletableFuture<MeterStoreResult> deleteMeter(Meter meter);
+
+    /**
+     * Adds the meter features to the store.
+     *
+     * @param meterfeatures the meter features
+     * @return the result of the store operation
+     */
+    MeterStoreResult storeMeterFeatures(MeterFeatures meterfeatures);
+
+    /**
+     * Deletes the meter features from the store.
+     *
+     * @param deviceId the device id
+     * @return a future indicating the result of the store operation
+     */
+    MeterStoreResult deleteMeterFeatures(DeviceId deviceId);
 
     /**
      * Updates a meter whose meter id is the same as the passed meter.
@@ -72,6 +89,15 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
     Collection<Meter> getAllMeters();
 
     /**
+     * Returns all meters stored in the store for a
+     * precise device.
+     *
+     * @param deviceId the device to get the meter list from
+     * @return a collection of meters
+     */
+    Collection<Meter> getAllMeters(DeviceId deviceId);
+
+    /**
      * Update the store by deleting the failed meter.
      * Notifies the delegate that the meter failed to allow it
      * to nofity the app.
@@ -86,5 +112,30 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
      * @param m a meter
      */
     void deleteMeterNow(Meter m);
+
+    /**
+     * Retrieve maximum meters available for the device.
+     *
+     * @param key the meter features key
+     * @return the maximum number of meters supported by the device
+     */
+    long getMaxMeters(MeterFeaturesKey key);
+
+    /**
+     * Allocates the first available MeterId.
+     *
+     * @param deviceId the device id
+     * @return the meter Id or null if it was not possible
+     * to allocate a meter id
+     */
+    MeterId allocateMeterId(DeviceId deviceId);
+
+    /**
+     * Frees the given meter id.
+     *
+     * @param deviceId the device id
+     * @param meterId the id to be freed
+     */
+    void freeMeterId(DeviceId deviceId, MeterId meterId);
 
 }

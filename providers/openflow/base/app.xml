@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright 2014-2016 Open Networking Laboratory
+  ~ Copyright 2015-present Open Networking Foundation
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -17,15 +17,14 @@
 <app name="org.onosproject.openflow-base" origin="ON.Lab" version="${project.version}"
      category="Provider" url="http://onosproject.org" title="OpenFlow Provider"
      featuresRepo="mvn:${project.groupId}/${project.artifactId}/${project.version}/xml/features"
-     features="${project.artifactId}">
+     features="${project.artifactId}" apps="org.onosproject.optical-model">
     <description>${project.description}</description>
-    <artifact>mvn:${project.groupId}/onos-of-api/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-of-ctl/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-drivers/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-protocols-openflow-api/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-protocols-openflow-ctl/${project.version}</artifact>
 
-    <artifact>mvn:${project.groupId}/onos-of-provider-device/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-of-provider-packet/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-of-provider-flow/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-of-provider-group/${project.version}</artifact>
-    <artifact>mvn:${project.groupId}/onos-of-provider-meter/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-providers-openflow-device/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-providers-openflow-packet/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-providers-openflow-flow/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-providers-openflow-group/${project.version}</artifact>
+    <artifact>mvn:${project.groupId}/onos-providers-openflow-meter/${project.version}</artifact>
 </app>

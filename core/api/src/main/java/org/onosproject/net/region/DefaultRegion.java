@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,21 @@ package org.onosproject.net.region;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import org.onosproject.cluster.NodeId;
+import org.onosproject.net.AbstractAnnotated;
+import org.onosproject.net.Annotations;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 /**
  * Default implementation of a region.
  */
-public final class DefaultRegion implements Region {
+public final class DefaultRegion extends AbstractAnnotated implements Region {
+
+    private static final int NAME_MAX_LENGTH = 1024;
 
     private final RegionId id;
     private final String name;
@@ -40,13 +46,19 @@ public final class DefaultRegion implements Region {
      * @param id      region identifier
      * @param name    friendly name
      * @param type    region type
+     * @param annots  annotations
      * @param masters list of sets of cluster node identifiers; in order of mastership
      */
-    public DefaultRegion(RegionId id, String name, Type type, List<Set<NodeId>> masters) {
+    public DefaultRegion(RegionId id, String name, Type type,
+                         Annotations annots, List<Set<NodeId>> masters) {
+        super(annots);
         this.id = id;
         this.name = name;
         this.type = type;
         this.masters = masters != null ? ImmutableList.copyOf(masters) : ImmutableList.of();
+        if (name != null) {
+            checkArgument(name.length() <= NAME_MAX_LENGTH, "name exceeds maximum length " + NAME_MAX_LENGTH);
+        }
     }
 
     @Override

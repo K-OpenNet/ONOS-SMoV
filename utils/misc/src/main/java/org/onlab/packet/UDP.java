@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-
-
 package org.onlab.packet;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
+
+import com.google.common.collect.ImmutableMap;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static org.onlab.packet.PacketUtils.*;
@@ -30,21 +29,25 @@ import static org.onlab.packet.PacketUtils.*;
  */
 public class UDP extends BasePacket {
     public static final Map<Integer, Deserializer<? extends IPacket>> PORT_DESERIALIZER_MAP =
-            new HashMap<>();
+            ImmutableMap.<Integer, Deserializer<? extends IPacket>>builder()
+                    .put(UDP.DHCP_SERVER_PORT, DHCP.deserializer())
+                    .put(UDP.DHCP_CLIENT_PORT, DHCP.deserializer())
+                    .put(UDP.DHCP_V6_SERVER_PORT, DHCP6.deserializer())
+                    .put(UDP.DHCP_V6_CLIENT_PORT, DHCP6.deserializer())
+                    .put(UDP.VXLAN_UDP_PORT, VXLAN.deserializer())
+                    .put(UDP.RIP_PORT, RIP.deserializer())
+                    .put(UDP.RIPNG_PORT, RIPng.deserializer())
+                    .build();
+
     public static final int DHCP_SERVER_PORT = 67;
     public static final int DHCP_CLIENT_PORT = 68;
+    public static final int DHCP_V6_SERVER_PORT = 547;
+    public static final int DHCP_V6_CLIENT_PORT = 546;
+    public static final int VXLAN_UDP_PORT = 4789;
+    public static final int RIP_PORT = 520;
+    public static final int RIPNG_PORT = 521;
 
     private static final short UDP_HEADER_LENGTH = 8;
-
-    static {
-        /*
-         * Disable DHCP until the deserialize code is hardened to deal with
-         * garbage input
-         */
-        UDP.PORT_DESERIALIZER_MAP.put(UDP.DHCP_SERVER_PORT, DHCP.deserializer());
-        UDP.PORT_DESERIALIZER_MAP.put(UDP.DHCP_CLIENT_PORT, DHCP.deserializer());
-
-    }
 
     protected int sourcePort;
     protected int destinationPort;
@@ -194,34 +197,6 @@ public class UDP extends BasePacket {
             bb.putShort(6, this.checksum);
         }
         return data;
-    }
-
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.sourcePort = (bb.getShort() & 0xffff);
-        this.destinationPort = (bb.getShort() & 0xffff);
-        this.length = bb.getShort();
-        this.checksum = bb.getShort();
-
-        Deserializer<? extends IPacket> deserializer;
-        if (UDP.PORT_DESERIALIZER_MAP.containsKey(this.destinationPort)) {
-            deserializer = UDP.PORT_DESERIALIZER_MAP.get(this.destinationPort);
-        } else if (UDP.PORT_DESERIALIZER_MAP.containsKey(this.sourcePort)) {
-            deserializer = UDP.PORT_DESERIALIZER_MAP.get(this.sourcePort);
-        } else {
-            deserializer = Data.deserializer();
-        }
-
-        try {
-            this.payload = deserializer.deserialize(data, bb.position(),
-                                                   bb.limit() - bb.position());
-            this.payload.setParent(this);
-        } catch (DeserializationException e) {
-            return this;
-        }
-        return this;
     }
 
     /*

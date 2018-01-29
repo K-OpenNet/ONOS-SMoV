@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ package org.onosproject.store.service;
 
 import java.util.function.Function;
 
-import org.joda.time.DateTime;
 import org.onlab.util.ByteArraySizeHashPrinter;
+import org.onlab.util.Tools;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
@@ -96,8 +96,8 @@ public class Versioned<V> {
      * @param <U> value type of the returned instance
      * @return mapped instance
      */
-    public <U> Versioned<U> map(Function<V, U> transformer) {
-        return new Versioned<>(transformer.apply(value), version, creationTime);
+    public synchronized <U> Versioned<U> map(Function<V, U> transformer) {
+        return new Versioned<>(value != null ? transformer.apply(value) : null, version, creationTime);
     }
 
     /**
@@ -143,7 +143,7 @@ public class Versioned<V> {
         return MoreObjects.toStringHelper(this)
             .add("value", value instanceof byte[] ? new ByteArraySizeHashPrinter((byte[]) value) : value)
             .add("version", version)
-            .add("creationTime", new DateTime(creationTime))
+            .add("creationTime", Tools.defaultOffsetDataTime(creationTime))
             .toString();
     }
 }

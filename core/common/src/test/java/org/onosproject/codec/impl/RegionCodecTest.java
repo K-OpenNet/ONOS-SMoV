@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Open Networking Laboratory
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import org.junit.Test;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.core.CoreService;
+import org.onosproject.net.Annotations;
+import org.onosproject.net.DefaultAnnotations;
 import org.onosproject.net.region.DefaultRegion;
 import org.onosproject.net.region.Region;
 import org.onosproject.net.region.RegionId;
@@ -75,8 +77,9 @@ public class RegionCodecTest {
         RegionId regionId = RegionId.regionId("1");
         String name = "foo";
         Region.Type type = Region.Type.ROOM;
+        Annotations noAnnots = DefaultAnnotations.EMPTY;
 
-        Region region = new DefaultRegion(regionId, name, type, masters);
+        Region region = new DefaultRegion(regionId, name, type, noAnnots, masters);
 
         ObjectNode regionJson = regionCodec.encode(region, context);
         assertThat(regionJson, matchesRegion(region));

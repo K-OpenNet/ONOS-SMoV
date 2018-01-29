@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Open Networking Laboratory
+ * Copyright 2014-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -248,25 +248,6 @@ public class ARP extends BasePacket {
         return data;
     }
 
-    @Override
-    public IPacket deserialize(final byte[] data, final int offset,
-                               final int length) {
-        final ByteBuffer bb = ByteBuffer.wrap(data, offset, length);
-        this.hardwareType = bb.getShort();
-        this.protocolType = bb.getShort();
-        this.hardwareAddressLength = bb.get();
-        this.protocolAddressLength = bb.get();
-        this.opCode = bb.getShort();
-        this.senderHardwareAddress = new byte[0xff & this.hardwareAddressLength];
-        bb.get(this.senderHardwareAddress, 0, this.senderHardwareAddress.length);
-        this.senderProtocolAddress = new byte[0xff & this.protocolAddressLength];
-        bb.get(this.senderProtocolAddress, 0, this.senderProtocolAddress.length);
-        this.targetHardwareAddress = new byte[0xff & this.hardwareAddressLength];
-        bb.get(this.targetHardwareAddress, 0, this.targetHardwareAddress.length);
-        this.targetProtocolAddress = new byte[0xff & this.protocolAddressLength];
-        bb.get(this.targetProtocolAddress, 0, this.targetProtocolAddress.length);
-        return this;
-    }
 
     /*
      * (non-Javadoc)
@@ -338,6 +319,69 @@ public class ARP extends BasePacket {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Builds an ARP request using the supplied parameters.
+     *
+     * @param senderMacAddress the mac address of the sender
+     * @param senderIpAddress the ip address of the sender
+     * @param targetMacAddress the mac address of the target
+     * @param targetIpAddress the ip address to resolve
+     * @param destinationMacAddress the mac address put in Ethernet header
+     * @param vlanId the vlan id
+     * @return the Ethernet frame containing the ARP request
+     */
+    public static Ethernet buildArpRequest(byte[] senderMacAddress,
+                                           byte[] senderIpAddress,
+                                           byte[] targetMacAddress,
+                                           byte[] targetIpAddress,
+                                           byte[] destinationMacAddress,
+                                           short vlanId) {
+
+        if (senderMacAddress.length != MacAddress.MAC_ADDRESS_LENGTH ||
+                senderIpAddress.length != Ip4Address.BYTE_LENGTH ||
+                targetIpAddress.length != Ip4Address.BYTE_LENGTH) {
+            return null;
+        }
+
+        ARP arpRequest = new ARP();
+        arpRequest.setHardwareType(ARP.HW_TYPE_ETHERNET)
+                .setProtocolType(ARP.PROTO_TYPE_IP)
+                .setHardwareAddressLength((byte) Ethernet.DATALAYER_ADDRESS_LENGTH)
+                .setProtocolAddressLength((byte) Ip4Address.BYTE_LENGTH)
+                .setOpCode(ARP.OP_REQUEST)
+                .setSenderHardwareAddress(senderMacAddress)
+                .setTargetHardwareAddress(targetMacAddress)
+                .setSenderProtocolAddress(senderIpAddress)
+                .setTargetProtocolAddress(targetIpAddress);
+
+        Ethernet eth = new Ethernet();
+        eth.setDestinationMACAddress(destinationMacAddress)
+                .setSourceMACAddress(senderMacAddress)
+                .setEtherType(Ethernet.TYPE_ARP)
+                .setVlanID(vlanId)
+                .setPad(true)
+                .setPayload(arpRequest);
+        return eth;
+    }
+
+    /**
+     * Builds an ARP request using the supplied parameters.
+     *
+     * @param senderMacAddress the mac address of the sender
+     * @param senderIpAddress the ip address of the sender
+     * @param targetIpAddress the ip address to resolve
+     * @param vlanId the vlan id
+     * @return the Ethernet frame containing the ARP request
+     */
+    public static Ethernet buildArpRequest(byte[] senderMacAddress,
+                                           byte[] senderIpAddress,
+                                           byte[] targetIpAddress,
+                                           short vlanId) {
+        return buildArpRequest(senderMacAddress, senderIpAddress,
+                MacAddress.ZERO.toBytes(), targetIpAddress,
+                MacAddress.BROADCAST.toBytes(), vlanId);
     }
 
     /**
@@ -414,6 +458,21 @@ public class ARP extends BasePacket {
         };
     }
 
+    /**
+     * Make an exact copy of the ARP packet.
+     *
+     * @return copy of the packet
+     */
+    public ARP duplicate() {
+        try {
+            byte[] data = serialize();
+            return deserializer().deserialize(data, 0, data.length);
+        } catch (DeserializationException dex) {
+            // If we can't make an object out of the serialized data, its a defect
+            throw new IllegalStateException(dex);
+        }
+    }
+
     @Override
     public String toString() {
         return toStringHelper(getClass())
@@ -422,10 +481,10 @@ public class ARP extends BasePacket {
                 .add("hardwareAddressLength", Byte.toString(hardwareAddressLength))
                 .add("protocolAddressLength", Byte.toString(protocolAddressLength))
                 .add("opCode", Short.toString(opCode))
-                .add("senderHardwareAddress", Arrays.toString(senderHardwareAddress))
-                .add("senderProtocolAddress", Arrays.toString(senderProtocolAddress))
-                .add("targetHardwareAddress", Arrays.toString(targetHardwareAddress))
-                .add("targetProtocolAddress", Arrays.toString(targetProtocolAddress))
+                .add("senderHardwareAddress", MacAddress.valueOf(senderHardwareAddress))
+                .add("senderProtocolAddress", Ip4Address.valueOf(senderProtocolAddress))
+                .add("targetHardwareAddress", MacAddress.valueOf(targetHardwareAddress))
+                .add("targetProtocolAddress", Ip4Address.valueOf(targetProtocolAddress))
                 .toString();
     }
 }

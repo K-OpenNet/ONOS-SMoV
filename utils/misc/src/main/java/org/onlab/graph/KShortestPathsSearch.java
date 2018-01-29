@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,12 +40,13 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
     private final Logger log = getLogger(getClass());
 
     @Override
-    public Result<V, E> search(Graph<V, E> graph, V src, V dst, EdgeWeight<V, E> weight, int maxPaths) {
-        checkNotNull(src);
-        checkNotNull(dst);
-        //The modified edge weight removes any need to modify the original graph
-        InnerEdgeWeighter modifiedWeighter = new InnerEdgeWeighter(checkNotNull(weight));
-        checkArgument(maxPaths > 0);
+    protected Result<V, E> internalSearch(Graph<V, E> graph, V src, V dst, EdgeWeigher<V, E> weigher, int maxPaths) {
+        //The modified edge weigher removes any need to modify the original graph
+        InnerEdgeWeigher modifiedWeighter = new InnerEdgeWeigher(checkNotNull(weigher));
+        checkArgument(maxPaths != ALL_PATHS, "KShortestPath search cannot" +
+                "be used with ALL_PATHS.");
+        checkArgument(maxPaths > 0, "The max number of paths must be greater" +
+                " than 0");
         Graph<V, E> originalGraph = checkNotNull(graph);
         //the result contains the set of eventual results
         InnerOrderedResult result = new InnerOrderedResult(src, dst, maxPaths);
@@ -55,7 +56,7 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
         DijkstraGraphSearch<V, E> dijkstraSearch = new DijkstraGraphSearch<>();
         Set<Path<V, E>> dijkstraResults = dijkstraSearch.search(originalGraph, src, dst, modifiedWeighter, 1).paths();
         //Checks if the dst was reachable
-        if (dijkstraResults.size() == 0) {
+        if (dijkstraResults.isEmpty()) {
             log.warn("No path was found.");
             return result;
         }
@@ -64,12 +65,12 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
 
         for (int k = 1; k < maxPaths; k++) {
 
-            for (int i = 0; i < (resultPaths.get(k - 1).edges().size() - 1); i++) {
+            for (int i = 0; i < resultPaths.get(k - 1).edges().size(); i++) {
                 V spurNode = resultPaths.get(k - 1).edges().get(i).src();
                 List<E> rootPathEdgeList = resultPaths.get(k - 1).edges().subList(0, i);
 
                 for (Path<V, E> path : resultPaths) {
-                    if (edgeListsAreEqual(rootPathEdgeList, path.edges().subList(0, i))) {
+                    if (path.edges().size() >= i && edgeListsAreEqual(rootPathEdgeList, path.edges().subList(0, i))) {
                         modifiedWeighter.removedEdges.add(path.edges().get(i));
                     }
                 }
@@ -81,14 +82,14 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
                 }
 
                 dijkstraResults = dijkstraSearch.search(originalGraph, spurNode, dst, modifiedWeighter, 1).paths();
-                if (dijkstraResults.size() != 0) {
+                if (!dijkstraResults.isEmpty()) {
                     Path<V, E> spurPath = dijkstraResults.iterator().next();
                     List<E> totalPath = new ArrayList<>(rootPathEdgeList);
-                    spurPath.edges().forEach(e -> totalPath.add(e));
-                    //The following line must use the original weighter not the modified weighter because the modified
-                    //weighter will count -1 values used for modifying the graph and return an inaccurate cost.
-                    potentialPaths.add(new DefaultPath<V, E>(totalPath,
-                                                             calculatePathCost(weight, totalPath)));
+                    spurPath.edges().forEach(totalPath::add);
+                    //The following line must use the original weigher not the modified weigher because the modified
+                    //weigher will count -1 values used for modifying the graph and return an inaccurate cost.
+                    potentialPaths.add(new DefaultPath<>(totalPath,
+                            calculatePathCost(weigher, totalPath)));
                 }
 
                 //Restore all removed paths and nodes
@@ -122,10 +123,10 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
         return true;
     }
 
-    private Double calculatePathCost(EdgeWeight<V, E> weighter, List<E> edges) {
-        Double totalCost = 0.0;
+    private Weight calculatePathCost(EdgeWeigher<V, E> weighter, List<E> edges) {
+        Weight totalCost = weighter.getInitialWeight();
         for (E edge : edges) {
-            totalCost += weighter.weight(edge);
+            totalCost = totalCost.merge(weighter.weight(edge));
         }
         return totalCost;
     }
@@ -133,23 +134,31 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
     /**
      * Weights edges to make them inaccessible if set, otherwise returns the result of the original EdgeWeight.
      */
-    private class InnerEdgeWeighter implements EdgeWeight<V, E> {
+    private final class InnerEdgeWeigher implements EdgeWeigher<V, E> {
 
         private Set<E> removedEdges = Sets.newConcurrentHashSet();
-        private EdgeWeight<V, E> innerEdgeWeight;
+        private EdgeWeigher<V, E> innerEdgeWeigher;
 
-        public InnerEdgeWeighter(EdgeWeight<V, E> weight) {
-            this.innerEdgeWeight = weight;
+        private InnerEdgeWeigher(EdgeWeigher<V, E> weigher) {
+            this.innerEdgeWeigher = weigher;
         }
 
         @Override
-        public double weight(E edge) {
+        public Weight weight(E edge) {
             if (removedEdges.contains(edge)) {
-                //THIS RELIES ON THE LOCAL DIJKSTRA ALGORITHM AVOIDING NEGATIVES
-                return -1;
-            } else {
-                return innerEdgeWeight.weight(edge);
+                return innerEdgeWeigher.getNonViableWeight();
             }
+            return innerEdgeWeigher.weight(edge);
+        }
+
+        @Override
+        public Weight getInitialWeight() {
+            return innerEdgeWeigher.getInitialWeight();
+        }
+
+        @Override
+        public Weight getNonViableWeight() {
+            return innerEdgeWeigher.getNonViableWeight();
         }
     }
 
@@ -181,7 +190,7 @@ public class KShortestPathsSearch<V extends Vertex, E extends Edge<V>> extends A
 
         @Override
         public int compare(Path<V, E> pathOne, Path<V, E> pathTwo) {
-            int comparisonValue = Double.compare(pathOne.cost(), pathTwo.cost());
+            int comparisonValue = pathOne.cost().compareTo(pathTwo.cost());
             if  (comparisonValue != 0) {
                 return comparisonValue;
             } else if (edgeListsAreEqual(pathOne.edges(), pathTwo.edges())) {

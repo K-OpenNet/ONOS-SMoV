@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Open Networking Laboratory
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import org.onosproject.bgpio.types.MpUnReachNlri;
 import org.onosproject.bgpio.util.UnSupportedAttribute;
 import org.onosproject.bgpio.util.Validation;
 import org.onosproject.bgpio.util.Constants;
+import org.onosproject.bgpio.types.attr.WideCommunity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,8 +150,11 @@ public class BgpPathAttributes {
             case EXTENDED_COMMUNITY_TYPE:
                 pathAttribute = BgpExtendedCommunity.read(cb);
                 break;
+            case WideCommunity.TYPE:
+                pathAttribute = WideCommunity.read(cb);
+                break;
             default:
-                //skip bytes for unsupported attribute types
+                log.debug("Skip bytes for unsupported attribute types");
                 UnSupportedAttribute.read(cb);
             }
             pathAttributeList.add(pathAttribute);
@@ -214,6 +218,10 @@ public class BgpPathAttributes {
                 BgpExtendedCommunity extendedCommunity = (BgpExtendedCommunity) attr;
                 extendedCommunity.write(cb);
                 break;
+            case WideCommunity.TYPE:
+                WideCommunity wideCommunity = (WideCommunity) attr;
+                wideCommunity.write(cb);
+                break;
             case MpReachNlri.MPREACHNLRI_TYPE:
                 MpReachNlri mpReach = (MpReachNlri) attr;
                 mpReach.write(cb);
@@ -255,19 +263,19 @@ public class BgpPathAttributes {
         }
 
         if (!isOrigin) {
-            log.debug("Mandatory Attributes not Present");
+            log.debug("Mandatory attributes not Present");
             Validation.validateType(BgpErrorType.UPDATE_MESSAGE_ERROR,
                     BgpErrorType.MISSING_WELLKNOWN_ATTRIBUTE,
                     Origin.ORIGIN_TYPE);
         }
         if (!isAsPath) {
-            log.debug("Mandatory Attributes not Present");
+            log.debug("Mandatory attributes not Present");
             Validation.validateType(BgpErrorType.UPDATE_MESSAGE_ERROR,
                     BgpErrorType.MISSING_WELLKNOWN_ATTRIBUTE,
                     AsPath.ASPATH_TYPE);
         }
         if (!isMpUnReach && !isMpReach && !isNextHop) {
-            log.debug("Mandatory Attributes not Present");
+            log.debug("Mandatory attributes not Present");
             Validation.validateType(BgpErrorType.UPDATE_MESSAGE_ERROR,
                     BgpErrorType.MISSING_WELLKNOWN_ATTRIBUTE,
                     NextHop.NEXTHOP_TYPE);
