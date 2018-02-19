@@ -48,7 +48,7 @@ onos_app (
 
             <vnet-perm>
                 <permission>VNET_READ</permission>
-                <vnetId>1</vnetId>
+                <vnetId>3</vnetId>
             </vnet-perm>
 
             <vnet-perm>
