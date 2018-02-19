@@ -585,7 +585,7 @@ public class ReactiveForwarding {
     // Install a rule forwarding the packet to the specified port.
     private void installRule(PacketContext context, PortNumber portNumber, ReactiveForwardMetrics macMetrics) {
         VirtualNetwork vnet = null;
-
+	vnet = vnetService.getVirtualNetwork(NetworkId.networkId(Long.valueOf(2).longValue()));
         vnet = vnetService.getVirtualNetwork(NetworkId.networkId(Long.valueOf(1).longValue()));
         //
         // We don't support (yet) buffer IDs in the Flow Service so
