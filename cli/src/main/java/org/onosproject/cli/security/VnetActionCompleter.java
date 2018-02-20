@@ -37,7 +37,6 @@ public class VnetActionCompleter extends AbstractCompleter {
     public int complete(String buffer, int cursor, List<String> candidates) {
 
         StringsCompleter delegate = new StringsCompleter();
-
         SortedSet<String> strings = delegate.getStrings();
 
         strings.add("READ");
