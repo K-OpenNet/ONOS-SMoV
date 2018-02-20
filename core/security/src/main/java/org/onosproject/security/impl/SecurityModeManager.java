@@ -119,7 +119,6 @@ public class SecurityModeManager implements SecurityAdminService {
         getBundleContext().removeFrameworkListener(securityEventListener);
         store.unsetDelegate(delegate);
         log.info("Stopped");
-
     }
 
     @Override
