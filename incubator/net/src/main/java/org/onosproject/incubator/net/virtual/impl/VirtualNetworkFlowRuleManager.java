@@ -185,6 +185,7 @@ public class VirtualNetworkFlowRuleManager
     public Iterable<FlowEntry> getFlowEntriesById(ApplicationId id) {
         DeviceService deviceService = manager.get(networkId(), DeviceService.class);
 
+
         Set<FlowEntry> flowEntries = Sets.newHashSet();
         for (Device d : deviceService.getDevices()) {
             for (FlowEntry flowEntry : store.getFlowEntries(networkId(), d.id())) {
