@@ -69,6 +69,7 @@ public class GrantVnetPermCommand extends AbstractShellCommand {
             print("No such application: %s", name);
             return;
         }
+
         Application app = applicationAdminService.getApplication(appId);
         SecurityAdminService smService = SecurityUtil.getSecurityService();
         if (smService == null) {
