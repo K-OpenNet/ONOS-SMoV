@@ -39,7 +39,6 @@ public class VnetActionCompleter extends AbstractCompleter {
         StringsCompleter delegate = new StringsCompleter();
         SortedSet<String> strings = delegate.getStrings();
 
-
         strings.add("READ");
         strings.add("WRITE");
         strings.add("EVENT");
