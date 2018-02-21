@@ -53,6 +53,7 @@ public class VnetCompleter extends AbstractCompleter {
         SortedSet<String> strings = delegate.getStrings();
         while (virtualNetworks.iterator().hasNext()) {
 
+
             VirtualNetwork vnet = virtualNetworks.iterator().next();
             strings.add(vnet.id().toString());
         }
