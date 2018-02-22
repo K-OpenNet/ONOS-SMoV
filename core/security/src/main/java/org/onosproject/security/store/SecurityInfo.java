@@ -17,7 +17,6 @@
 package org.onosproject.security.store;
 
 import org.onosproject.security.Permission;
-
 import java.util.Set;
 
 /**
