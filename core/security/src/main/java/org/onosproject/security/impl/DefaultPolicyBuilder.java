@@ -15,7 +15,6 @@
  */
 package org.onosproject.security.impl;
 
-
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.onosproject.cluster.ClusterAdminService;
