@@ -19,7 +19,6 @@ package org.onosproject.security.store;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.security.Permission;
 import org.onosproject.store.Store;
-
 import java.util.Set;
 
 /**
