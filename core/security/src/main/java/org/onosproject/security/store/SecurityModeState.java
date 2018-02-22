@@ -40,4 +40,5 @@ public enum SecurityModeState {
      * Indicates that application has violated security policy.
      */
     POLICY_VIOLATED,
+
 }
