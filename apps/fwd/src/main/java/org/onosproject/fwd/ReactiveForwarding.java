@@ -613,6 +613,7 @@ public class ReactiveForwarding {
                     .matchEthSrc(inPkt.getSourceMAC())
                     .matchEthDst(inPkt.getDestinationMAC());
 
+
             // If configured Match Vlan ID
             if (matchVlanId && inPkt.getVlanID() != Ethernet.VLAN_UNTAGGED) {
                 selectorBuilder.matchVlanId(VlanId.vlanId(inPkt.getVlanID()));
