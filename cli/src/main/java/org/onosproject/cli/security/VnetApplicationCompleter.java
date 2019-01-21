@@ -42,6 +42,7 @@ public class VnetApplicationCompleter extends AbstractCompleter {
         ApplicationService service = get(ApplicationService.class);
         Iterator<Application> it = service.getApplications().iterator();
         SortedSet<String> strings = delegate.getStrings();
+
         while (it.hasNext()) {
             Application app = it.next();
 
