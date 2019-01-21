@@ -58,6 +58,7 @@ public class GrantVnetPermCommand extends AbstractShellCommand {
 
     public static final String ANSI_RESET = "\u001B[0m";
     public static final String ANSI_RED = "\u001B[31m";
+
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_YELLOW = "\u001B[33m";
 
@@ -72,6 +73,7 @@ public class GrantVnetPermCommand extends AbstractShellCommand {
 
         Application app = applicationAdminService.getApplication(appId);
         SecurityAdminService smService = SecurityUtil.getSecurityService();
+
         if (smService == null) {
             print("Security Mode is disabled");
             return;
@@ -80,7 +82,7 @@ public class GrantVnetPermCommand extends AbstractShellCommand {
         VirtualNetworkAdminService service = get(VirtualNetworkAdminService.class);
 
         if (id == null) {
-            print("Please specify virtual network ID");
+            print("Please specify virtual network ID (VNET ID)");
             return;
         } else {
             if(smService.isSecured(appId) == true) {
