@@ -35,24 +35,28 @@ import static org.onosproject.cli.AbstractShellCommand.get;
 public class ReviewApplicationNameCompleter extends AbstractCompleter {
     @Override
     public int complete(String buffer, int cursor, List<String> candidates) {
+
         // Delegate string completer
         StringsCompleter delegate = new StringsCompleter();
 
         ApplicationService service = get(ApplicationService.class);
         Iterator<Application> it = service.getApplications().iterator();
         SortedSet<String> strings = delegate.getStrings();
+
         while (it.hasNext()) {
             Application app = it.next();
             ApplicationState state = service.getState(app.id());
+
 //            if (previousApps.contains(app.id().name())) {
 //                continue;
 //            }
+
+	    // INSTALLED state
             if (state == INSTALLED) {
                 strings.add(app.id().name());
             }
         }
 
-        // Now let the completer do the work for figuring out what to offer.
         return delegate.complete(buffer, cursor, candidates);
     }
 }
