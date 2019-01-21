@@ -55,16 +55,20 @@ public class ReviewCommand extends AbstractShellCommand {
     protected void execute() {
         ApplicationAdminService applicationAdminService = get(ApplicationAdminService.class);
         ApplicationId appId = applicationAdminService.getId(name);
+
         if (appId == null) {
             print("No such application: %s", name);
             return;
         }
+
         Application app = applicationAdminService.getApplication(appId);
         SecurityAdminService smService = SecurityUtil.getSecurityService();
+
         if (smService == null) {
             print("Security Mode is disabled");
             return;
         }
+
         if (accept == null) {
             smService.review(appId);
             printPolicy(smService, app);
@@ -118,7 +122,7 @@ public class ReviewCommand extends AbstractShellCommand {
             }
         }
 
-        for (Permission perm: assortedMap.get(4)) {
+        for (Permission perm: assortedMap.get(4)) { // CLI SERVICES
             printGreen("\t[CLI SERVICE] " + perm.getName() + "(" + perm.getActions() + ")");
         }
 
