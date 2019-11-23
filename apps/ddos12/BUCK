@@ -1,0 +1,137 @@
+COMPILE_DEPS = [
+    '//lib:CORE_DEPS',
+    '//lib:JACKSON',
+    '//lib:KRYO',
+    '//lib:javax.ws.rs-api',
+    '//utils/rest:onlab-rest',
+    '//core/store/serializers:onos-core-serializers',
+    '//core/store/primitives:onos-core-primitives',
+    '//core/api:onos-api',
+    '//lib:org.apache.karaf.shell.console',
+    '//cli:onos-cli',
+    '//incubator/api:onos-incubator-api',
+
+]
+
+
+TEST_DEPS = [
+    '//lib:TEST_REST',
+    '//lib:jersey-server',
+]
+
+osgi_jar_with_tests (
+    deps = COMPILE_DEPS,
+    test_deps = TEST_DEPS,
+    web_context = '/onos/v1/ddosDefense',
+)
+
+onos_app (
+    title = 'Defense DDos attack',
+    category = 'Security',
+    url = 'http://onosproject.org',
+    description = 'ONOS ddosDefense application.',
+    security = '''\
+	<role>USER</role>
+        <permissions>
+            <app-perm>APP_WRITE</app-perm>
+            <app-perm>DEVICE_READ</app-perm>
+            <app-perm>DEVICE_WRITE</app-perm>
+            <app-perm>TOPOLOGY_READ</app-perm>
+            <app-perm>PACKET_READ</app-perm>
+            <app-perm>PACKET_WRITE</app-perm>
+            <app-perm>PACKET_EVENT</app-perm>
+            <app-perm>HOST_READ</app-perm>            
+
+
+            <vnet-perm>
+                <permission>VNET_READ</permission>
+                <vnetId>1</vnetId>
+            </vnet-perm>
+
+            <vnet-perm>
+                <permission>VNET_WRITE</permission>
+                <vnetId>1</vnetId>
+            </vnet-perm>
+
+            <java-perm>
+                <classname>org.osgi.framework.AdminPermission</classname>
+                <name>*</name>
+                <actions>*</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.karaf.shell.console.CompletableFunction</name>
+                 <actions>register</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.karaf.shell.commands.CommandWithAction</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>java.lang.RuntimePermission</classname>
+                 <name>accessDeclaredMembers</name>
+            </java-perm>
+
+            <java-perm>
+                 <classname>java.lang.RuntimePermission</classname>
+                 <name>modifyThread</name>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.net.flowobjective.FlowObjectiveService</name>
+                 <actions>get</actions>
+            </java-perm>
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.incubator.net.virtual.VirtualNetworkService</name>
+                 <actions>get</actions>
+            </java-perm>
+
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.net.intent.IntentService</name>
+                 <actions>get</actions>
+            </java-perm>
+
+
+
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.osgi.service.blueprint.container.BlueprintContainer</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.ddos12.h2hintent</name>
+                 <actions>register</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.onosproject.store.service.StorageService</name>
+                 <actions>get</actions>
+            </java-perm>
+            <java-perm>
+                 <classname>org.osgi.framework.ServicePermission</classname>
+                 <name>org.apache.felix.service.command.Function</name>
+                 <actions>register</actions>
+            </java-perm>
+
+            <java-perm>
+                <classname>java.util.PropertyPermission</classname>
+                <name>java.version</name>
+                <actions>read</actions>
+            </java-perm>
+
+            <java-perm>
+                <classname>java.lang.reflect.ReflectPermission</classname>
+                <name>suppressAccessChecks</name>
+            </java-perm>
+	</permissions>''',
+
+)
