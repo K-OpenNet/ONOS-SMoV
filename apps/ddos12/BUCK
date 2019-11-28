@@ -41,7 +41,8 @@ onos_app (
             <app-perm>PACKET_WRITE</app-perm>
             <app-perm>PACKET_EVENT</app-perm>
             <app-perm>HOST_READ</app-perm>            
-
+	    <app-perm>STORAGE_WRITE</app-perm>
+	    <app-perm>INTENT_WRITE</app-perm>
 
             <vnet-perm>
                 <permission>VNET_READ</permission>
