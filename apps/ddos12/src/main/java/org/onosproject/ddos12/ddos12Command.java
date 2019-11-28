@@ -90,9 +90,11 @@ public class ddos12Command extends AbstractShellCommand {
 					System.out.println("COM1: " + i);*/
 					break;
 				case "COM2":
+					h2hintent h2h = new h2hintent();
 					System.out.println("COM2");
 					break;
         case "COM3":
+	  h2hintent h2h = new h2hintent();
           System.out.println("COM3");
           break;
 				default:
